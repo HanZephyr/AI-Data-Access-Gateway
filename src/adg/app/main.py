@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 
+from adg.admin_api.datasources import router as admin_datasource_router
 from adg.admin_api.system import router as admin_system_router
 from adg.app.settings import get_settings
 
@@ -8,6 +9,7 @@ from adg.app.settings import get_settings
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.service_name)
+    app.include_router(admin_datasource_router)
     app.include_router(admin_system_router)
 
     @app.get("/health", tags=["system"])

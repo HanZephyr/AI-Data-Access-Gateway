@@ -19,6 +19,22 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     op.create_table(
+        "datasources",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("name", sa.String(length=200), nullable=False),
+        sa.Column("type", sa.String(length=64), nullable=False),
+        sa.Column("datasource_kind", sa.String(length=64), nullable=False),
+        sa.Column("config_json", sa.Text(), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_datasources_tenant_id", "datasources", ["tenant_id"])
+    op.create_index("ix_datasources_type", "datasources", ["type"])
+
+    op.create_table(
         "api_keys",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
@@ -56,8 +72,59 @@ def upgrade() -> None:
     op.create_index("ix_audit_events_query_id", "audit_events", ["query_id"])
     op.create_index("ix_audit_events_created_at", "audit_events", ["created_at"])
 
+    op.create_table(
+        "resources",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("datasource_id", sa.String(length=36), nullable=False),
+        sa.Column("parent_id", sa.String(length=36), nullable=True),
+        sa.Column("kind", sa.String(length=64), nullable=False),
+        sa.Column("name", sa.String(length=200), nullable=False),
+        sa.Column("path", sa.String(length=512), nullable=False),
+        sa.Column("display_name", sa.String(length=200), nullable=False),
+        sa.Column("query_language", sa.String(length=32), nullable=True),
+        sa.Column("metadata_json", sa.Text(), nullable=False),
+        sa.Column("scanned_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_resources_tenant_id", "resources", ["tenant_id"])
+    op.create_index("ix_resources_datasource_id", "resources", ["datasource_id"])
+    op.create_index("ix_resources_parent_id", "resources", ["parent_id"])
+    op.create_index("ix_resources_kind", "resources", ["kind"])
+    op.create_index("ix_resources_path", "resources", ["path"])
+    op.create_index("ix_resources_scanned_at", "resources", ["scanned_at"])
+
+    op.create_table(
+        "resource_fields",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("datasource_id", sa.String(length=36), nullable=False),
+        sa.Column("resource_id", sa.String(length=36), nullable=False),
+        sa.Column("name", sa.String(length=200), nullable=False),
+        sa.Column("data_type", sa.String(length=200), nullable=False),
+        sa.Column("nullable", sa.Boolean(), nullable=False),
+        sa.Column("ordinal_position", sa.Integer(), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("metadata_json", sa.Text(), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_resource_fields_tenant_id", "resource_fields", ["tenant_id"])
+    op.create_index("ix_resource_fields_datasource_id", "resource_fields", ["datasource_id"])
+    op.create_index("ix_resource_fields_resource_id", "resource_fields", ["resource_id"])
+
 
 def downgrade() -> None:
+    op.drop_index("ix_resource_fields_resource_id", table_name="resource_fields")
+    op.drop_index("ix_resource_fields_datasource_id", table_name="resource_fields")
+    op.drop_index("ix_resource_fields_tenant_id", table_name="resource_fields")
+    op.drop_table("resource_fields")
+    op.drop_index("ix_resources_scanned_at", table_name="resources")
+    op.drop_index("ix_resources_path", table_name="resources")
+    op.drop_index("ix_resources_kind", table_name="resources")
+    op.drop_index("ix_resources_parent_id", table_name="resources")
+    op.drop_index("ix_resources_datasource_id", table_name="resources")
+    op.drop_index("ix_resources_tenant_id", table_name="resources")
+    op.drop_table("resources")
     op.drop_index("ix_audit_events_created_at", table_name="audit_events")
     op.drop_index("ix_audit_events_query_id", table_name="audit_events")
     op.drop_index("ix_audit_events_datasource_id", table_name="audit_events")
@@ -68,3 +135,6 @@ def downgrade() -> None:
     op.drop_table("audit_events")
     op.drop_index("ix_api_keys_key_hash", table_name="api_keys")
     op.drop_table("api_keys")
+    op.drop_index("ix_datasources_type", table_name="datasources")
+    op.drop_index("ix_datasources_tenant_id", table_name="datasources")
+    op.drop_table("datasources")
