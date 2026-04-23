@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -14,15 +14,15 @@ class AuditService:
         self,
         *,
         tenant_id: str,
-        user_id: Optional[str],
-        api_key_id: Optional[str],
+        user_id: str | None,
+        api_key_id: str | None,
         event_type: str,
         decision: str,
-        datasource_id: Optional[str],
+        datasource_id: str | None,
         resource_ids: list[str],
-        query_id: Optional[str],
-        sql_text: Optional[str],
-        reason: Optional[str],
+        query_id: str | None,
+        sql_text: str | None,
+        reason: str | None,
         metadata: dict[str, Any],
     ) -> AuditEvent:
         event = AuditEvent(
