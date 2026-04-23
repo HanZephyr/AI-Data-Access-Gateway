@@ -15,10 +15,14 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
+    settings = get_settings()
+    if "control_plane_database_url" in settings.model_fields_set:
+        return settings.control_plane_database_url
+
     configured = config.get_main_option("sqlalchemy.url")
     if configured:
         return configured
-    return get_settings().control_plane_database_url
+    return settings.control_plane_database_url
 
 
 def run_migrations_offline() -> None:
