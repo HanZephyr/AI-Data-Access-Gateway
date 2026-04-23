@@ -18,7 +18,14 @@ def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
 
     engine = create_engine(db_url)
     tables = set(inspect(engine).get_table_names())
-    assert {"api_keys", "audit_events", "alembic_version"}.issubset(tables)
+    assert {
+        "api_keys",
+        "audit_events",
+        "datasources",
+        "resources",
+        "resource_fields",
+        "alembic_version",
+    }.issubset(tables)
 
 
 def test_migration_uses_database_url_from_environment(
@@ -46,5 +53,12 @@ def test_migration_uses_database_url_from_environment(
         get_settings.cache_clear()
 
     configured_tables = set(inspect(create_engine(configured_db_url)).get_table_names())
-    assert {"api_keys", "audit_events", "alembic_version"}.issubset(configured_tables)
+    assert {
+        "api_keys",
+        "audit_events",
+        "datasources",
+        "resources",
+        "resource_fields",
+        "alembic_version",
+    }.issubset(configured_tables)
     assert not default_db_path.exists()
