@@ -1,6 +1,6 @@
 from pytest import MonkeyPatch
 
-from adg.app.settings import Settings  # type: ignore[import-untyped]
+from adg.app.settings import Settings
 
 
 def test_settings_defaults_are_local_friendly() -> None:
