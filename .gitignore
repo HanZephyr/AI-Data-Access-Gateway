@@ -1,0 +1,9 @@
+.vscode
+.codex
+.agents
+.venv
+*.pyc
+
+dev-docs/
+.worktrees/
+
