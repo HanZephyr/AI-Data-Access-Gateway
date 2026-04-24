@@ -241,6 +241,19 @@ class GatewayRuntimeService:
             datasource_id=datasource_id,
             resource_paths=guard_result.accessed_resources,
         )
+        if len(actual_resources) != len(guard_result.accessed_resources):
+            reason = "unknown_sql_resource"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
+
         declared_ids = set(resource_ids)
         actual_ids = {resource.id for resource in actual_resources}
         if not actual_ids.issubset(declared_ids):

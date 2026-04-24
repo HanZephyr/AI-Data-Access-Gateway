@@ -205,6 +205,25 @@ def test_execute_query_rejects_actual_resources_outside_declared_scope(
     assert event.event_type == "permission_rejected"
 
 
+def test_execute_query_rejects_unknown_sql_resources(db_session: Session) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from public.unknown_table",
+        limit=100,
+    )
+
+    assert response["status"] == "rejected"
+    assert response["reason"] == "unknown_sql_resource"
+    event = db_session.execute(select(AuditEvent)).scalar_one()
+    assert event.event_type == "permission_rejected"
+
+
 def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
