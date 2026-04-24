@@ -131,12 +131,15 @@ function App() {
         <Layout>
           <Layout.Header className="topbar">
             <Typography.Text strong>{pages.find((item) => item.key === page)?.label}</Typography.Text>
-            <Input.Password
-              className="key-input"
-              value={api.apiKey}
-              onChange={(event) => api.saveApiKey(event.target.value)}
-              addonBefore="API key"
-            />
+            <Space.Compact className="key-input">
+              <Button>API key</Button>
+              <Input
+                id="adg-api-key"
+                name="adg-api-key"
+                value={api.apiKey}
+                onChange={(event) => api.saveApiKey(event.target.value)}
+              />
+            </Space.Compact>
           </Layout.Header>
           <Layout.Content className="content">
             <Page page={page} api={api} />
