@@ -10,7 +10,7 @@ related_docs:
   - docs/superpowers/specs/2026-04-24-milestone-5-web-console-design.md
   - docs/superpowers/acceptance/2026-04-24-milestone-5-web-console.md
   - docs/superpowers/plans/2026-04-24-milestone-5-web-console.md
-last_verified_commit: d3eaeab
+last_verified_commit: 34840fd
 status: active
 ---
 
@@ -36,6 +36,8 @@ status: active
 - Console admin APIs require `require_admin_api_key`.
 - Runtime side effects from MCP HTTP tool calls must commit at the route layer.
 - The web console stores the operator-supplied API key in local storage and sends it through `X-ADG-API-Key`.
+- Management tables should prioritize human-readable labels such as `resource_label` over raw primary/foreign key values. Raw UUIDs remain available in details when needed for troubleshooting.
+- Policy and masking forms should use searchable resource selectors backed by `/admin/resources` rather than asking operators to copy `resource_id` strings manually.
 - `web/dist/`, `web/node_modules/`, `web/tsconfig.tsbuildinfo`, and runtime `data/` are local artifacts and must remain ignored.
 
 ## Extension points
@@ -46,5 +48,6 @@ status: active
 ## Common pitfalls
 
 - Treating the console as standalone without backend seed data. The UI expects a valid admin API key and live FastAPI admin endpoints.
+- Reintroducing manual foreign-key text boxes for resource association. This raises operator error risk and contradicts the console UX contract.
 - Committing web build artifacts or local SQLite/log files.
 - Reintroducing password-input browser warnings for the API key field.

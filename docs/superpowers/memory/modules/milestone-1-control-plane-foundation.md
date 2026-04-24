@@ -9,7 +9,7 @@ related_docs:
   - docs/superpowers/specs/2026-04-23-ai-data-access-gateway-v1-design.md
   - docs/superpowers/plans/2026-04-24-milestone-1-project-skeleton.md
   - docs/superpowers/memory/contracts/api-key-identity-context.md
-last_verified_commit: 2b70103
+last_verified_commit: 34840fd
 status: active
 ---
 
@@ -30,6 +30,7 @@ status: active
 - DB session layer: `src/adg/control_plane/db.py`
 - Alembic environment: `src/adg/control_plane/migrations/env.py`
 - ORM base and models: `src/adg/control_plane/models/`
+- ID generator: `src/adg/shared/ids.py`
 - Audit writer: `src/adg/audit/service.py`
 
 ## Invariants
@@ -41,6 +42,7 @@ status: active
 - Expired API keys must be rejected even when the stored key is otherwise valid and still marked active.
 - Admin routes must depend on admin-scoped API keys rather than generic API key authentication.
 - Audit is foundational in Milestone 1 even though most event types arrive in later milestones.
+- Control-plane primary keys must be generated with `adg.shared.ids.uuidv7()`. Business names, paths, labels, and descriptions belong in their dedicated fields, not in primary-key strings.
 - This milestone does not yet include connectors, metadata scanning, MCP runtime tools, policy evaluation, SQL Guard, masking, decrypt APIs, or the web console.
 
 ## Extension points
