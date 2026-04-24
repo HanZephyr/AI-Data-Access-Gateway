@@ -561,6 +561,21 @@ body {
   background: #f2f8f7;
 }
 
+.catalog-tag-editor {
+  padding: 14px 16px;
+  border: 1px solid var(--mist-300);
+  background: var(--mist-50);
+}
+
+.catalog-tag-select {
+  width: 100%;
+}
+
+.catalog-tag-editor .ant-tag {
+  margin-inline-end: 0;
+  padding-inline: 10px 6px;
+}
+
 .catalog-empty {
   margin: auto;
 }

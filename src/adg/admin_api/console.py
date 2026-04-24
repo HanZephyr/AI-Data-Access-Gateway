@@ -13,7 +13,14 @@ from adg.app.settings import get_settings
 from adg.audit.models import AuditEvent
 from adg.control_plane.db import get_session
 from adg.control_plane.models.api_key import ApiKey
-from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
+from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.governance import (
+    DatasourceTag,
+    FieldPolicy,
+    ResourcePolicy,
+    ResourceTag,
+    Tag,
+)
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.security import hash_api_key
@@ -58,6 +65,13 @@ class ResourceTagRequest(BaseModel):
 
     tag_id: str
     resource_id: str
+
+
+class DatasourceTagRequest(BaseModel):
+    """Payload for attaching an existing tag to an existing datasource."""
+
+    tag_id: str
+    datasource_id: str
 
 
 class ResourcePolicyRequest(BaseModel):
@@ -163,10 +177,11 @@ def list_resources(
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
-    resources = session.execute(
-        select(Resource).where(*conditions).order_by(Resource.path)
-    ).scalars()
-    return [_serialize_resource(resource) for resource in resources]
+    resources = list(
+        session.execute(select(Resource).where(*conditions).order_by(Resource.path)).scalars()
+    )
+    tags_by_resource_id = _load_resource_tags(session, [resource.id for resource in resources])
+    return [_serialize_resource(resource, tags_by_resource_id) for resource in resources]
 
 
 @router.get("/resource-tree")
@@ -184,6 +199,7 @@ def list_resource_tree(
         session.execute(select(Resource).where(*conditions).order_by(Resource.path)).scalars()
     )
     resource_ids = [resource.id for resource in resources]
+    tags_by_resource_id = _load_resource_tags(session, resource_ids)
     fields = []
     if resource_ids:
         fields = list(
@@ -193,7 +209,7 @@ def list_resource_tree(
                 .order_by(ResourceField.ordinal_position)
             ).scalars()
         )
-    return _build_resource_tree(resources, fields)
+    return _build_resource_tree(resources, fields, tags_by_resource_id)
 
 
 @router.get("/resources/{resource_id}")
@@ -205,7 +221,7 @@ def get_resource(
     """Fetch one resource by id."""
 
     resource = _get_by_id(session, Resource, resource_id, "Resource not found")
-    return _serialize_resource(resource)
+    return _serialize_resource(resource, _load_resource_tags(session, [resource.id]))
 
 
 @router.patch("/resources/{resource_id}")
@@ -339,6 +355,7 @@ def delete_tag(
 ) -> Response:
     """Delete a tag and any resource bindings that reference it."""
 
+    session.execute(delete(DatasourceTag).where(DatasourceTag.tag_id == tag_id))
     session.execute(delete(ResourceTag).where(ResourceTag.tag_id == tag_id))
     tag = session.get(Tag, tag_id)
     if tag is not None:
@@ -355,16 +372,90 @@ def bind_resource_tag(
 ) -> dict[str, Any]:
     """Attach a tag to a resource after validating the resource exists."""
 
+    _require_tag(session, payload.tag_id)
     _require_resource(session, payload.resource_id)
-    binding = ResourceTag(**payload.model_dump())
-    session.add(binding)
-    session.commit()
-    session.refresh(binding)
+    binding = session.execute(
+        select(ResourceTag).where(
+            ResourceTag.tag_id == payload.tag_id,
+            ResourceTag.resource_id == payload.resource_id,
+        )
+    ).scalar_one_or_none()
+    if binding is None:
+        binding = ResourceTag(**payload.model_dump())
+        session.add(binding)
+        session.commit()
+        session.refresh(binding)
     return {
         "id": binding.id,
         "tag_id": binding.tag_id,
         "resource_id": binding.resource_id,
     }
+
+
+@router.delete("/resource-tags", status_code=status.HTTP_204_NO_CONTENT)
+def unbind_resource_tag(
+    tag_id: str,
+    resource_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Detach a tag from a resource using the tag/resource pair."""
+
+    session.execute(
+        delete(ResourceTag).where(
+            ResourceTag.tag_id == tag_id,
+            ResourceTag.resource_id == resource_id,
+        )
+    )
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/datasource-tags", status_code=status.HTTP_201_CREATED)
+def bind_datasource_tag(
+    payload: DatasourceTagRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Attach a tag to a datasource after validating the datasource exists."""
+
+    _require_tag(session, payload.tag_id)
+    _require_datasource(session, payload.datasource_id)
+    binding = session.execute(
+        select(DatasourceTag).where(
+            DatasourceTag.tag_id == payload.tag_id,
+            DatasourceTag.datasource_id == payload.datasource_id,
+        )
+    ).scalar_one_or_none()
+    if binding is None:
+        binding = DatasourceTag(**payload.model_dump())
+        session.add(binding)
+        session.commit()
+        session.refresh(binding)
+    return {
+        "id": binding.id,
+        "tag_id": binding.tag_id,
+        "datasource_id": binding.datasource_id,
+    }
+
+
+@router.delete("/datasource-tags", status_code=status.HTTP_204_NO_CONTENT)
+def unbind_datasource_tag(
+    tag_id: str,
+    datasource_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Detach a tag from a datasource using the tag/datasource pair."""
+
+    session.execute(
+        delete(DatasourceTag).where(
+            DatasourceTag.tag_id == tag_id,
+            DatasourceTag.datasource_id == datasource_id,
+        )
+    )
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/resource-policies")
@@ -706,7 +797,10 @@ def get_mcp_setup(
     }
 
 
-def _serialize_resource(resource: Resource) -> dict[str, Any]:
+def _serialize_resource(
+    resource: Resource,
+    tags_by_resource_id: dict[str, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     """Convert a resource ORM object into a JSON-ready admin payload."""
 
     return {
@@ -720,6 +814,7 @@ def _serialize_resource(resource: Resource) -> dict[str, Any]:
         "query_language": resource.query_language,
         "status": resource.status,
         "scanned_at": resource.scanned_at.isoformat(),
+        "tags": list((tags_by_resource_id or {}).get(resource.id, [])),
     }
 
 
@@ -742,6 +837,7 @@ def _serialize_resource_field(field: ResourceField) -> dict[str, Any]:
 def _build_resource_tree(
     resources: list[Resource],
     fields: list[ResourceField],
+    tags_by_resource_id: dict[str, list[dict[str, Any]]],
 ) -> list[dict[str, Any]]:
     """Nest resource rows by parent id and attach field leaves to table/view nodes."""
 
@@ -760,6 +856,7 @@ def _build_resource_tree(
             "query_language": resource.query_language,
             "status": resource.status,
             "scanned_at": resource.scanned_at.isoformat(),
+            "tags": list(tags_by_resource_id.get(resource.id, [])),
             "children": [],
         }
         for resource in resources
@@ -808,6 +905,27 @@ def _serialize_tag(tag: Tag) -> dict[str, Any]:
         "category": tag.category,
         "description": tag.description,
     }
+
+
+def _load_resource_tags(
+    session: Session,
+    resource_ids: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Load serialized tags for resource ids keyed by resource id."""
+
+    if not resource_ids:
+        return {}
+
+    rows = session.execute(
+        select(ResourceTag.resource_id, Tag)
+        .join(Tag, Tag.id == ResourceTag.tag_id)
+        .where(ResourceTag.resource_id.in_(resource_ids))
+        .order_by(Tag.name)
+    ).all()
+    tags_by_resource_id: dict[str, list[dict[str, Any]]] = {item_id: [] for item_id in resource_ids}
+    for resource_id, tag in rows:
+        tags_by_resource_id.setdefault(resource_id, []).append(_serialize_tag(tag))
+    return tags_by_resource_id
 
 
 def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict[str, Any]:
@@ -919,6 +1037,24 @@ def _require_resource(session: Session, resource_id: str) -> Resource:
     if resource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
     return resource
+
+
+def _require_datasource(session: Session, datasource_id: str) -> Datasource:
+    """Validate that a referenced datasource exists."""
+
+    datasource = session.get(Datasource, datasource_id)
+    if datasource is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Datasource not found")
+    return datasource
+
+
+def _require_tag(session: Session, tag_id: str) -> Tag:
+    """Validate that a referenced tag exists."""
+
+    tag = session.get(Tag, tag_id)
+    if tag is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
+    return tag
 
 
 def _apply_updates(item: Any, data: dict[str, Any]) -> None:

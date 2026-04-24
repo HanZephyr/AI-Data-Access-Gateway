@@ -26,6 +26,16 @@ class ResourceTag(Base):
     resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
 
 
+class DatasourceTag(Base):
+    """Many-to-many binding between a datasource and a tag."""
+
+    __tablename__ = "datasource_tags"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
+    tag_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+
+
 class ResourcePolicy(Base):
     """Resource-level allow or deny rule for a user, role, group, or everyone."""
 

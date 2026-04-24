@@ -115,6 +115,8 @@ def test_admin_resource_and_tag_management() -> None:
         headers=auth(),
     )
     assert bound.status_code == 201
+    assert bound.json()["tag_id"] == tag_id
+    assert bound.json()["resource_id"] == "res_customers"
 
     tags = client.get("/admin/tags", headers=auth())
     assert [tag["name"] for tag in tags.json()] == ["pii"]
@@ -135,6 +137,14 @@ def test_admin_resource_and_tag_management() -> None:
     resource = client.get("/admin/resources/res_customers", headers=auth())
     assert resource.status_code == 200
     assert resource.json()["display_name"] == "customers"
+    assert resource.json()["tags"] == [
+        {
+            "id": tag_id,
+            "name": "pii",
+            "category": "classification",
+            "description": "Email and account identifiers",
+        }
+    ]
 
     updated_resource = client.patch(
         "/admin/resources/res_customers",
@@ -165,8 +175,26 @@ def test_admin_resource_and_tag_management() -> None:
     assert table_node["kind"] == "relational_table"
     assert table_node["status"] == "disabled"
     assert table_node["description"] == "Stores registered customer account profiles."
+    assert table_node["tags"] == [
+        {
+            "id": tag_id,
+            "name": "pii",
+            "category": "classification",
+            "description": "Email and account identifiers",
+        }
+    ]
     assert table_node["children"][0]["type"] == "field"
     assert tree.json()[0]["children"][0]["status"] == "disabled"
+
+    unbound = client.delete(
+        f"/admin/resource-tags?resource_id=res_customers&tag_id={tag_id}",
+        headers=auth(),
+    )
+    assert unbound.status_code == 204
+
+    resource_after_unbind = client.get("/admin/resources/res_customers", headers=auth())
+    assert resource_after_unbind.status_code == 200
+    assert resource_after_unbind.json()["tags"] == []
 
     deleted_tag = client.delete(f"/admin/tags/{tag_id}", headers=auth())
     assert deleted_tag.status_code == 204

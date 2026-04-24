@@ -106,6 +106,7 @@ const translations = {
     "common.required": "{label} is required",
     "common.validJson": "{label} must be valid JSON",
     "placeholder.resourceSearch": "Search and select a resource",
+    "placeholder.tagSearch": "Search and select a tag",
     "apiKey.newTitle": "New API key",
     "field.name": "Name",
     "field.type": "Type",
@@ -143,6 +144,9 @@ const translations = {
     "catalog.nodeType": "Node type",
     "catalog.fieldInfo": "Field information",
     "catalog.disabledHint": "Disabled assets are hidden from runtime resource discovery.",
+    "catalog.tags": "Tags",
+    "catalog.noTags": "No tags assigned",
+    "catalog.addTag": "Add tag",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
     "mcp.tools": "Tools",
@@ -237,6 +241,7 @@ const translations = {
     "common.required": "请输入{label}",
     "common.validJson": "{label}必须是有效 JSON",
     "placeholder.resourceSearch": "搜索并选择资源",
+    "placeholder.tagSearch": "搜索并选择标签",
     "apiKey.newTitle": "新 API 密钥",
     "field.name": "名称",
     "field.type": "类型",
@@ -274,6 +279,9 @@ const translations = {
     "catalog.nodeType": "节点类型",
     "catalog.fieldInfo": "字段信息",
     "catalog.disabledHint": "停用的资产不会出现在运行时资源发现结果中。",
+    "catalog.tags": "标签",
+    "catalog.noTags": "暂未绑定标签",
+    "catalog.addTag": "添加标签",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
     "mcp.tools": "工具",
@@ -368,6 +376,7 @@ const translations = {
     "common.required": "請輸入{label}",
     "common.validJson": "{label}必須是有效 JSON",
     "placeholder.resourceSearch": "搜尋並選擇資源",
+    "placeholder.tagSearch": "搜尋並選擇標籤",
     "apiKey.newTitle": "新 API 金鑰",
     "field.name": "名稱",
     "field.type": "類型",
@@ -405,6 +414,9 @@ const translations = {
     "catalog.nodeType": "節點類型",
     "catalog.fieldInfo": "欄位資訊",
     "catalog.disabledHint": "停用的資產不會出現在執行時資源探索結果中。",
+    "catalog.tags": "標籤",
+    "catalog.noTags": "尚未綁定標籤",
+    "catalog.addTag": "新增標籤",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
     "mcp.tools": "工具",
@@ -776,6 +788,7 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
   const resources = useData<CatalogTreeNode[]>(() => api.request("/admin/resource-tree"), [api.apiKey]);
+  const tags = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
@@ -785,11 +798,12 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
   const flatNodes = flattenCatalogTree(sourceTree);
   const visibleKeys = flattenCatalogTree(treeData).map((node) => node.key);
   const selected = flatNodes.find((node) => node.key === selectedKey) || null;
-  const loading = datasources.loading || resources.loading;
-  const error = datasources.error || resources.error;
+  const loading = datasources.loading || resources.loading || tags.loading;
+  const error = datasources.error || resources.error || tags.error;
   const reloadAll = () => {
     datasources.reload();
     resources.reload();
+    tags.reload();
   };
 
   useEffect(() => {
@@ -838,6 +852,7 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
       {selected ? (
         <CatalogDetail
           api={api}
+          tags={tags.data || []}
           selected={selected}
           onSaved={reloadAll}
           onDeleted={() => {
@@ -866,11 +881,13 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
 
 function CatalogDetail({
   api,
+  tags,
   selected,
   onSaved,
   onDeleted
 }: {
   api: ReturnType<typeof useApi>;
+  tags: AnyRecord[];
   selected: CatalogTreeNode;
   onSaved: () => void;
   onDeleted: () => void;
@@ -881,22 +898,25 @@ function CatalogDetail({
     return (
       <DatasourceDetail
         api={api}
+        tags={tags}
         selected={selected}
         onSaved={onSaved}
         onDeleted={onDeleted}
       />
     );
   }
-  return <AssetDetail api={api} selected={selected} onSaved={onSaved} />;
+  return <AssetDetail api={api} tags={tags} selected={selected} onSaved={onSaved} />;
 }
 
 function DatasourceDetail({
   api,
+  tags,
   selected,
   onSaved,
   onDeleted
 }: {
   api: ReturnType<typeof useApi>;
+  tags: AnyRecord[];
   selected: CatalogTreeNode;
   onSaved: () => void;
   onDeleted: () => void;
@@ -972,6 +992,14 @@ function DatasourceDetail({
             <Input.TextArea autoComplete="off" autoSize={{ minRows: 8, maxRows: 16 }} />
           </Form.Item>
         </Form>
+        <CatalogTagEditor
+          api={api}
+          targetType="datasource"
+          targetId={selected.id}
+          assignedTags={selected.tags || []}
+          allTags={tags}
+          onChanged={onSaved}
+        />
       </div>
     </div>
   );
@@ -979,10 +1007,12 @@ function DatasourceDetail({
 
 function AssetDetail({
   api,
+  tags,
   selected,
   onSaved
 }: {
   api: ReturnType<typeof useApi>;
+  tags: AnyRecord[];
   selected: CatalogTreeNode;
   onSaved: () => void;
 }) {
@@ -1052,7 +1082,113 @@ function AssetDetail({
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
         </Form>
+        {selected.type === "resource" ? (
+          <CatalogTagEditor
+            api={api}
+            targetType="resource"
+            targetId={selected.id}
+            assignedTags={selected.tags || []}
+            allTags={tags}
+            onChanged={onSaved}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function CatalogTagEditor({
+  api,
+  targetType,
+  targetId,
+  assignedTags,
+  allTags,
+  onChanged
+}: {
+  api: ReturnType<typeof useApi>;
+  targetType: "datasource" | "resource";
+  targetId: string;
+  assignedTags: AnyRecord[];
+  allTags: AnyRecord[];
+  onChanged: () => void;
+}) {
+  /** Manage tag bindings for datasource and resource detail panes. */
+
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
+  const assignedIds = new Set(assignedTags.map((tag) => String(tag.id)));
+  const options = allTags
+    .filter((tag) => !assignedIds.has(String(tag.id)))
+    .map((tag) => ({
+      value: String(tag.id),
+      label: `${String(tag.name)}${tag.category ? ` · ${String(tag.category)}` : ""}`,
+      searchText: `${String(tag.name)} ${String(tag.category || "")} ${String(tag.description || "")}`.toLowerCase()
+    }));
+
+  const bindTag = async (tagId: string) => {
+    await api.request(targetType === "datasource" ? "/admin/datasource-tags" : "/admin/resource-tags", {
+      method: "POST",
+      body: JSON.stringify(
+        targetType === "datasource"
+          ? { tag_id: tagId, datasource_id: targetId }
+          : { tag_id: tagId, resource_id: targetId }
+      )
+    });
+    messageApi.success(t("common.saved"));
+    onChanged();
+  };
+
+  const unbindTag = async (tagId: string) => {
+    const search = new URLSearchParams(
+      targetType === "datasource"
+        ? { tag_id: tagId, datasource_id: targetId }
+        : { tag_id: tagId, resource_id: targetId }
+    );
+    await api.request(`/admin/${targetType}-tags?${search.toString()}`, {
+      method: "DELETE"
+    });
+    messageApi.success(t("common.saved"));
+    onChanged();
+  };
+
+  return (
+    <div className="catalog-tag-editor">
+      <Space direction="vertical" size={10} className="full">
+        <Typography.Text strong>{t("catalog.tags")}</Typography.Text>
+        <Select
+          key={`${targetType}:${targetId}:${assignedTags.map((tag) => String(tag.id)).join(",")}`}
+          showSearch
+          allowClear
+          className="catalog-tag-select"
+          placeholder={t("placeholder.tagSearch")}
+          options={options}
+          onSelect={(value) => {
+            void bindTag(String(value));
+          }}
+          filterOption={(input, option) =>
+            String((option as { searchText?: string } | undefined)?.searchText || "")
+              .includes(input.toLowerCase())
+          }
+        />
+        {assignedTags.length ? (
+          <Space wrap size={[8, 8]}>
+            {assignedTags.map((tag) => (
+              <Tag
+                key={String(tag.id)}
+                closable
+                onClose={(event) => {
+                  event.preventDefault();
+                  void unbindTag(String(tag.id));
+                }}
+              >
+                {String(tag.name)}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          <Typography.Text type="secondary">{t("catalog.noTags")}</Typography.Text>
+        )}
+      </Space>
     </div>
   );
 }
@@ -1139,6 +1275,7 @@ function buildDatasourceTree(
     datasource_kind: datasource.datasource_kind,
     config: datasource.config,
     status: datasource.status,
+    tags: datasource.tags || [],
     children: resourceRoots.filter((resource) => resource.datasource_id === datasource.id),
   }));
 }
@@ -1165,6 +1302,7 @@ function filterCatalogTree(nodes: CatalogTreeNode[], search: string): CatalogTre
       node.data_type,
       node.description,
       node.datasource_type,
+      (node.tags || []).map((tag: AnyRecord) => `${String(tag.name)} ${String(tag.category || "")}`).join(" "),
       JSON.stringify(node.config || {})
     ].join(" ").toLowerCase();
     if (haystack.includes(needle) || children.length) {

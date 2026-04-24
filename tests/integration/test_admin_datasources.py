@@ -70,6 +70,35 @@ def test_admin_datasource_crud_routes() -> None:
     )
     assert fetched.status_code == 200
     assert fetched.json()["name"] == "Warehouse"
+    assert fetched.json()["tags"] == []
+
+    tag = client.post(
+        "/admin/tags",
+        json={"name": "critical", "category": "importance"},
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    assert tag.status_code == 201
+    tag_id = tag.json()["id"]
+
+    bound = client.post(
+        "/admin/datasource-tags",
+        json={"tag_id": tag_id, "datasource_id": datasource_id},
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    assert bound.status_code == 201
+    assert bound.json()["tag_id"] == tag_id
+    assert bound.json()["datasource_id"] == datasource_id
+
+    listed_with_tags = client.get("/admin/datasources", headers={"X-ADG-API-Key": "adg_admin"})
+    assert listed_with_tags.status_code == 200
+    assert listed_with_tags.json()[0]["tags"] == [
+        {
+            "id": tag_id,
+            "name": "critical",
+            "category": "importance",
+            "description": None,
+        }
+    ]
 
     updated = client.patch(
         f"/admin/datasources/{datasource_id}",
@@ -84,6 +113,27 @@ def test_admin_datasource_crud_routes() -> None:
     assert updated.json()["name"] == "Warehouse Replica"
     assert updated.json()["status"] == "disabled"
     assert updated.json()["config"]["database"] == "replica"
+    assert updated.json()["tags"] == [
+        {
+            "id": tag_id,
+            "name": "critical",
+            "category": "importance",
+            "description": None,
+        }
+    ]
+
+    unbound = client.delete(
+        f"/admin/datasource-tags?datasource_id={datasource_id}&tag_id={tag_id}",
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    assert unbound.status_code == 204
+
+    fetched_after_unbind = client.get(
+        f"/admin/datasources/{datasource_id}",
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    assert fetched_after_unbind.status_code == 200
+    assert fetched_after_unbind.json()["tags"] == []
 
     deleted = client.delete(
         f"/admin/datasources/{datasource_id}",

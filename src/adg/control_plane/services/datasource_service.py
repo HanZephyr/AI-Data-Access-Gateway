@@ -5,6 +5,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.governance import (
+    DatasourceTag,
+    FieldPolicy,
+    ResourcePolicy,
+    ResourceTag,
+)
+from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.errors import NotFoundError
 
@@ -74,8 +81,25 @@ class DatasourceService:
         """Delete a datasource and all scanned metadata snapshots that depend on it."""
 
         datasource = self.get_datasource(datasource_id)
+        resource_ids = list(
+            self._session.execute(
+                select(Resource.id).where(Resource.datasource_id == datasource.id)
+            ).scalars()
+        )
+        if resource_ids:
+            self._session.execute(delete(ResourceTag).where(ResourceTag.resource_id.in_(resource_ids)))
+            self._session.execute(
+                delete(ResourcePolicy).where(ResourcePolicy.resource_id.in_(resource_ids))
+            )
+            self._session.execute(delete(FieldPolicy).where(FieldPolicy.resource_id.in_(resource_ids)))
+            self._session.execute(
+                delete(MaskingPolicy).where(MaskingPolicy.resource_id.in_(resource_ids))
+            )
         self._session.execute(
             delete(ResourceField).where(ResourceField.datasource_id == datasource.id)
         )
         self._session.execute(delete(Resource).where(Resource.datasource_id == datasource.id))
+        self._session.execute(
+            delete(DatasourceTag).where(DatasourceTag.datasource_id == datasource.id)
+        )
         self._session.delete(datasource)
