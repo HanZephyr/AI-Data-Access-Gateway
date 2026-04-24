@@ -135,6 +135,18 @@ class GatewayRuntimeService:
 
         self._session.flush()
         resource = self._get_resource(resource_id)
+        disabled_reason = self._disabled_resource_reason(resource)
+        if disabled_reason is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                resource.datasource_id,
+                [resource.id],
+                None,
+                disabled_reason,
+            )
+            return {"status": "rejected", "reason": disabled_reason}
         access = self._policy.check_resource_access(
             identity=identity,
             resource=resource,
@@ -154,7 +166,10 @@ class GatewayRuntimeService:
 
         fields = self._session.execute(
             select(ResourceField)
-            .where(ResourceField.resource_id == resource.id)
+            .where(
+                ResourceField.resource_id == resource.id,
+                ResourceField.status == "active",
+            )
             .order_by(ResourceField.ordinal_position)
         ).scalars()
         columns = []
@@ -170,6 +185,7 @@ class GatewayRuntimeService:
                     "name": field.name,
                     "data_type": field.data_type,
                     "nullable": field.nullable,
+                    "description": field.description,
                     "access": "allowed" if field_access.allowed else "denied",
                     "masking_strategy": None,
                 }
@@ -225,6 +241,18 @@ class GatewayRuntimeService:
         declared_resources = [self._get_resource(resource_id) for resource_id in resource_ids]
         # Declared resources are the caller's intended scope; every declared resource is checked.
         for resource in declared_resources:
+            disabled_reason = self._disabled_resource_reason(resource)
+            if disabled_reason is not None:
+                self._record_rejection(
+                    identity,
+                    api_key_id,
+                    "permission_rejected",
+                    datasource_id,
+                    resource_ids,
+                    query,
+                    disabled_reason,
+                )
+                return {"status": "rejected", "reason": disabled_reason}
             decision = self._policy.check_resource_access(
                 identity=identity,
                 resource=resource,
@@ -263,6 +291,20 @@ class GatewayRuntimeService:
         )
         if len(actual_resources) != len(guard_result.accessed_resources):
             reason = "unknown_sql_resource"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
+
+        disabled_field = self._first_disabled_field(actual_resources, guard_result.accessed_fields)
+        if disabled_field is not None:
+            reason = f"field_disabled:{disabled_field}"
             self._record_rejection(
                 identity,
                 api_key_id,
@@ -336,6 +378,7 @@ class GatewayRuntimeService:
 
         conditions: list[ColumnElement[bool]] = [
             Resource.kind.in_(["relational_table", "relational_view"]),
+            Resource.status == "active",
         ]
         if datasource_id is not None:
             conditions.append(Resource.datasource_id == datasource_id)
@@ -343,6 +386,7 @@ class GatewayRuntimeService:
         return [
             resource
             for resource in resources
+            if self._disabled_resource_reason(resource) is None
             if self._policy.check_resource_access(
                 identity=identity,
                 resource=resource,
@@ -364,6 +408,7 @@ class GatewayRuntimeService:
                 select(Resource).where(
                     Resource.datasource_id == datasource_id,
                     Resource.kind.in_(["relational_table", "relational_view"]),
+                    Resource.status == "active",
                 )
             ).scalars()
         )
@@ -374,6 +419,7 @@ class GatewayRuntimeService:
                 resource
                 for resource in resources
                 if resource.path == resource_path or resource.path.endswith(f".{resource_path}")
+                if self._disabled_resource_reason(resource) is None
             ]
             if len(matches) == 1:
                 matched.append(matches[0])
@@ -431,8 +477,38 @@ class GatewayRuntimeService:
             "name": resource.name,
             "path": resource.path,
             "display_name": resource.display_name,
+            "description": resource.description,
             "query_language": resource.query_language,
         }
+
+    def _disabled_resource_reason(self, resource: Resource) -> str | None:
+        """Return a stable rejection reason when a resource or ancestor is disabled."""
+
+        current: Resource | None = resource
+        while current is not None:
+            if current.status != "active":
+                return "resource_disabled"
+            current = self._session.get(Resource, current.parent_id) if current.parent_id else None
+        return None
+
+    def _first_disabled_field(
+        self,
+        resources: list[Resource],
+        accessed_fields: list[str],
+    ) -> str | None:
+        """Find the first explicitly referenced field disabled in any actual resource."""
+
+        if not accessed_fields:
+            return None
+        disabled_fields = self._session.execute(
+            select(ResourceField).where(
+                ResourceField.resource_id.in_([resource.id for resource in resources]),
+                ResourceField.name.in_(accessed_fields),
+                ResourceField.status != "active",
+            )
+        ).scalars()
+        field = next(disabled_fields, None)
+        return None if field is None else field.name
 
     def _record_discovery(
         self,

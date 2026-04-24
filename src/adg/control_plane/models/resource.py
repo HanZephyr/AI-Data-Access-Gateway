@@ -19,7 +19,9 @@ class Resource(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     path: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     query_language: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     scanned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -42,4 +44,5 @@ class ResourceField(Base):
     nullable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     ordinal_position: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

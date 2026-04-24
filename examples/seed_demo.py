@@ -48,29 +48,74 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         )
         session.add(datasource)
         session.flush()
-        # Seed one table resource with one PII-like field so masking UI has useful data.
-        resource = Resource(
+        database = Resource(
             datasource_id=datasource.id,
             parent_id=None,
+            kind="database",
+            name="warehouse",
+            path="warehouse",
+            display_name="warehouse",
+            description="Demo analytical warehouse used by the gateway examples.",
+            query_language="sql",
+            status="active",
+            metadata_json="{}",
+        )
+        session.add(database)
+        session.flush()
+        schema = Resource(
+            datasource_id=datasource.id,
+            parent_id=database.id,
+            kind="schema",
+            name="public",
+            path="warehouse.public",
+            display_name="public",
+            description="Public schema exposed to analytics users.",
+            query_language="sql",
+            status="active",
+            metadata_json="{}",
+        )
+        session.add(schema)
+        session.flush()
+        # Seed one table resource with PII-like fields so masking and catalog UI have useful data.
+        resource = Resource(
+            datasource_id=datasource.id,
+            parent_id=schema.id,
             kind="relational_table",
             name="customers",
             path="warehouse.public.customers",
             display_name="customers",
+            description="Customer profile table synchronized from the CRM system.",
             query_language="sql",
+            status="active",
             metadata_json="{}",
         )
         session.add(resource)
         session.flush()
-        session.add(
-            ResourceField(
-                datasource_id=datasource.id,
-                resource_id=resource.id,
-                name="email",
-                data_type="varchar",
-                nullable=True,
-                ordinal_position=1,
-                metadata_json="{}",
-            )
+        session.add_all(
+            [
+                ResourceField(
+                    datasource_id=datasource.id,
+                    resource_id=resource.id,
+                    name="id",
+                    data_type="integer",
+                    nullable=False,
+                    ordinal_position=1,
+                    description="Stable customer identifier.",
+                    status="active",
+                    metadata_json="{}",
+                ),
+                ResourceField(
+                    datasource_id=datasource.id,
+                    resource_id=resource.id,
+                    name="email",
+                    data_type="varchar",
+                    nullable=True,
+                    ordinal_position=2,
+                    description="Customer login and notification email.",
+                    status="active",
+                    metadata_json="{}",
+                ),
+            ]
         )
         tag = Tag(
             name="pii",

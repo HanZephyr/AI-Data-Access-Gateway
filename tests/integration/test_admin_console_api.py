@@ -51,6 +51,7 @@ def build_console_app() -> TestClient:
         session.add(resource)
         session.add(
             ResourceField(
+                id="field_email",
                 datasource_id="ds_1",
                 resource_id=resource.id,
                 name="email",
@@ -137,11 +138,35 @@ def test_admin_resource_and_tag_management() -> None:
 
     updated_resource = client.patch(
         "/admin/resources/res_customers",
-        json={"display_name": "Customer Accounts"},
+        json={
+            "display_name": "Customer Accounts",
+            "description": "Stores registered customer account profiles.",
+            "status": "disabled",
+        },
         headers=auth(),
     )
     assert updated_resource.status_code == 200
     assert updated_resource.json()["display_name"] == "Customer Accounts"
+    assert updated_resource.json()["description"] == "Stores registered customer account profiles."
+    assert updated_resource.json()["status"] == "disabled"
+
+    updated_field = client.patch(
+        "/admin/resource-fields/field_email",
+        json={"description": "Primary customer email used for login.", "status": "disabled"},
+        headers=auth(),
+    )
+    assert updated_field.status_code == 200
+    assert updated_field.json()["description"] == "Primary customer email used for login."
+    assert updated_field.json()["status"] == "disabled"
+
+    tree = client.get("/admin/resource-tree", headers=auth())
+    assert tree.status_code == 200
+    table_node = tree.json()[0]
+    assert table_node["kind"] == "relational_table"
+    assert table_node["status"] == "disabled"
+    assert table_node["description"] == "Stores registered customer account profiles."
+    assert table_node["children"][0]["type"] == "field"
+    assert tree.json()[0]["children"][0]["status"] == "disabled"
 
     deleted_tag = client.delete(f"/admin/tags/{tag_id}", headers=auth())
     assert deleted_tag.status_code == 204

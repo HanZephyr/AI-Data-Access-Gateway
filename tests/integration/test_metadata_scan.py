@@ -162,3 +162,49 @@ def test_admin_datasource_scan_endpoint_replaces_snapshots() -> None:
         assert [field.name for field in fields] == ["total"]
     finally:
         session.close()
+
+
+def test_metadata_scan_preserves_admin_annotations_for_stable_assets() -> None:
+    client, session = build_scan_client()
+    try:
+        first = client.post(
+            "/admin/datasources/ds_123/scan",
+            headers={"X-ADG-API-Key": "adg_admin"},
+        )
+        assert first.status_code == 200
+
+        resource = session.execute(
+            select(Resource).where(Resource.path == "warehouse.public.orders")
+        ).scalar_one()
+        field = session.execute(
+            select(ResourceField).where(
+                ResourceField.resource_id == resource.id,
+                ResourceField.name == "id",
+            )
+        ).scalar_one()
+        resource_id = resource.id
+        field_id = field.id
+        resource.description = "Order facts from the transactional system."
+        resource.status = "disabled"
+        field.description = "Primary order identifier."
+        field.status = "disabled"
+        session.commit()
+
+        FakeConnector.scan_count = 0
+        second = client.post(
+            "/admin/datasources/ds_123/scan",
+            headers={"X-ADG-API-Key": "adg_admin"},
+        )
+        assert second.status_code == 200
+
+        session.expire_all()
+        preserved_resource = session.get(Resource, resource_id)
+        preserved_field = session.get(ResourceField, field_id)
+        assert preserved_resource is not None
+        assert preserved_field is not None
+        assert preserved_resource.description == "Order facts from the transactional system."
+        assert preserved_resource.status == "disabled"
+        assert preserved_field.description == "Primary order identifier."
+        assert preserved_field.status == "disabled"
+    finally:
+        session.close()

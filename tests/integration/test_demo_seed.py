@@ -31,21 +31,39 @@ def test_seed_demo_creates_console_ready_data(tmp_path: Path) -> None:
     with session_factory() as session:
         api_key = session.execute(select(ApiKey)).scalar_one()
         datasource = session.execute(select(Datasource)).scalar_one()
-        resource = session.execute(select(Resource)).scalar_one()
-        field = session.execute(select(ResourceField)).scalar_one()
+        resources = session.execute(select(Resource).order_by(Resource.path)).scalars().all()
+        fields = (
+            session.execute(select(ResourceField).order_by(ResourceField.ordinal_position))
+            .scalars()
+            .all()
+        )
         tag = session.execute(select(Tag)).scalar_one()
         binding = session.execute(select(ResourceTag)).scalar_one()
         masking = session.execute(select(MaskingPolicy)).scalar_one()
         audit = session.execute(select(AuditEvent)).scalar_one()
+        resource = resources[-1]
+        field = fields[-1]
 
-        records: list[Any] = [api_key, datasource, resource, field, tag, binding, masking, audit]
+        records: list[Any] = [
+            api_key,
+            datasource,
+            *resources,
+            *fields,
+            tag,
+            binding,
+            masking,
+            audit,
+        ]
         for record in records:
             assert_uuidv7(record.id)
 
         assert api_key.name == "Demo Admin"
         assert datasource.name == "Demo Warehouse"
+        assert [item.kind for item in resources] == ["database", "schema", "relational_table"]
+        assert [item.parent_id for item in resources] == [None, resources[0].id, resources[1].id]
         assert resource.name == "customers"
         assert resource.path == "warehouse.public.customers"
+        assert [item.name for item in fields] == ["id", "email"]
         assert field.name == "email"
         assert field.resource_id == resource.id
         assert tag.name == "pii"

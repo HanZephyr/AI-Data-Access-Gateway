@@ -35,6 +35,7 @@ import {
   Tabs,
   Tag,
   Tooltip,
+  Tree,
   Typography,
   theme
 } from "antd";
@@ -56,6 +57,11 @@ type PageKey =
   | "mcp";
 
 type AnyRecord = Record<string, any>;
+type ResourceTreeNode = AnyRecord & {
+  key: string;
+  type: "resource" | "field";
+  children?: ResourceTreeNode[];
+};
 type Language = "zh-CN" | "zh-TW" | "en-US";
 type TranslationParams = Record<string, string | number>;
 
@@ -123,6 +129,13 @@ const translations = {
     "policy.resourcePolicies": "Resource Policies",
     "policy.fieldPolicies": "Field Policies",
     "section.fields": "Fields",
+    "catalog.search": "Search databases, tables, or fields",
+    "catalog.selectPrompt": "Select a database, table, or field to edit catalog notes.",
+    "catalog.treeTitle": "Asset Catalog",
+    "catalog.detailsTitle": "Catalog Details",
+    "catalog.nodeType": "Node type",
+    "catalog.fieldInfo": "Field information",
+    "catalog.disabledHint": "Disabled assets are hidden from runtime resource discovery.",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
     "mcp.tools": "Tools",
@@ -137,6 +150,10 @@ const translations = {
     "option.postgres": "postgres",
     "option.mysql": "mysql",
     "option.doris": "doris",
+    "option.database": "database",
+    "option.schema": "schema",
+    "option.relational_table": "table",
+    "option.relational_view": "view",
     "column.id": "ID",
     "column.datasource_id": "Datasource",
     "column.resource_id": "Resource",
@@ -238,6 +255,13 @@ const translations = {
     "policy.resourcePolicies": "资源权限策略",
     "policy.fieldPolicies": "字段权限策略",
     "section.fields": "字段",
+    "catalog.search": "搜索库、表或字段",
+    "catalog.selectPrompt": "选择一个数据库、数据表或字段来维护目录说明。",
+    "catalog.treeTitle": "资产目录",
+    "catalog.detailsTitle": "目录详情",
+    "catalog.nodeType": "节点类型",
+    "catalog.fieldInfo": "字段信息",
+    "catalog.disabledHint": "停用的资产不会出现在运行时资源发现结果中。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
     "mcp.tools": "工具",
@@ -252,6 +276,10 @@ const translations = {
     "option.postgres": "Postgres",
     "option.mysql": "MySQL",
     "option.doris": "Doris",
+    "option.database": "数据库",
+    "option.schema": "Schema",
+    "option.relational_table": "数据表",
+    "option.relational_view": "视图",
     "column.id": "ID",
     "column.datasource_id": "数据源",
     "column.resource_id": "资源",
@@ -353,6 +381,13 @@ const translations = {
     "policy.resourcePolicies": "資源權限策略",
     "policy.fieldPolicies": "欄位權限策略",
     "section.fields": "欄位",
+    "catalog.search": "搜尋資料庫、資料表或欄位",
+    "catalog.selectPrompt": "選擇一個資料庫、資料表或欄位來維護目錄說明。",
+    "catalog.treeTitle": "資產目錄",
+    "catalog.detailsTitle": "目錄詳情",
+    "catalog.nodeType": "節點類型",
+    "catalog.fieldInfo": "欄位資訊",
+    "catalog.disabledHint": "停用的資產不會出現在執行時資源探索結果中。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
     "mcp.tools": "工具",
@@ -367,6 +402,10 @@ const translations = {
     "option.postgres": "Postgres",
     "option.mysql": "MySQL",
     "option.doris": "Doris",
+    "option.database": "資料庫",
+    "option.schema": "Schema",
+    "option.relational_table": "資料表",
+    "option.relational_view": "檢視",
     "column.id": "ID",
     "column.datasource_id": "資料來源",
     "column.resource_id": "資源",
@@ -743,33 +782,208 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function Resources({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Resource table plus field detail table for the selected resource. */
+  /** Database-asset catalog with a DBeaver-style tree and editable right pane. */
 
-  const state = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
-  const [resourceId, setResourceId] = useState<string | null>(null);
-  const fields = useData<AnyRecord[]>(
-    () => (resourceId ? api.request(`/admin/resources/${resourceId}/fields`) : Promise.resolve([])),
-    [api.apiKey, resourceId]
-  );
+  const { t } = useI18n();
+  const state = useData<ResourceTreeNode[]>(() => api.request("/admin/resource-tree"), [api.apiKey]);
+  const [search, setSearch] = useState("");
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+  const treeData = filterResourceTree(state.data || [], search);
+  const flatNodes = flattenResourceTree(state.data || []);
+  const visibleKeys = flattenResourceTree(treeData).map((node) => node.key);
+  const selected = flatNodes.find((node) => node.key === selectedKey) || null;
+
+  useEffect(() => {
+    if (state.data) {
+      setExpandedKeys(
+        flattenResourceTree(state.data)
+          .filter((node) => (node.children || []).length > 0)
+          .map((node) => node.key)
+      );
+    }
+  }, [state.data]);
+
   return (
-    <Space direction="vertical" size={16} className="full">
-      <CrudPanel
-        api={api}
-        title="nav.resources"
-        listPath="/admin/resources"
-        updatePath={(row) => `/admin/resources/${row.id}`}
-        deletePath={(row) => `/admin/resources/${row.id}`}
-        fields={[
-          { name: "display_name", label: "field.displayName" },
-          { name: "query_language", label: "field.queryLanguage" }
-        ]}
-        initialValues={{}}
-        onRow={(row) => ({ onClick: () => setResourceId(row.id) })}
-        stateOverride={state}
-      />
-      <EndpointTable api={api} title="section.fields" path={resourceId ? `/admin/resources/${resourceId}/fields` : "__empty__"} />
-    </Space>
+    <section className="resource-catalog">
+      <div className="catalog-tree panel">
+        <div className="panel-head">
+          <Typography.Title level={4}>{t("catalog.treeTitle")}</Typography.Title>
+          <Button onClick={state.reload}>{t("common.refresh")}</Button>
+        </div>
+        <div className="catalog-tree-body">
+          <Input.Search
+            allowClear
+            className="catalog-search"
+            placeholder={t("catalog.search")}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {state.error ? <Alert type="error" message={state.error} /> : null}
+          <Tree
+            blockNode
+            showLine
+            treeData={toAntTreeData(treeData, t)}
+            selectedKeys={selectedKey ? [selectedKey] : []}
+            expandedKeys={search ? visibleKeys : expandedKeys}
+            onExpand={(keys) => setExpandedKeys(keys)}
+            onSelect={(keys) => setSelectedKey(String(keys[0] || ""))}
+          />
+        </div>
+      </div>
+      {selected ? (
+        <CatalogDetail api={api} selected={selected} onSaved={state.reload} />
+      ) : (
+        <div className="catalog-detail panel">
+          <div className="panel-head">
+            <Typography.Title level={4}>{t("catalog.detailsTitle")}</Typography.Title>
+            <Button type="primary" disabled>{t("common.save")}</Button>
+          </div>
+          <Empty className="catalog-empty" description={t("catalog.selectPrompt")} />
+        </div>
+      )}
+    </section>
   );
+}
+
+function CatalogDetail({
+  api,
+  selected,
+  onSaved
+}: {
+  api: ReturnType<typeof useApi>;
+  selected: ResourceTreeNode;
+  onSaved: () => void;
+}) {
+  /** Editable detail pane for the selected catalog resource or field node. */
+
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    form.setFieldsValue(toCatalogFormValues(selected));
+  }, [form, selected]);
+
+  const save = async () => {
+    const values = await form.validateFields();
+    const endpoint =
+      selected.type === "field"
+        ? `/admin/resource-fields/${selected.id}`
+        : `/admin/resources/${selected.id}`;
+    await api.request(endpoint, {
+      method: "PATCH",
+      body: JSON.stringify(values)
+    });
+    messageApi.success(t("common.saved"));
+    onSaved();
+  };
+
+  return (
+    <div className="catalog-detail panel">
+      <div className="panel-head">
+        <Typography.Title level={4}>{t("catalog.detailsTitle")}</Typography.Title>
+        <Space>
+          <Tag>{optionLabel(String(selected.status || "active"), t)}</Tag>
+          <Button type="primary" onClick={save}>{t("common.save")}</Button>
+        </Space>
+      </div>
+      <div className="catalog-detail-body">
+        <Descriptions bordered column={1} size="small">
+          <Descriptions.Item label={t("catalog.nodeType")}>
+            {selected.type === "field" ? t("tab.field") : optionLabel(String(selected.kind), t)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("column.path")}>
+            <Typography.Text copyable>{String(selected.path || selected.name)}</Typography.Text>
+          </Descriptions.Item>
+          {selected.type === "field" ? (
+            <Descriptions.Item label={t("catalog.fieldInfo")}>
+              {selected.data_type} · {t("column.ordinal_position")} {selected.ordinal_position}
+            </Descriptions.Item>
+          ) : null}
+        </Descriptions>
+        <Alert type="info" showIcon message={t("catalog.disabledHint")} />
+        <Form form={form} layout="vertical">
+          {selected.type === "resource" ? (
+            <>
+              <Form.Item name="display_name" label={t("field.displayName")}>
+                <Input autoComplete="off" />
+              </Form.Item>
+              <Form.Item name="query_language" label={t("field.queryLanguage")}>
+                <Input autoComplete="off" />
+              </Form.Item>
+            </>
+          ) : null}
+          <Form.Item name="description" label={t("field.description")}>
+            <Input.TextArea autoComplete="off" autoSize={{ minRows: 6, maxRows: 14 }} />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+        </Form>
+      </div>
+    </div>
+  );
+}
+
+function flattenResourceTree(nodes: ResourceTreeNode[]): ResourceTreeNode[] {
+  /** Flatten the catalog tree for selection lookup and expansion control. */
+
+  return nodes.flatMap((node) => [node, ...flattenResourceTree(node.children || [])]);
+}
+
+function filterResourceTree(nodes: ResourceTreeNode[], search: string): ResourceTreeNode[] {
+  /** Keep matching nodes and ancestors so search still preserves hierarchy. */
+
+  const needle = search.trim().toLowerCase();
+  if (!needle) return nodes;
+  const filtered: ResourceTreeNode[] = [];
+  for (const node of nodes) {
+    const children = filterResourceTree(node.children || [], search);
+    const haystack = [
+      node.name,
+      node.display_name,
+      node.path,
+      node.kind,
+      node.data_type,
+      node.description
+    ].join(" ").toLowerCase();
+    if (haystack.includes(needle) || children.length) {
+      filtered.push({ ...node, children });
+    }
+  }
+  return filtered;
+}
+
+function toCatalogFormValues(node: ResourceTreeNode) {
+  /** Extract only editable catalog fields from the selected tree node. */
+
+  return node.type === "field"
+    ? { description: node.description, status: node.status || "active" }
+    : {
+        display_name: node.display_name,
+        description: node.description,
+        query_language: node.query_language,
+        status: node.status || "active"
+      };
+}
+
+function toAntTreeData(nodes: ResourceTreeNode[], t: I18nContextValue["t"]): AnyRecord[] {
+  /** Convert API tree nodes into Ant Design tree data with status-aware labels. */
+
+  return nodes.map((node) => {
+    const children = toAntTreeData(node.children || [], t);
+    return {
+      key: node.key,
+      title: (
+        <Space size={6} className="catalog-node-title">
+          <span>{String(node.display_name || node.name)}</span>
+          {node.status === "disabled" ? <Tag>{optionLabel("disabled", t)}</Tag> : null}
+        </Space>
+      ),
+      ...(children.length ? { children } : {})
+    };
+  });
 }
 
 function Tags({ api }: { api: ReturnType<typeof useApi> }) {

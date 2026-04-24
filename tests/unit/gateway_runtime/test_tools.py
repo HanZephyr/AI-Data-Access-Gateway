@@ -68,6 +68,7 @@ def add_resource(
     resource_id: str,
     datasource_id: str = "ds_1",
     path: str = "warehouse.public.customers",
+    status: str = "active",
 ) -> Resource:
     resource = Resource(
         id=resource_id,
@@ -78,6 +79,7 @@ def add_resource(
         path=path,
         display_name=path.rsplit(".", 1)[-1],
         query_language="sql",
+        status=status,
         metadata_json="{}",
     )
     db_session.add(resource)
@@ -91,6 +93,7 @@ def add_resource(
                 data_type="integer" if field_name == "id" else "varchar",
                 nullable=False,
                 ordinal_position=index,
+                status="active",
                 metadata_json="{}",
             )
         )
@@ -147,6 +150,55 @@ def test_tags_only_include_accessible_resources(db_session: Session) -> None:
     response = runtime(db_session).list_tags(identity=identity(), api_key_id="key_1")
 
     assert response["tags"] == [{"id": "tag_public", "name": "public", "category": None}]
+
+
+def test_runtime_discovery_hides_disabled_resources_and_fields(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    active = add_resource(db_session, resource_id="res_active")
+    disabled = add_resource(
+        db_session,
+        resource_id="res_disabled",
+        path="warehouse.public.secret_customers",
+        status="disabled",
+    )
+    email = db_session.execute(
+        select(ResourceField).where(
+            ResourceField.resource_id == active.id,
+            ResourceField.name == "email",
+        )
+    ).scalar_one()
+    email.status = "disabled"
+    db_session.add(
+        ResourcePolicy(
+            subject_type="all",
+            subject_id="*",
+            effect="allow",
+            action="read",
+            status="active",
+        )
+    )
+
+    listed = runtime(db_session).list_resources(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+    )
+    described = runtime(db_session).describe_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=active.id,
+    )
+    disabled_description = runtime(db_session).describe_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=disabled.id,
+    )
+
+    assert [resource["id"] for resource in listed["resources"]] == [active.id]
+    assert [column["name"] for column in described["columns"]] == ["id"]
+    assert disabled_description == {"status": "rejected", "reason": "resource_disabled"}
 
 
 def test_describe_resource_marks_denied_fields(db_session: Session) -> None:

@@ -1,7 +1,7 @@
 import json
 import secrets
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
@@ -41,7 +41,16 @@ class ResourceUpdateRequest(BaseModel):
     """Editable resource fields exposed by the admin console."""
 
     display_name: str | None = None
+    description: str | None = None
     query_language: str | None = None
+    status: str | None = None
+
+
+class ResourceFieldUpdateRequest(BaseModel):
+    """Editable field metadata controlled by operators after metadata scans."""
+
+    description: str | None = None
+    status: str | None = None
 
 
 class ResourceTagRequest(BaseModel):
@@ -160,6 +169,33 @@ def list_resources(
     return [_serialize_resource(resource) for resource in resources]
 
 
+@router.get("/resource-tree")
+def list_resource_tree(
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+    datasource_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return resources and fields as an expandable catalog tree."""
+
+    conditions = []
+    if datasource_id is not None:
+        conditions.append(Resource.datasource_id == datasource_id)
+    resources = list(
+        session.execute(select(Resource).where(*conditions).order_by(Resource.path)).scalars()
+    )
+    resource_ids = [resource.id for resource in resources]
+    fields = []
+    if resource_ids:
+        fields = list(
+            session.execute(
+                select(ResourceField)
+                .where(ResourceField.resource_id.in_(resource_ids))
+                .order_by(ResourceField.ordinal_position)
+            ).scalars()
+        )
+    return _build_resource_tree(resources, fields)
+
+
 @router.get("/resources/{resource_id}")
 def get_resource(
     resource_id: str,
@@ -220,18 +256,23 @@ def list_resource_fields(
         .where(ResourceField.resource_id == resource_id)
         .order_by(ResourceField.ordinal_position)
     ).scalars()
-    return [
-        {
-            "id": field.id,
-            "resource_id": field.resource_id,
-            "name": field.name,
-            "data_type": field.data_type,
-            "nullable": field.nullable,
-            "ordinal_position": field.ordinal_position,
-            "description": field.description,
-        }
-        for field in fields
-    ]
+    return [_serialize_resource_field(field) for field in fields]
+
+
+@router.patch("/resource-fields/{field_id}")
+def update_resource_field(
+    field_id: str,
+    payload: ResourceFieldUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Update field-level catalog annotations without changing scanned structure."""
+
+    field = _get_by_id(session, ResourceField, field_id, "Field not found")
+    _apply_updates(field, payload.model_dump(exclude_unset=True))
+    session.commit()
+    session.refresh(field)
+    return _serialize_resource_field(field)
 
 
 @router.get("/tags")
@@ -675,9 +716,87 @@ def _serialize_resource(resource: Resource) -> dict[str, Any]:
         "name": resource.name,
         "path": resource.path,
         "display_name": resource.display_name,
+        "description": resource.description,
         "query_language": resource.query_language,
+        "status": resource.status,
         "scanned_at": resource.scanned_at.isoformat(),
     }
+
+
+def _serialize_resource_field(field: ResourceField) -> dict[str, Any]:
+    """Convert a scanned field into an editable admin payload."""
+
+    return {
+        "id": field.id,
+        "datasource_id": field.datasource_id,
+        "resource_id": field.resource_id,
+        "name": field.name,
+        "data_type": field.data_type,
+        "nullable": field.nullable,
+        "ordinal_position": field.ordinal_position,
+        "description": field.description,
+        "status": field.status,
+    }
+
+
+def _build_resource_tree(
+    resources: list[Resource],
+    fields: list[ResourceField],
+) -> list[dict[str, Any]]:
+    """Nest resource rows by parent id and attach field leaves to table/view nodes."""
+
+    nodes_by_id: dict[str, dict[str, Any]] = {
+        resource.id: {
+            "key": f"resource:{resource.id}",
+            "type": "resource",
+            "id": resource.id,
+            "datasource_id": resource.datasource_id,
+            "parent_id": resource.parent_id,
+            "kind": resource.kind,
+            "name": resource.name,
+            "path": resource.path,
+            "display_name": resource.display_name,
+            "description": resource.description,
+            "query_language": resource.query_language,
+            "status": resource.status,
+            "scanned_at": resource.scanned_at.isoformat(),
+            "children": [],
+        }
+        for resource in resources
+    }
+
+    roots: list[dict[str, Any]] = []
+    for resource in resources:
+        node = nodes_by_id[resource.id]
+        if resource.parent_id and resource.parent_id in nodes_by_id:
+            cast(list[dict[str, Any]], nodes_by_id[resource.parent_id]["children"]).append(node)
+        else:
+            roots.append(node)
+
+    for field in fields:
+        parent = nodes_by_id.get(field.resource_id)
+        if parent is None:
+            continue
+        cast(list[dict[str, Any]], parent["children"]).append(
+            {
+                "key": f"field:{field.id}",
+                "type": "field",
+                "id": field.id,
+                "field_id": field.id,
+                "resource_id": field.resource_id,
+                "datasource_id": field.datasource_id,
+                "name": field.name,
+                "display_name": field.name,
+                "data_type": field.data_type,
+                "nullable": field.nullable,
+                "ordinal_position": field.ordinal_position,
+                "description": field.description,
+                "status": field.status,
+                "children": [],
+            }
+        )
+
+    return roots
 
 
 def _serialize_tag(tag: Tag) -> dict[str, Any]:
