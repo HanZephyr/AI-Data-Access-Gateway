@@ -4,11 +4,13 @@ from uuid import uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from adg.app.settings import get_settings
 from adg.audit.service import AuditService
 from adg.connectors.registry import ConnectorRegistry, get_connector_registry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.resource import Resource, ResourceField
+from adg.masking.service import MaskingService
 from adg.policy.runtime import IdentityContext, RuntimePolicyService
 from adg.shared.errors import NotFoundError
 from adg.sql_guard.guard import SqlGuard
@@ -25,6 +27,7 @@ class GatewayRuntimeService:
         self._connector_registry = connector_registry or get_connector_registry()
         self._policy = RuntimePolicyService(session)
         self._audit = AuditService(session)
+        self._masking = MaskingService(session, secret_key=get_settings().secret_key)
 
     def list_datasources(
         self,
@@ -270,8 +273,15 @@ class GatewayRuntimeService:
             return {"status": "rejected", "reason": reason}
 
         connector = self._connector_registry.create(datasource.type)
-        result = connector.execute_query(datasource.config(), guard_result.normalized_sql, limit)
         query_id = f"qry_{uuid4()}"
+        result = connector.execute_query(datasource.config(), guard_result.normalized_sql, limit)
+        result, masked_columns = self._masking.apply_to_result(
+            identity=identity,
+            datasource_id=datasource_id,
+            query_id=query_id,
+            resources=actual_resources,
+            result=result,
+        )
         self._audit.record_event(
             tenant_id=identity.tenant_id,
             user_id=identity.user_id,
@@ -286,6 +296,7 @@ class GatewayRuntimeService:
             metadata={
                 "warnings": guard_result.warnings,
                 "accessed_fields": guard_result.accessed_fields,
+                "masked_columns": masked_columns,
             },
         )
         self._session.flush()
@@ -294,7 +305,7 @@ class GatewayRuntimeService:
             "status": "success",
             "columns": list(result.columns),
             "rows": list(result.rows),
-            "masking": {"masked_columns": []},
+            "masking": {"masked_columns": masked_columns},
             "warnings": guard_result.warnings,
         }
 

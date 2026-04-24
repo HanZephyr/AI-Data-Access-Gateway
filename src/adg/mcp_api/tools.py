@@ -22,36 +22,36 @@ def call_tool(
     runtime = GatewayRuntimeService(session)
 
     if tool_name == "list_datasources":
-        return runtime.list_datasources(identity=identity, api_key_id=api_key.id)
-    if tool_name == "list_tags":
-        return runtime.list_tags(identity=identity, api_key_id=api_key.id)
-    if tool_name == "list_resources":
-        return runtime.list_resources(
+        response = runtime.list_datasources(identity=identity, api_key_id=api_key.id)
+    elif tool_name == "list_tags":
+        response = runtime.list_tags(identity=identity, api_key_id=api_key.id)
+    elif tool_name == "list_resources":
+        response = runtime.list_resources(
             identity=identity,
             api_key_id=api_key.id,
             datasource_id=str(payload["datasource_id"]),
         )
-    if tool_name == "list_resources_by_tag":
-        return runtime.list_resources_by_tag(
+    elif tool_name == "list_resources_by_tag":
+        response = runtime.list_resources_by_tag(
             identity=identity,
             api_key_id=api_key.id,
             tag_names=[str(item) for item in payload.get("tag_names", [])],
         )
-    if tool_name == "describe_resource":
-        return runtime.describe_resource(
+    elif tool_name == "describe_resource":
+        response = runtime.describe_resource(
             identity=identity,
             api_key_id=api_key.id,
             resource_id=str(payload["resource_id"]),
         )
-    if tool_name == "preview_resource":
-        return runtime.preview_resource(
+    elif tool_name == "preview_resource":
+        response = runtime.preview_resource(
             identity=identity,
             api_key_id=api_key.id,
             resource_id=str(payload["resource_id"]),
             limit=int(payload.get("limit", 20)),
         )
-    if tool_name == "execute_query":
-        return runtime.execute_query(
+    elif tool_name == "execute_query":
+        response = runtime.execute_query(
             identity=identity,
             api_key_id=api_key.id,
             datasource_id=str(payload["datasource_id"]),
@@ -59,11 +59,14 @@ def call_tool(
             query=str(payload["query"]),
             limit=int(payload.get("limit", 100)),
         )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown MCP tool",
+        )
 
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Unknown MCP tool",
-    )
+    session.commit()
+    return response
 
 
 def _identity_from_payload(payload: dict[str, Any]) -> IdentityContext:
