@@ -4,8 +4,8 @@ from typing import Any
 
 from adg.audit.service import AuditService
 from adg.control_plane.db import create_engine_from_url, create_session_factory
-from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
+from adg.control_plane.models.base import Base
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.masking import MaskingPolicy
