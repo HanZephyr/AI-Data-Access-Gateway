@@ -26,7 +26,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Call ADG MCP-style HTTP tools.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--api-key", default="adg_admin")
+    parser.add_argument("--api-key", required=True)
     parser.add_argument("--user-id", default="demo-user")
     args = parser.parse_args()
 

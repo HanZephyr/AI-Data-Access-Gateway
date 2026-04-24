@@ -1,3 +1,4 @@
+import pytest
 from pytest import MonkeyPatch
 
 from adg.app.settings import Settings
@@ -22,3 +23,11 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.env == "test"
     assert settings.control_plane_database_url == "sqlite:///./test.db"
     assert settings.secret_key == "unit-test-secret"
+
+
+def test_settings_reject_default_secret_key_in_production(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("ADG_ENV", "production")
+    monkeypatch.delenv("ADG_SECRET_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="ADG_SECRET_KEY"):
+        Settings()

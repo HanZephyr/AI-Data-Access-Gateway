@@ -4,13 +4,12 @@ from typing import Any
 
 from adg.audit.service import AuditService
 from adg.control_plane.db import create_engine_from_url, create_session_factory
-from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.base import Base
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
-from adg.shared.security import hash_api_key
+from adg.control_plane.services.api_key_service import create_api_key
 
 
 def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
@@ -24,13 +23,11 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
 
     with session_factory() as session:
         # The demo key intentionally carries all scopes so quickstart flows stay simple.
-        api_key = ApiKey(
+        api_key, plaintext = create_api_key(
+            session,
             name="Demo Admin",
-            key_hash=hash_api_key("adg_admin"),
-            status="active",
-            scopes='["admin","runtime","internal"]',
+            scopes=["admin", "runtime", "internal"],
         )
-        session.add(api_key)
         datasource = Datasource(
             name="Demo Warehouse",
             type="postgres",
@@ -150,7 +147,7 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
 
     return {
         "database_url": database_url,
-        "admin_api_key": "adg_admin",
+        "admin_api_key": plaintext,
     }
 
 

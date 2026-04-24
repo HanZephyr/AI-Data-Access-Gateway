@@ -16,6 +16,8 @@ Seed demo data:
 uv run --extra dev python examples/seed_demo.py --database-url sqlite:///./data/adg-control-plane.db
 ```
 
+The command prints a one-time random admin API key in JSON. Keep that value and use it in the console and CLI examples below.
+
 Run the backend:
 
 ```bash
@@ -35,7 +37,7 @@ Open the console:
 
 ```text
 http://127.0.0.1:5173
-API key: adg_admin
+API key: <the admin_api_key printed by seed_demo.py>
 ```
 
 Run backend verification:
@@ -56,13 +58,24 @@ npm run build
 Call MCP-style HTTP tools:
 
 ```bash
-uv run --extra dev python examples/mcp_client_http.py --api-key adg_admin
+uv run --extra dev python examples/mcp_client_http.py --api-key <the admin_api_key printed by seed_demo.py>
 ```
+
+Production bootstrap flow:
+
+```bash
+uv run --extra dev alembic upgrade head
+uv run --extra dev adg-init-admin --database-url sqlite:///./data/adg-control-plane.db
+```
+
+`adg-init-admin` prints a one-time random admin API key for the control plane. Store it immediately, then use it to create scoped replacement keys from the console.
 
 Run with Docker Compose:
 
 ```bash
+$env:ADG_SECRET_KEY = "<generate-a-long-random-secret>"
 docker compose up --build
+docker compose exec backend adg-init-admin --database-url sqlite:///./data/adg-control-plane.db
 ```
 
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.

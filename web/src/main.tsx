@@ -633,7 +633,7 @@ function columnLabel(key: string, t: I18nContextValue["t"]) {
 function useApi() {
   /** Keep the API key in local storage and attach it to every console request. */
 
-  const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "adg_admin");
+  const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "");
   const saveApiKey = (value: string) => {
     localStorage.setItem("adg.apiKey", value);
     setApiKey(value);

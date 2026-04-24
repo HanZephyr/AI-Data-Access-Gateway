@@ -1,5 +1,4 @@
 import json
-import secrets
 from datetime import datetime
 from typing import Annotated, Any, cast
 
@@ -23,7 +22,7 @@ from adg.control_plane.models.governance import (
 )
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
-from adg.shared.security import hash_api_key
+from adg.control_plane.services.api_key_service import create_api_key as create_api_key_record
 
 router = APIRouter(prefix="/admin", tags=["admin-console"])
 
@@ -779,15 +778,12 @@ def create_api_key(
 ) -> dict[str, Any]:
     """Create an API key and return the raw value exactly once."""
 
-    plaintext = f"adg_{secrets.token_urlsafe(24)}"
-    api_key = ApiKey(
+    api_key, plaintext = create_api_key_record(
+        session,
         name=payload.name,
-        key_hash=hash_api_key(plaintext),
-        status="active",
-        scopes=json.dumps(payload.scopes, separators=(",", ":")),
+        scopes=payload.scopes,
         expires_at=payload.expires_at,
     )
-    session.add(api_key)
     session.commit()
     session.refresh(api_key)
     return {**_serialize_api_key(api_key), "api_key": plaintext}

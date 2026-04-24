@@ -13,6 +13,7 @@ from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
+from adg.shared.security import verify_api_key
 
 
 def assert_uuidv7(value: str) -> None:
@@ -75,5 +76,7 @@ def test_seed_demo_creates_console_ready_data(tmp_path: Path) -> None:
         assert json.loads(audit.resource_ids_json) == [resource.id]
         assert audit.event_type == "metadata_discovery"
 
-    assert result["admin_api_key"] == "adg_admin"
+    assert result["admin_api_key"].startswith("adg_")
+    assert result["admin_api_key"] != "adg_admin"
+    assert verify_api_key(result["admin_api_key"], api_key.key_hash)
     assert "tenant_id" not in result
