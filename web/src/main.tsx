@@ -598,7 +598,14 @@ function ConsoleApp() {
               {currentPageTitle}
             </Typography.Title>
           </div>
-          <Space className="topbar-actions" size={12} align="center">
+          <Select
+            className="mobile-page-select"
+            aria-label={currentPageTitle}
+            value={page}
+            options={navigationItems.map((item) => ({ key: item.key, value: item.key, label: item.label }))}
+            onChange={(key) => setPage(key as PageKey)}
+          />
+          <div className="topbar-actions">
             <Select
               className="language-select"
               aria-label={t("topbar.language")}
@@ -616,7 +623,7 @@ function ConsoleApp() {
                 onChange={(event) => api.saveApiKey(event.target.value)}
               />
             </Space.Compact>
-          </Space>
+          </div>
         </Layout.Header>
         <Layout.Content className="content">
           <Page page={page} api={api} />
