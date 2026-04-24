@@ -29,6 +29,15 @@ def build_mcp_app() -> tuple[TestClient, sessionmaker[Session]]:
             )
         )
         session.add(
+            ApiKey(
+                id="key_admin_only",
+                name="admin-only",
+                key_hash=hash_api_key("adg_admin_only"),
+                status="active",
+                scopes='["admin"]',
+            )
+        )
+        session.add(
             Datasource(
                 id="ds_1",
                 name="Warehouse",
@@ -89,3 +98,16 @@ def test_mcp_tool_route_commits_runtime_audit_events() -> None:
     with session_factory() as session:
         event = session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "metadata_discovery"
+
+
+def test_mcp_tool_route_rejects_api_key_without_runtime_scope() -> None:
+    client, _ = build_mcp_app()
+
+    response = client.post(
+        "/mcp/tools/list_datasources",
+        json={"user_id": "user-1"},
+        headers={"X-ADG-API-Key": "adg_admin_only"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Runtime scope required"

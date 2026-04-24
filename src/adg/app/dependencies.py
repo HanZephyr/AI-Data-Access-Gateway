@@ -74,3 +74,17 @@ def require_admin_api_key(
         )
 
     return api_key
+
+
+def require_runtime_api_key(
+    api_key: Annotated[AuthenticatedApiKey, Depends(require_api_key)],
+) -> AuthenticatedApiKey:
+    """Require the authenticated API key to carry the runtime scope."""
+
+    if "runtime" not in json.loads(api_key.scopes):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Runtime scope required",
+        )
+
+    return api_key
