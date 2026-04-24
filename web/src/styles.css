@@ -550,6 +550,23 @@ body {
   flex: 0 0 auto;
 }
 
+.tag-catalog-tree .ant-tree-node-content-wrapper {
+  width: 100%;
+}
+
+.tag-catalog-node {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tag-catalog-node .ant-btn {
+  flex: 0 0 auto;
+}
+
 .catalog-detail-body {
   display: grid;
   align-content: start;

@@ -206,6 +206,75 @@ def test_admin_resource_and_tag_management() -> None:
     assert missing_resource.status_code == 404
 
 
+def test_admin_tag_catalog_lists_bound_datasource_and_resources() -> None:
+    client = build_console_app()
+
+    created = client.post(
+        "/admin/tags",
+        json={"name": "gold", "category": "tier"},
+        headers=auth(),
+    )
+    assert created.status_code == 201
+    tag_id = created.json()["id"]
+
+    datasource_bound = client.post(
+        "/admin/datasource-tags",
+        json={"tag_id": tag_id, "datasource_id": "ds_1"},
+        headers=auth(),
+    )
+    assert datasource_bound.status_code == 201
+
+    resource_bound = client.post(
+        "/admin/resource-tags",
+        json={"tag_id": tag_id, "resource_id": "res_customers"},
+        headers=auth(),
+    )
+    assert resource_bound.status_code == 201
+
+    catalog = client.get(f"/admin/tags/{tag_id}/catalog", headers=auth())
+    assert catalog.status_code == 200
+    body = catalog.json()
+    assert len(body) == 1
+    datasource_node = body[0]
+    assert datasource_node["key"] == "datasource:ds_1"
+    assert datasource_node["type"] == "datasource"
+    assert datasource_node["id"] == "ds_1"
+    assert datasource_node["tags"] == [
+        {
+            "id": tag_id,
+            "name": "gold",
+            "category": "tier",
+            "description": None,
+        }
+    ]
+    assert datasource_node["children"] == [
+        {
+            "key": "resource:res_customers",
+            "type": "resource",
+            "id": "res_customers",
+            "datasource_id": "ds_1",
+            "parent_id": None,
+            "kind": "relational_table",
+            "name": "customers",
+            "path": "warehouse.public.customers",
+            "display_name": "customers",
+            "description": None,
+            "query_language": "sql",
+            "status": "active",
+            "scanned_at": datasource_node["children"][0]["scanned_at"],
+            "tags": [
+                {
+                    "id": tag_id,
+                    "name": "gold",
+                    "category": "tier",
+                    "description": None,
+                }
+            ],
+            "children": [],
+        }
+    ]
+
+
 def test_admin_policy_and_masking_policy_management() -> None:
     client = build_console_app()
 

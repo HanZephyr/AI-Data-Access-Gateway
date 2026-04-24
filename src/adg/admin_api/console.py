@@ -331,6 +331,74 @@ def get_tag(
     return _serialize_tag(tag)
 
 
+@router.get("/tags/{tag_id}/catalog")
+def get_tag_catalog(
+    tag_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, Any]]:
+    """Return datasource-grouped catalog nodes associated with one governance tag."""
+
+    _require_tag(session, tag_id)
+    datasource_ids = list(
+        session.execute(
+            select(DatasourceTag.datasource_id)
+            .where(DatasourceTag.tag_id == tag_id)
+            .order_by(DatasourceTag.datasource_id)
+        ).scalars()
+    )
+    tagged_resource_ids = list(
+        session.execute(
+            select(ResourceTag.resource_id)
+            .where(ResourceTag.tag_id == tag_id)
+            .order_by(ResourceTag.resource_id)
+        ).scalars()
+    )
+    tagged_resources = (
+        list(
+            session.execute(
+                select(Resource)
+                .where(Resource.id.in_(tagged_resource_ids))
+                .order_by(Resource.path)
+            ).scalars()
+        )
+        if tagged_resource_ids
+        else []
+    )
+    involved_datasource_ids = sorted(
+        {
+            *datasource_ids,
+            *(resource.datasource_id for resource in tagged_resources),
+        }
+    )
+    if not involved_datasource_ids:
+        return []
+
+    datasources = list(
+        session.execute(
+            select(Datasource)
+            .where(Datasource.id.in_(involved_datasource_ids))
+            .order_by(Datasource.name)
+        ).scalars()
+    )
+    resources = list(
+        session.execute(
+            select(Resource)
+            .where(Resource.datasource_id.in_(involved_datasource_ids))
+            .order_by(Resource.path)
+        ).scalars()
+    )
+    tags_by_datasource_id = _load_datasource_tags(session, involved_datasource_ids)
+    tags_by_resource_id = _load_resource_tags(session, [resource.id for resource in resources])
+    return _build_tag_catalog_tree(
+        datasources=datasources,
+        resources=resources,
+        tagged_resource_ids=set(tagged_resource_ids),
+        tags_by_datasource_id=tags_by_datasource_id,
+        tags_by_resource_id=tags_by_resource_id,
+    )
+
+
 @router.patch("/tags/{tag_id}")
 def update_tag(
     tag_id: str,
@@ -896,6 +964,79 @@ def _build_resource_tree(
     return roots
 
 
+def _build_tag_catalog_tree(
+    *,
+    datasources: list[Datasource],
+    resources: list[Resource],
+    tagged_resource_ids: set[str],
+    tags_by_datasource_id: dict[str, list[dict[str, Any]]],
+    tags_by_resource_id: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Build a datasource-grouped resource tree pruned to tagged nodes and their ancestors."""
+
+    resources_by_id = {resource.id: resource for resource in resources}
+    included_resource_ids: set[str] = set()
+    for resource_id in tagged_resource_ids:
+        current = resources_by_id.get(resource_id)
+        while current is not None and current.id not in included_resource_ids:
+            included_resource_ids.add(current.id)
+            current = resources_by_id.get(current.parent_id) if current.parent_id else None
+
+    filtered_resources = [
+        resource for resource in resources if resource.id in included_resource_ids
+    ]
+    resource_nodes_by_id: dict[str, dict[str, Any]] = {
+        resource.id: {
+            "key": f"resource:{resource.id}",
+            "type": "resource",
+            "id": resource.id,
+            "datasource_id": resource.datasource_id,
+            "parent_id": resource.parent_id,
+            "kind": resource.kind,
+            "name": resource.name,
+            "path": resource.path,
+            "display_name": resource.display_name,
+            "description": resource.description,
+            "query_language": resource.query_language,
+            "status": resource.status,
+            "scanned_at": resource.scanned_at.isoformat(),
+            "tags": list(tags_by_resource_id.get(resource.id, [])),
+            "children": [],
+        }
+        for resource in filtered_resources
+    }
+    root_resources_by_datasource_id: dict[str, list[dict[str, Any]]] = {
+        datasource.id: [] for datasource in datasources
+    }
+    for resource in filtered_resources:
+        node = resource_nodes_by_id[resource.id]
+        if resource.parent_id and resource.parent_id in resource_nodes_by_id:
+            parent_children = cast(
+                list[dict[str, Any]],
+                resource_nodes_by_id[resource.parent_id]["children"],
+            )
+            parent_children.append(node)
+        else:
+            root_resources_by_datasource_id.setdefault(resource.datasource_id, []).append(node)
+
+    return [
+        {
+            "key": f"datasource:{datasource.id}",
+            "type": "datasource",
+            "id": datasource.id,
+            "name": datasource.name,
+            "display_name": datasource.name,
+            "datasource_type": datasource.type,
+            "type_name": datasource.type,
+            "datasource_kind": datasource.datasource_kind,
+            "status": datasource.status,
+            "tags": list(tags_by_datasource_id.get(datasource.id, [])),
+            "children": list(root_resources_by_datasource_id.get(datasource.id, [])),
+        }
+        for datasource in datasources
+    ]
+
+
 def _serialize_tag(tag: Tag) -> dict[str, Any]:
     """Convert a tag ORM object into a JSON-ready admin payload."""
 
@@ -926,6 +1067,29 @@ def _load_resource_tags(
     for resource_id, tag in rows:
         tags_by_resource_id.setdefault(resource_id, []).append(_serialize_tag(tag))
     return tags_by_resource_id
+
+
+def _load_datasource_tags(
+    session: Session,
+    datasource_ids: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Load serialized tags for datasource ids keyed by datasource id."""
+
+    if not datasource_ids:
+        return {}
+
+    rows = session.execute(
+        select(DatasourceTag.datasource_id, Tag)
+        .join(Tag, Tag.id == DatasourceTag.tag_id)
+        .where(DatasourceTag.datasource_id.in_(datasource_ids))
+        .order_by(Tag.name)
+    ).all()
+    tags_by_datasource_id: dict[str, list[dict[str, Any]]] = {
+        item_id: [] for item_id in datasource_ids
+    }
+    for datasource_id, tag in rows:
+        tags_by_datasource_id.setdefault(datasource_id, []).append(_serialize_tag(tag))
+    return tags_by_datasource_id
 
 
 def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict[str, Any]:

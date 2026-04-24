@@ -30,6 +30,7 @@ import {
   InputNumber,
   Layout,
   Menu,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -53,6 +54,7 @@ import {
   maskingConfigFromFormValues,
   maskingFormValuesFromConfig,
 } from "./configForms";
+import { findTreePathByKey } from "./catalogNavigation";
 import "./styles.css";
 
 type PageKey =
@@ -70,6 +72,10 @@ type CatalogTreeNode = AnyRecord & {
   key: string;
   type: "datasource" | "resource" | "field";
   children?: CatalogTreeNode[];
+};
+type CatalogJumpTarget = {
+  /** Tree node key that should be focused after navigating into the datasource workspace. */
+  key: string;
 };
 type Language = "zh-CN" | "zh-TW" | "en-US";
 type TranslationParams = Record<string, string | number>;
@@ -164,9 +170,13 @@ const translations = {
     "catalog.tags": "Tags",
     "catalog.noTags": "No tags assigned",
     "catalog.addTag": "Add tag",
+    "catalog.jump": "Open in Data Sources",
     "masking.fixedHint": "Fixed masking always returns the same replacement text.",
     "masking.partialHint": "Partial masking keeps the start and end of the value visible.",
     "masking.noConfig": "This masking strategy does not require extra configuration.",
+    "tag.relatedAssets": "Linked assets",
+    "tag.relatedAssetsTitle": "{name} linked assets",
+    "tag.noLinkedAssets": "No data assets are currently linked to this tag.",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
     "mcp.tools": "Tools",
@@ -312,9 +322,13 @@ const translations = {
     "catalog.tags": "标签",
     "catalog.noTags": "暂未绑定标签",
     "catalog.addTag": "添加标签",
+    "catalog.jump": "打开数据源页",
     "masking.fixedHint": "固定脱敏会始终返回同一段替换文本。",
     "masking.partialHint": "局部脱敏会保留值的开头和结尾可见部分。",
     "masking.noConfig": "当前脱敏策略不需要额外配置。",
+    "tag.relatedAssets": "关联资源",
+    "tag.relatedAssetsTitle": "{name} 的关联资源",
+    "tag.noLinkedAssets": "当前没有数据资产关联到这个标签。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
     "mcp.tools": "工具",
@@ -460,9 +474,13 @@ const translations = {
     "catalog.tags": "標籤",
     "catalog.noTags": "尚未綁定標籤",
     "catalog.addTag": "新增標籤",
+    "catalog.jump": "打開資料源頁",
     "masking.fixedHint": "固定脫敏會固定回傳同一段替換文字。",
     "masking.partialHint": "局部脫敏會保留值的開頭和結尾可見部分。",
     "masking.noConfig": "目前的脫敏策略不需要額外設定。",
+    "tag.relatedAssets": "關聯資源",
+    "tag.relatedAssetsTitle": "{name} 的關聯資源",
+    "tag.noLinkedAssets": "目前沒有資料資產關聯到這個標籤。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
     "mcp.tools": "工具",
@@ -702,6 +720,7 @@ function ConsoleApp() {
 
   const { language, setLanguage, t } = useI18n();
   const [page, setPage] = useState<PageKey>("overview");
+  const [catalogJumpTarget, setCatalogJumpTarget] = useState<CatalogJumpTarget | null>(null);
   const api = useApi();
   const navigationItems = pages.map((item) => ({
     key: item.key,
@@ -709,6 +728,10 @@ function ConsoleApp() {
     label: t(item.labelKey)
   }));
   const currentPageTitle = t(pages.find((item) => item.key === page)?.labelKey || "nav.overview");
+  const openCatalogNode = (target: CatalogJumpTarget) => {
+    setPage("datasources");
+    setCatalogJumpTarget(target);
+  };
   return (
     <Layout className="shell">
       <Layout.Sider width={248} className="sider">
@@ -762,19 +785,45 @@ function ConsoleApp() {
           </div>
         </Layout.Header>
         <Layout.Content className="content">
-          <Page page={page} api={api} />
+          <Page
+            page={page}
+            api={api}
+            catalogJumpTarget={catalogJumpTarget}
+            onCatalogJumpHandled={() => setCatalogJumpTarget(null)}
+            onOpenCatalogNode={openCatalogNode}
+          />
         </Layout.Content>
       </Layout>
     </Layout>
   );
 }
 
-function Page({ page, api }: { page: PageKey; api: ReturnType<typeof useApi> }) {
+function Page({
+  page,
+  api,
+  catalogJumpTarget,
+  onCatalogJumpHandled,
+  onOpenCatalogNode,
+}: {
+  page: PageKey;
+  api: ReturnType<typeof useApi>;
+  catalogJumpTarget: CatalogJumpTarget | null;
+  onCatalogJumpHandled: () => void;
+  onOpenCatalogNode: (target: CatalogJumpTarget) => void;
+}) {
   /** Route the selected navigation key to its console page component. */
 
   if (page === "overview") return <Overview api={api} />;
-  if (page === "datasources") return <Datasources api={api} />;
-  if (page === "tags") return <Tags api={api} />;
+  if (page === "datasources") {
+    return (
+      <Datasources
+        api={api}
+        jumpTarget={catalogJumpTarget}
+        onJumpHandled={onCatalogJumpHandled}
+      />
+    );
+  }
+  if (page === "tags") return <Tags api={api} onOpenCatalogNode={onOpenCatalogNode} />;
   if (page === "policies") return <Policies api={api} />;
   if (page === "masking") return <Masking api={api} />;
   if (page === "apiKeys") return <ApiKeys api={api} />;
@@ -828,7 +877,15 @@ function EndpointTable({ api, title, path }: { api: ReturnType<typeof useApi>; t
   );
 }
 
-function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
+function Datasources({
+  api,
+  jumpTarget,
+  onJumpHandled,
+}: {
+  api: ReturnType<typeof useApi>;
+  jumpTarget: CatalogJumpTarget | null;
+  onJumpHandled: () => void;
+}) {
   /** Unified datasource and asset catalog workspace. */
 
   const { t } = useI18n();
@@ -861,6 +918,19 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
       );
     }
   }, [datasources.data, resources.data]);
+
+  useEffect(() => {
+    if (!jumpTarget || loading || !datasources.data || !resources.data || !tags.data) {
+      return;
+    }
+    const path = findTreePathByKey(sourceTree, jumpTarget.key);
+    if (path.length) {
+      setSearch("");
+      setSelectedKey(jumpTarget.key);
+      setExpandedKeys((current) => Array.from(new Set([...current, ...path.slice(0, -1)])));
+    }
+    onJumpHandled();
+  }, [jumpTarget, loading, sourceTree, onJumpHandled]);
 
   return (
     <section className="resource-catalog">
@@ -1535,24 +1605,209 @@ function toAntTreeData(nodes: CatalogTreeNode[], t: I18nContextValue["t"]): AnyR
   });
 }
 
-function Tags({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Governance tag CRUD page. */
+function toTagCatalogTreeData(
+  nodes: CatalogTreeNode[],
+  t: I18nContextValue["t"],
+  onOpenNode: (node: CatalogTreeNode) => void,
+): AnyRecord[] {
+  /** Convert tag-linked catalog nodes into modal tree data with jump actions. */
+
+  return nodes.map((node) => {
+    const children = toTagCatalogTreeData(node.children || [], t, onOpenNode);
+    const label = String(node.display_name || node.name);
+    const meta = node.type === "datasource"
+      ? String(node.datasource_type || "")
+      : String(node.kind || "");
+    return {
+      key: node.key,
+      title: (
+        <div className="tag-catalog-node">
+          <Space size={6} className="catalog-node-title">
+            <span>{label}</span>
+            {meta ? <Tag>{optionLabel(meta, t)}</Tag> : null}
+            {node.status === "disabled" ? <Tag>{optionLabel("disabled", t)}</Tag> : null}
+          </Space>
+          <Button size="small" type="link" onClick={(event) => {
+            event.stopPropagation();
+            onOpenNode(node);
+          }}>
+            {t("catalog.jump")}
+          </Button>
+        </div>
+      ),
+      ...(children.length ? { children } : {}),
+    };
+  });
+}
+
+function Tags({
+  api,
+  onOpenCatalogNode,
+}: {
+  api: ReturnType<typeof useApi>;
+  onOpenCatalogNode: (target: CatalogJumpTarget) => void;
+}) {
+  /** Governance tag CRUD page with reverse lookup into linked datasource assets. */
+
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
+  const state = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const [editing, setEditing] = useState<AnyRecord | null>(null);
+  const [catalogTag, setCatalogTag] = useState<AnyRecord | null>(null);
+  const [open, setOpen] = useState(false);
+  const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
+
+  const create = async () => {
+    const values = await form.validateFields();
+    await api.request("/admin/tags", {
+      method: "POST",
+      body: JSON.stringify(values)
+    });
+    messageApi.success(t("common.saved"));
+    setOpen(false);
+    state.reload();
+  };
+
+  const update = async () => {
+    if (!editing) return;
+    const values = await editForm.validateFields();
+    await api.request(`/admin/tags/${editing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(values)
+    });
+    messageApi.success(t("common.saved"));
+    setEditing(null);
+    state.reload();
+  };
+
+  const remove = async (row: AnyRecord) => {
+    await api.request(`/admin/tags/${row.id}`, { method: "DELETE" });
+    messageApi.success(t("common.deleted"));
+    if (catalogTag?.id === row.id) {
+      setCatalogTag(null);
+    }
+    state.reload();
+  };
 
   return (
-    <CrudPanel
-      api={api}
-      title="nav.tags"
-      listPath="/admin/tags"
-      createPath="/admin/tags"
-      updatePath={(row) => `/admin/tags/${row.id}`}
-      deletePath={(row) => `/admin/tags/${row.id}`}
-      fields={[
-        { name: "name", label: "field.name", required: true },
-        { name: "category", label: "field.category" },
-        { name: "description", label: "field.description", input: "textarea" }
-      ]}
-      initialValues={{}}
-    />
+    <Space direction="vertical" size={12} className="full">
+      <Button
+        type="primary"
+        onClick={() => {
+          form.resetFields();
+          setOpen(true);
+        }}
+      >
+        {t("common.create")}
+      </Button>
+      <DataPanel
+        title={t("nav.tags")}
+        state={state}
+        columns={columnsFromRows(state.data || [], t)}
+        actionsColumnWidth={248}
+        actions={(row) => (
+          <Space size={4} onClick={(event) => event.stopPropagation()}>
+            <Tooltip title={t("tag.relatedAssets")}>
+              <Button size="small" onClick={() => setCatalogTag(row)}>
+                {t("tag.relatedAssets")}
+              </Button>
+            </Tooltip>
+            <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
+            <IconAction
+              title={t("common.edit")}
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(row);
+                editForm.setFieldsValue(row);
+              }}
+            />
+            <Popconfirm title={t("common.deleteConfirm", { title: t("nav.tags") })} onConfirm={() => remove(row)}>
+              <Button size="small" icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Space>
+        )}
+      />
+      <RecordDetails record={selected} title={t("nav.tags")} onClose={() => setSelected(null)} />
+      <Drawer
+        title={t("common.createTitle", { title: t("nav.tags") })}
+        open={open}
+        onClose={() => setOpen(false)}
+        extra={<Button type="primary" onClick={create}>{t("common.save")}</Button>}
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
+          <Form.Item name="category" label={t("field.category")}><Input autoComplete="off" /></Form.Item>
+          <Form.Item name="description" label={t("field.description")}><Input.TextArea autoComplete="off" autoSize={{ minRows: 3, maxRows: 8 }} /></Form.Item>
+        </Form>
+      </Drawer>
+      <Drawer
+        title={t("common.editTitle", { title: t("nav.tags") })}
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        extra={<Button type="primary" onClick={update}>{t("common.save")}</Button>}
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
+          <Form.Item name="category" label={t("field.category")}><Input autoComplete="off" /></Form.Item>
+          <Form.Item name="description" label={t("field.description")}><Input.TextArea autoComplete="off" autoSize={{ minRows: 3, maxRows: 8 }} /></Form.Item>
+        </Form>
+      </Drawer>
+      <TagCatalogModal
+        api={api}
+        tag={catalogTag}
+        onClose={() => setCatalogTag(null)}
+        onOpenCatalogNode={onOpenCatalogNode}
+      />
+    </Space>
+  );
+}
+
+function TagCatalogModal({
+  api,
+  tag,
+  onClose,
+  onOpenCatalogNode,
+}: {
+  api: ReturnType<typeof useApi>;
+  tag: AnyRecord | null;
+  onClose: () => void;
+  onOpenCatalogNode: (target: CatalogJumpTarget) => void;
+}) {
+  /** Show all datasource and resource nodes that are linked to a selected tag. */
+
+  const { t } = useI18n();
+  const state = useData<CatalogTreeNode[]>(
+    () => (tag ? api.request(`/admin/tags/${tag.id}/catalog`) : Promise.resolve([])),
+    [api.apiKey, tag?.id]
+  );
+  const openNode = (node: CatalogTreeNode) => {
+    onOpenCatalogNode({ key: node.key });
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={t("tag.relatedAssetsTitle", { name: String(tag?.name || "") })}
+      open={Boolean(tag)}
+      onCancel={onClose}
+      footer={null}
+      width={820}
+    >
+      {state.error ? <Alert type="error" message={state.error} /> : null}
+      {!state.error && !state.loading && !state.data?.length ? (
+        <Empty description={t("tag.noLinkedAssets")} />
+      ) : (
+        <Tree
+          blockNode
+          className="tag-catalog-tree"
+          showLine
+          defaultExpandAll
+          treeData={toTagCatalogTreeData(state.data || [], t, openNode)}
+        />
+      )}
+    </Modal>
   );
 }
 
@@ -1950,13 +2205,15 @@ function DataPanel({
   state,
   columns,
   actions,
-  onRow
+  onRow,
+  actionsColumnWidth = 112,
 }: {
   title: string;
   state: { data: AnyRecord[] | null; loading: boolean; error: string | null; reload: () => void };
   columns: ColumnsType<AnyRecord>;
   actions?: (row: AnyRecord) => React.ReactNode;
   onRow?: (row: AnyRecord) => React.HTMLAttributes<HTMLElement>;
+  actionsColumnWidth?: number;
 }) {
   /** Shared table panel with optional row actions and a reload control. */
 
@@ -1969,7 +2226,7 @@ function DataPanel({
           title: "",
           key: "actions",
           fixed: "right" as const,
-          width: 112,
+          width: actionsColumnWidth,
           render: (_: unknown, row: AnyRecord) => actions(row)
         }
       ]
