@@ -42,10 +42,17 @@ import {
   Typography,
   theme
 } from "antd";
+import type { FormInstance } from "antd/es/form";
 import type { ColumnsType } from "antd/es/table";
 import enUS from "antd/locale/en_US";
 import zhCN from "antd/locale/zh_CN";
 import zhTW from "antd/locale/zh_TW";
+import {
+  datasourceConfigFromFormValues,
+  datasourceFormValuesFromConfig,
+  maskingConfigFromFormValues,
+  maskingFormValuesFromConfig,
+} from "./configForms";
 import "./styles.css";
 
 type PageKey =
@@ -112,6 +119,11 @@ const translations = {
     "field.type": "Type",
     "field.status": "Status",
     "field.config": "Config",
+    "field.host": "Host",
+    "field.port": "Port",
+    "field.database": "Database",
+    "field.username": "Username",
+    "field.password": "Password",
     "field.displayName": "Display name",
     "field.queryLanguage": "Query language",
     "field.category": "Category",
@@ -125,6 +137,10 @@ const translations = {
     "field.tagId": "Tag ID",
     "field.priority": "Priority",
     "field.strategy": "Strategy",
+    "field.replacement": "Replacement",
+    "field.prefix": "Visible prefix",
+    "field.suffix": "Visible suffix",
+    "field.fill": "Mask character",
     "field.scopes": "Scopes",
     "tab.resource": "Resource",
     "tab.field": "Field",
@@ -137,6 +153,7 @@ const translations = {
     "datasource.tested": "Connection test passed",
     "datasource.scanned": "Metadata synced",
     "datasource.deleteConfirm": "Delete this data source and scanned metadata?",
+    "datasource.configHint": "Use explicit connection fields instead of pasting JSON.",
     "catalog.search": "Search data sources, databases, tables, or fields",
     "catalog.selectPrompt": "Select a data source, database, table, or field to edit details.",
     "catalog.treeTitle": "Data Sources",
@@ -147,6 +164,9 @@ const translations = {
     "catalog.tags": "Tags",
     "catalog.noTags": "No tags assigned",
     "catalog.addTag": "Add tag",
+    "masking.fixedHint": "Fixed masking always returns the same replacement text.",
+    "masking.partialHint": "Partial masking keeps the start and end of the value visible.",
+    "masking.noConfig": "This masking strategy does not require extra configuration.",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
     "mcp.tools": "Tools",
@@ -247,6 +267,11 @@ const translations = {
     "field.type": "类型",
     "field.status": "状态",
     "field.config": "配置",
+    "field.host": "主机",
+    "field.port": "端口",
+    "field.database": "数据库",
+    "field.username": "用户名",
+    "field.password": "密码",
     "field.displayName": "显示名称",
     "field.queryLanguage": "查询语言",
     "field.category": "分类",
@@ -260,6 +285,10 @@ const translations = {
     "field.tagId": "标签 ID",
     "field.priority": "优先级",
     "field.strategy": "策略",
+    "field.replacement": "替换文本",
+    "field.prefix": "保留前缀",
+    "field.suffix": "保留后缀",
+    "field.fill": "掩码字符",
     "field.scopes": "权限范围",
     "tab.resource": "资源",
     "tab.field": "字段",
@@ -272,6 +301,7 @@ const translations = {
     "datasource.tested": "连接测试通过",
     "datasource.scanned": "元数据已同步",
     "datasource.deleteConfirm": "确认删除该数据源及其扫描元数据？",
+    "datasource.configHint": "使用明确的连接字段填写配置，不需要手写 JSON。",
     "catalog.search": "搜索数据源、库、表或字段",
     "catalog.selectPrompt": "选择一个数据源、数据库、数据表或字段来维护详情。",
     "catalog.treeTitle": "数据源",
@@ -282,6 +312,9 @@ const translations = {
     "catalog.tags": "标签",
     "catalog.noTags": "暂未绑定标签",
     "catalog.addTag": "添加标签",
+    "masking.fixedHint": "固定脱敏会始终返回同一段替换文本。",
+    "masking.partialHint": "局部脱敏会保留值的开头和结尾可见部分。",
+    "masking.noConfig": "当前脱敏策略不需要额外配置。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
     "mcp.tools": "工具",
@@ -382,6 +415,11 @@ const translations = {
     "field.type": "類型",
     "field.status": "狀態",
     "field.config": "設定",
+    "field.host": "主機",
+    "field.port": "連接埠",
+    "field.database": "資料庫",
+    "field.username": "使用者名稱",
+    "field.password": "密碼",
     "field.displayName": "顯示名稱",
     "field.queryLanguage": "查詢語言",
     "field.category": "分類",
@@ -395,6 +433,10 @@ const translations = {
     "field.tagId": "標籤 ID",
     "field.priority": "優先順序",
     "field.strategy": "策略",
+    "field.replacement": "替換文字",
+    "field.prefix": "保留前綴",
+    "field.suffix": "保留後綴",
+    "field.fill": "遮罩字元",
     "field.scopes": "權限範圍",
     "tab.resource": "資源",
     "tab.field": "欄位",
@@ -407,6 +449,7 @@ const translations = {
     "datasource.tested": "連線測試通過",
     "datasource.scanned": "中繼資料已同步",
     "datasource.deleteConfirm": "確認刪除此資料來源及其掃描中繼資料？",
+    "datasource.configHint": "使用明確的連線欄位填寫設定，不需要手寫 JSON。",
     "catalog.search": "搜尋資料來源、資料庫、資料表或欄位",
     "catalog.selectPrompt": "選擇一個資料來源、資料庫、資料表或欄位來維護詳情。",
     "catalog.treeTitle": "資料來源",
@@ -417,6 +460,9 @@ const translations = {
     "catalog.tags": "標籤",
     "catalog.noTags": "尚未綁定標籤",
     "catalog.addTag": "新增標籤",
+    "masking.fixedHint": "固定脫敏會固定回傳同一段替換文字。",
+    "masking.partialHint": "局部脫敏會保留值的開頭和結尾可見部分。",
+    "masking.noConfig": "目前的脫敏策略不需要額外設定。",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
     "mcp.tools": "工具",
@@ -492,7 +538,7 @@ type FieldConfig = {
   /** Backend payload field name used by Ant Design forms. */
   name: string;
   label: TranslationKey;
-  input?: "text" | "textarea" | "json" | "number" | "tags" | "select" | "resource-select";
+  input?: "text" | "textarea" | "number" | "tags" | "select" | "resource-select";
   required?: boolean;
   options?: string[];
   resourceOptions?: AnyRecord[];
@@ -908,6 +954,103 @@ function CatalogDetail({
   return <AssetDetail api={api} tags={tags} selected={selected} onSaved={onSaved} />;
 }
 
+function DatasourceConnectionFields() {
+  /** Render explicit relational connection inputs instead of raw JSON config. */
+
+  const { t } = useI18n();
+  return (
+    <>
+      <Alert type="info" showIcon message={t("datasource.configHint")} />
+      <div className="config-form-grid">
+        <Form.Item
+          name="host"
+          label={t("field.host")}
+          rules={[{ required: true, message: t("common.required", { label: t("field.host") }) }]}
+        >
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item
+          name="port"
+          label={t("field.port")}
+          rules={[{ required: true, message: t("common.required", { label: t("field.port") }) }]}
+        >
+          <InputNumber className="full" min={1} max={65535} />
+        </Form.Item>
+        <Form.Item
+          name="database"
+          label={t("field.database")}
+          rules={[{ required: true, message: t("common.required", { label: t("field.database") }) }]}
+          className="span-2"
+        >
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item name="username" label={t("field.username")}>
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item name="password" label={t("field.password")}>
+          <Input.Password autoComplete="new-password" />
+        </Form.Item>
+      </div>
+    </>
+  );
+}
+
+function MaskingConfigFields({ form }: { form: FormInstance<AnyRecord> }) {
+  /** Render strategy-specific masking controls and hide irrelevant config fields. */
+
+  const { t } = useI18n();
+  const strategy = String(Form.useWatch("strategy", form) || "fixed");
+
+  if (strategy === "partial") {
+    return (
+      <>
+        <Alert type="info" showIcon message={t("masking.partialHint")} />
+        <div className="config-form-grid">
+          <Form.Item
+            name="prefix"
+            label={t("field.prefix")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.prefix") }) }]}
+          >
+            <InputNumber className="full" min={0} />
+          </Form.Item>
+          <Form.Item
+            name="suffix"
+            label={t("field.suffix")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.suffix") }) }]}
+          >
+            <InputNumber className="full" min={0} />
+          </Form.Item>
+          <Form.Item
+            name="fill"
+            label={t("field.fill")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.fill") }) }]}
+            className="span-2"
+          >
+            <Input autoComplete="off" maxLength={1} />
+          </Form.Item>
+        </div>
+      </>
+    );
+  }
+
+  if (strategy === "fixed") {
+    return (
+      <>
+        <Alert type="info" showIcon message={t("masking.fixedHint")} />
+        <Form.Item
+          name="replacement"
+          label={t("field.replacement")}
+          rules={[{ required: true, message: t("common.required", { label: t("field.replacement") }) }]}
+        >
+          <Input autoComplete="off" />
+        </Form.Item>
+      </>
+    );
+  }
+
+  return <Alert type="info" showIcon message={t("masking.noConfig")} />;
+}
+
 function DatasourceDetail({
   api,
   tags,
@@ -988,9 +1131,7 @@ function DatasourceDetail({
           <Form.Item name="status" label={t("field.status")}>
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
-          <Form.Item name="config" label={t("field.config")} rules={[{ required: true }]}>
-            <Input.TextArea autoComplete="off" autoSize={{ minRows: 8, maxRows: 16 }} />
-          </Form.Item>
+          <DatasourceConnectionFields />
         </Form>
         <CatalogTagEditor
           api={api}
@@ -1234,11 +1375,7 @@ function DatasourceCreateDrawer({
         initialValues={{
           type: "postgres",
           status: "active",
-          config: JSON.stringify(
-            { host: "localhost", port: 5432, database: "warehouse" },
-            null,
-            2
-          )
+          ...datasourceFormValuesFromConfig({ host: "localhost", port: 5432, database: "warehouse" })
         }}
       >
         <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
@@ -1250,9 +1387,7 @@ function DatasourceCreateDrawer({
         <Form.Item name="status" label={t("field.status")} rules={[{ required: true }]}>
           <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
         </Form.Item>
-        <Form.Item name="config" label={t("field.config")} rules={[{ required: true }]}>
-          <Input.TextArea autoComplete="off" autoSize={{ minRows: 8, maxRows: 16 }} />
-        </Form.Item>
+        <DatasourceConnectionFields />
       </Form>
     </Drawer>
   );
@@ -1326,22 +1461,57 @@ function toCatalogFormValues(node: CatalogTreeNode) {
 }
 
 function toDatasourceFormValues(node: CatalogTreeNode) {
-  /** Convert datasource nodes into form values with pretty JSON config text. */
+  /** Convert datasource nodes into form values with explicit connection fields. */
 
   return {
     name: node.name,
     status: node.status || "active",
-    config: JSON.stringify(node.config || {}, null, 2),
+    ...datasourceFormValuesFromConfig(node.config || {}),
   };
 }
 
 function normalizeDatasourceValues(values: AnyRecord) {
-  /** Parse datasource config text before sending it to the admin API. */
+  /** Convert explicit datasource form fields into the admin API payload. */
+
+  const { host, port, database, username, password, ...rest } = values;
 
   return {
-    ...values,
-    config: typeof values.config === "string" ? JSON.parse(values.config) : values.config,
+    ...rest,
+    config: datasourceConfigFromFormValues({ host, port, database, username, password }),
   };
+}
+
+function toMaskingFormValues(values: AnyRecord) {
+  /** Expand masking policy config into dedicated form fields for the active strategy. */
+
+  const strategy = String(values.strategy || "fixed");
+  return {
+    ...values,
+    ...maskingFormValuesFromConfig(strategy, values.config || {}),
+  };
+}
+
+function normalizeMaskingValues(values: AnyRecord) {
+  /** Collapse strategy-specific masking controls back into the API payload shape. */
+
+  const { replacement, prefix, suffix, fill, ...rest } = values;
+  const strategy = String(rest.strategy || "fixed");
+  return {
+    ...rest,
+    config: maskingConfigFromFormValues(strategy, { replacement, prefix, suffix, fill }),
+  };
+}
+
+function applyMaskingStrategyDefaults(form: FormInstance<AnyRecord>, strategy: string) {
+  /** Reset strategy-specific form fields so newly selected modes start with sane defaults. */
+
+  form.setFieldsValue({
+    replacement: undefined,
+    prefix: undefined,
+    suffix: undefined,
+    fill: undefined,
+    ...maskingFormValuesFromConfig(strategy, {}),
+  });
 }
 
 function toAntTreeData(nodes: CatalogTreeNode[], t: I18nContextValue["t"]): AnyRecord[] {
@@ -1437,35 +1607,138 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
 }
 
 function Masking({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Masking policy CRUD page with searchable resource association. */
+  /** Masking policy CRUD page with strategy-aware config forms. */
 
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
+  const state = useData<AnyRecord[]>(() => api.request("/admin/masking-policies"), [api.apiKey]);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const [editing, setEditing] = useState<AnyRecord | null>(null);
+  const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
+
+  const openCreate = () => {
+    form.resetFields();
+    form.setFieldsValue(toMaskingFormValues({ strategy: "fixed", status: "active", config: { replacement: "REDACTED" } }));
+    setOpen(true);
+  };
+
+  const create = async () => {
+    const values = await form.validateFields();
+    await api.request("/admin/masking-policies", {
+      method: "POST",
+      body: JSON.stringify(normalizeMaskingValues(values))
+    });
+    messageApi.success(t("common.saved"));
+    setOpen(false);
+    state.reload();
+  };
+
+  const update = async () => {
+    if (!editing) return;
+    const values = await editForm.validateFields();
+    await api.request(`/admin/masking-policies/${editing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(normalizeMaskingValues(values))
+    });
+    messageApi.success(t("common.saved"));
+    setEditing(null);
+    state.reload();
+  };
+
+  const remove = async (row: AnyRecord) => {
+    await api.request(`/admin/masking-policies/${row.id}`, { method: "DELETE" });
+    messageApi.success(t("common.deleted"));
+    state.reload();
+  };
+
+  const maskingForm = (targetForm: FormInstance<AnyRecord>) => (
+    <Form form={targetForm} layout="vertical">
+      <Form.Item
+        name="resource_id"
+        label={t("field.resourceId")}
+        rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
+      >
+        <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+      </Form.Item>
+      <Form.Item
+        name="field_name"
+        label={t("field.field")}
+        rules={[{ required: true, message: t("common.required", { label: t("field.field") }) }]}
+      >
+        <Input autoComplete="off" />
+      </Form.Item>
+      <div className="config-form-grid">
+        <Form.Item name="subject_type" label={t("field.subjectType")}>
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item name="subject_id" label={t("field.subject")}>
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item
+          name="strategy"
+          label={t("field.strategy")}
+          rules={[{ required: true, message: t("common.required", { label: t("field.strategy") }) }]}
+        >
+          <Select
+            options={["fixed", "partial", "hash", "reversible"].map((value) => ({ value, label: optionLabel(value, t) }))}
+            onChange={(value) => {
+              applyMaskingStrategyDefaults(targetForm, String(value));
+            }}
+          />
+        </Form.Item>
+        <Form.Item name="status" label={t("field.status")}>
+          <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+        </Form.Item>
+      </div>
+      <MaskingConfigFields form={targetForm} />
+    </Form>
+  );
+
   return (
-    <CrudPanel
-      api={api}
-      title="nav.masking"
-      listPath="/admin/masking-policies"
-      createPath="/admin/masking-policies"
-      updatePath={(row) => `/admin/masking-policies/${row.id}`}
-      deletePath={(row) => `/admin/masking-policies/${row.id}`}
-      fields={[
-        {
-          name: "resource_id",
-          label: "field.resourceId",
-          input: "resource-select",
-          resourceOptions: resources.data || [],
-          loading: resources.loading,
-          required: true
-        },
-        { name: "field_name", label: "field.field", required: true },
-        { name: "subject_type", label: "field.subjectType" },
-        { name: "subject_id", label: "field.subject" },
-        { name: "strategy", label: "field.strategy", input: "select", options: ["fixed", "partial", "hash", "reversible"], required: true },
-        { name: "config", label: "field.config", input: "json", required: true },
-        { name: "status", label: "field.status", input: "select", options: ["active", "disabled"] }
-      ]}
-      initialValues={{ strategy: "fixed", config: { replacement: "REDACTED" }, status: "active" }}
-    />
+    <Space direction="vertical" size={12} className="full">
+      <Button type="primary" onClick={openCreate}>{t("common.create")}</Button>
+      <DataPanel
+        title={t("nav.masking")}
+        state={state}
+        columns={columnsFromRows(state.data || [], t)}
+        actions={(row) => (
+          <Space size={4} onClick={(event) => event.stopPropagation()}>
+            <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
+            <IconAction
+              title={t("common.edit")}
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(row);
+                editForm.setFieldsValue(toMaskingFormValues(row));
+              }}
+            />
+            <Popconfirm title={t("common.deleteConfirm", { title: t("nav.masking") })} onConfirm={() => remove(row)}>
+              <Button size="small" icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Space>
+        )}
+      />
+      <RecordDetails record={selected} title={t("nav.masking")} onClose={() => setSelected(null)} />
+      <Drawer
+        title={t("common.createTitle", { title: t("nav.masking") })}
+        open={open}
+        onClose={() => setOpen(false)}
+        extra={<Button type="primary" onClick={create}>{t("common.save")}</Button>}
+      >
+        {maskingForm(form)}
+      </Drawer>
+      <Drawer
+        title={t("common.editTitle", { title: t("nav.masking") })}
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        extra={<Button type="primary" onClick={update}>{t("common.save")}</Button>}
+      >
+        {maskingForm(editForm)}
+      </Drawer>
+    </Space>
   );
 }
 
@@ -1830,7 +2103,7 @@ function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
   const label = t(field.label);
   const rules = field.required ? [{ required: true, message: t("common.required", { label }) }] : undefined;
   let control: React.ReactNode = <Input autoComplete="off" />;
-  if (field.input === "textarea" || field.input === "json") {
+  if (field.input === "textarea") {
     control = <Input.TextArea autoComplete="off" autoSize={{ minRows: 3, maxRows: 8 }} />;
   } else if (field.input === "number") {
     control = <InputNumber className="full" />;
@@ -1849,32 +2122,18 @@ function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
 }
 
 function toFormValues(values: AnyRecord, fields: FieldConfig[]) {
-  /** Convert API values into form-friendly values, including pretty JSON text. */
+  /** Return shallow-copied values so generic drawers can edit API payloads safely. */
 
-  const result = { ...values };
-  for (const field of fields) {
-    if (field.input === "json" && result[field.name] !== undefined) {
-      result[field.name] = JSON.stringify(result[field.name], null, 2);
-    }
-  }
-  return result;
+  void fields;
+  return { ...values };
 }
 
 function normalizeValues(values: AnyRecord, fields: FieldConfig[], t?: I18nContextValue["t"]) {
-  /** Convert form values back into API payloads and validate JSON fields. */
+  /** Return shallow-copied values for generic CRUD forms without JSON text parsing. */
 
-  const result = { ...values };
-  for (const field of fields) {
-    if (field.input === "json" && typeof result[field.name] === "string") {
-      try {
-        result[field.name] = JSON.parse(result[field.name]);
-      } catch (error) {
-        const label = t ? t(field.label) : field.name;
-        throw new Error(t ? t("common.validJson", { label }) : `${label} must be valid JSON`);
-      }
-    }
-  }
-  return result;
+  void fields;
+  void t;
+  return { ...values };
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);

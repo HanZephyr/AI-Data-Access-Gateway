@@ -576,6 +576,16 @@ body {
   padding-inline: 10px 6px;
 }
 
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.config-form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
 .catalog-empty {
   margin: auto;
 }
@@ -646,6 +656,14 @@ body {
   .resource-catalog {
     min-height: auto;
     grid-template-columns: 1fr;
+  }
+
+  .config-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .config-form-grid .span-2 {
+    grid-column: auto;
   }
 
   .catalog-tree,
