@@ -28,6 +28,17 @@ class TagRequest(BaseModel):
     description: str | None = None
 
 
+class TagUpdateRequest(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    description: str | None = None
+
+
+class ResourceUpdateRequest(BaseModel):
+    display_name: str | None = None
+    query_language: str | None = None
+
+
 class ResourceTagRequest(BaseModel):
     tenant_id: str
     tag_id: str
@@ -46,6 +57,17 @@ class ResourcePolicyRequest(BaseModel):
     status: str = "active"
 
 
+class ResourcePolicyUpdateRequest(BaseModel):
+    subject_type: str | None = None
+    subject_id: str | None = None
+    effect: str | None = None
+    action: str | None = None
+    resource_id: str | None = None
+    tag_id: str | None = None
+    priority: int | None = None
+    status: str | None = None
+
+
 class FieldPolicyRequest(BaseModel):
     tenant_id: str
     subject_type: str
@@ -56,6 +78,17 @@ class FieldPolicyRequest(BaseModel):
     action: str
     priority: int = 0
     status: str = "active"
+
+
+class FieldPolicyUpdateRequest(BaseModel):
+    subject_type: str | None = None
+    subject_id: str | None = None
+    effect: str | None = None
+    resource_id: str | None = None
+    field_name: str | None = None
+    action: str | None = None
+    priority: int | None = None
+    status: str | None = None
 
 
 class MaskingPolicyRequest(BaseModel):
@@ -69,9 +102,25 @@ class MaskingPolicyRequest(BaseModel):
     status: str = "active"
 
 
+class MaskingPolicyUpdateRequest(BaseModel):
+    resource_id: str | None = None
+    field_name: str | None = None
+    strategy: str | None = None
+    config: dict[str, object] | None = None
+    subject_type: str | None = None
+    subject_id: str | None = None
+    status: str | None = None
+
+
 class ApiKeyCreateRequest(BaseModel):
     name: str
     scopes: list[str]
+    expires_at: datetime | None = None
+
+
+class ApiKeyUpdateRequest(BaseModel):
+    name: str | None = None
+    scopes: list[str] | None = None
     expires_at: datetime | None = None
 
 
@@ -89,6 +138,47 @@ def list_resources(
         select(Resource).where(*conditions).order_by(Resource.path)
     ).scalars()
     return [_serialize_resource(resource) for resource in resources]
+
+
+@router.get("/resources/{resource_id}")
+def get_resource(
+    resource_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    resource = _get_by_id(session, Resource, resource_id, "Resource not found")
+    return _serialize_resource(resource)
+
+
+@router.patch("/resources/{resource_id}")
+def update_resource(
+    resource_id: str,
+    payload: ResourceUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    resource = _get_by_id(session, Resource, resource_id, "Resource not found")
+    _apply_updates(resource, payload.model_dump(exclude_unset=True))
+    session.commit()
+    session.refresh(resource)
+    return _serialize_resource(resource)
+
+
+@router.delete("/resources/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_resource(
+    resource_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    resource = _get_by_id(session, Resource, resource_id, "Resource not found")
+    session.execute(delete(ResourceField).where(ResourceField.resource_id == resource_id))
+    session.execute(delete(ResourceTag).where(ResourceTag.resource_id == resource_id))
+    session.execute(delete(ResourcePolicy).where(ResourcePolicy.resource_id == resource_id))
+    session.execute(delete(FieldPolicy).where(FieldPolicy.resource_id == resource_id))
+    session.execute(delete(MaskingPolicy).where(MaskingPolicy.resource_id == resource_id))
+    session.delete(resource)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/resources/{resource_id}/fields")
@@ -136,6 +226,30 @@ def create_tag(
 ) -> dict[str, Any]:
     tag = Tag(**payload.model_dump())
     session.add(tag)
+    session.commit()
+    session.refresh(tag)
+    return _serialize_tag(tag)
+
+
+@router.get("/tags/{tag_id}")
+def get_tag(
+    tag_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    tag = _get_by_id(session, Tag, tag_id, "Tag not found")
+    return _serialize_tag(tag)
+
+
+@router.patch("/tags/{tag_id}")
+def update_tag(
+    tag_id: str,
+    payload: TagUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    tag = _get_by_id(session, Tag, tag_id, "Tag not found")
+    _apply_updates(tag, payload.model_dump(exclude_unset=True))
     session.commit()
     session.refresh(tag)
     return _serialize_tag(tag)
@@ -198,6 +312,30 @@ def create_resource_policy(
     return _serialize_resource_policy(policy)
 
 
+@router.get("/resource-policies/{policy_id}")
+def get_resource_policy(
+    policy_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
+    return _serialize_resource_policy(policy)
+
+
+@router.patch("/resource-policies/{policy_id}")
+def update_resource_policy(
+    policy_id: str,
+    payload: ResourcePolicyUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
+    _apply_updates(policy, payload.model_dump(exclude_unset=True))
+    session.commit()
+    session.refresh(policy)
+    return _serialize_resource_policy(policy)
+
+
 @router.delete("/resource-policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resource_policy(
     policy_id: str,
@@ -228,6 +366,30 @@ def create_field_policy(
 ) -> dict[str, Any]:
     policy = FieldPolicy(**payload.model_dump())
     session.add(policy)
+    session.commit()
+    session.refresh(policy)
+    return _serialize_field_policy(policy)
+
+
+@router.get("/field-policies/{policy_id}")
+def get_field_policy(
+    policy_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, FieldPolicy, policy_id, "Policy not found")
+    return _serialize_field_policy(policy)
+
+
+@router.patch("/field-policies/{policy_id}")
+def update_field_policy(
+    policy_id: str,
+    payload: FieldPolicyUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, FieldPolicy, policy_id, "Policy not found")
+    _apply_updates(policy, payload.model_dump(exclude_unset=True))
     session.commit()
     session.refresh(policy)
     return _serialize_field_policy(policy)
@@ -270,6 +432,34 @@ def create_masking_policy(
     return _serialize_masking_policy(policy)
 
 
+@router.get("/masking-policies/{policy_id}")
+def get_masking_policy(
+    policy_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, MaskingPolicy, policy_id, "Masking policy not found")
+    return _serialize_masking_policy(policy)
+
+
+@router.patch("/masking-policies/{policy_id}")
+def update_masking_policy(
+    policy_id: str,
+    payload: MaskingPolicyUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    policy = _get_by_id(session, MaskingPolicy, policy_id, "Masking policy not found")
+    data = payload.model_dump(exclude_unset=True)
+    config = data.pop("config", None)
+    _apply_updates(policy, data)
+    if config is not None:
+        policy.config_json = json.dumps(config, separators=(",", ":"))
+    session.commit()
+    session.refresh(policy)
+    return _serialize_masking_policy(policy)
+
+
 @router.delete("/masking-policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_masking_policy(
     policy_id: str,
@@ -287,6 +477,16 @@ def list_api_keys(
 ) -> list[dict[str, Any]]:
     keys = session.execute(select(ApiKey).order_by(ApiKey.created_at.desc())).scalars()
     return [_serialize_api_key(key) for key in keys]
+
+
+@router.get("/api-keys/{api_key_id}")
+def get_api_key(
+    api_key_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    api_key = _get_by_id(session, ApiKey, api_key_id, "API key not found")
+    return _serialize_api_key(api_key)
 
 
 @router.post("/api-keys", status_code=status.HTTP_201_CREATED)
@@ -307,6 +507,24 @@ def create_api_key(
     session.commit()
     session.refresh(api_key)
     return {**_serialize_api_key(api_key), "api_key": plaintext}
+
+
+@router.patch("/api-keys/{api_key_id}")
+def update_api_key(
+    api_key_id: str,
+    payload: ApiKeyUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    api_key = _get_by_id(session, ApiKey, api_key_id, "API key not found")
+    data = payload.model_dump(exclude_unset=True)
+    scopes = data.pop("scopes", None)
+    _apply_updates(api_key, data)
+    if scopes is not None:
+        api_key.scopes = json.dumps(scopes, separators=(",", ":"))
+    session.commit()
+    session.refresh(api_key)
+    return _serialize_api_key(api_key)
 
 
 @router.post("/api-keys/{api_key_id}/revoke")
@@ -452,6 +670,18 @@ def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
         "metadata": json.loads(event.metadata_json),
         "created_at": event.created_at.isoformat(),
     }
+
+
+def _get_by_id(session: Session, model: type[Any], item_id: str, detail: str) -> Any:
+    item = session.get(model, item_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
+    return item
+
+
+def _apply_updates(item: Any, data: dict[str, Any]) -> None:
+    for key, value in data.items():
+        setattr(item, key, value)
 
 
 def _delete_by_id(session: Session, model: type[Any], item_id: str) -> None:

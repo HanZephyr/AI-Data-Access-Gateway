@@ -121,6 +121,39 @@ def test_admin_resource_and_tag_management() -> None:
     tags = client.get("/admin/tags?tenant_id=tenant-a", headers=auth())
     assert [tag["name"] for tag in tags.json()] == ["pii"]
 
+    fetched_tag = client.get(f"/admin/tags/{tag_id}", headers=auth())
+    assert fetched_tag.status_code == 200
+    assert fetched_tag.json()["name"] == "pii"
+
+    updated_tag = client.patch(
+        f"/admin/tags/{tag_id}",
+        json={"description": "Email and account identifiers"},
+        headers=auth(),
+    )
+    assert updated_tag.status_code == 200
+    assert updated_tag.json()["description"] == "Email and account identifiers"
+
+    resource = client.get("/admin/resources/res_customers", headers=auth())
+    assert resource.status_code == 200
+    assert resource.json()["display_name"] == "customers"
+
+    updated_resource = client.patch(
+        "/admin/resources/res_customers",
+        json={"display_name": "Customer Accounts"},
+        headers=auth(),
+    )
+    assert updated_resource.status_code == 200
+    assert updated_resource.json()["display_name"] == "Customer Accounts"
+
+    deleted_tag = client.delete(f"/admin/tags/{tag_id}", headers=auth())
+    assert deleted_tag.status_code == 204
+
+    deleted_resource = client.delete("/admin/resources/res_customers", headers=auth())
+    assert deleted_resource.status_code == 204
+
+    missing_resource = client.get("/admin/resources/res_customers", headers=auth())
+    assert missing_resource.status_code == 404
+
 
 def test_admin_policy_and_masking_policy_management() -> None:
     client = build_console_app()
@@ -138,6 +171,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert resource_policy.status_code == 201
+    resource_policy_id = resource_policy.json()["id"]
 
     field_policy = client.post(
         "/admin/field-policies",
@@ -153,6 +187,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert field_policy.status_code == 201
+    field_policy_id = field_policy.json()["id"]
 
     masking = client.post(
         "/admin/masking-policies",
@@ -166,6 +201,34 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert masking.status_code == 201
+    masking_policy_id = masking.json()["id"]
+
+    updated_resource_policy = client.patch(
+        f"/admin/resource-policies/{resource_policy_id}",
+        json={"priority": 10, "status": "disabled"},
+        headers=auth(),
+    )
+    assert updated_resource_policy.status_code == 200
+    assert updated_resource_policy.json()["priority"] == 10
+    assert updated_resource_policy.json()["status"] == "disabled"
+
+    updated_field_policy = client.patch(
+        f"/admin/field-policies/{field_policy_id}",
+        json={"effect": "allow", "priority": 7},
+        headers=auth(),
+    )
+    assert updated_field_policy.status_code == 200
+    assert updated_field_policy.json()["effect"] == "allow"
+    assert updated_field_policy.json()["priority"] == 7
+
+    updated_masking = client.patch(
+        f"/admin/masking-policies/{masking_policy_id}",
+        json={"strategy": "partial", "config": {"prefix": 2, "suffix": 3, "fill": "*"}},
+        headers=auth(),
+    )
+    assert updated_masking.status_code == 200
+    assert updated_masking.json()["strategy"] == "partial"
+    assert updated_masking.json()["config"]["prefix"] == 2
 
     assert (
         len(client.get("/admin/resource-policies?tenant_id=tenant-a", headers=auth()).json())
@@ -175,6 +238,19 @@ def test_admin_policy_and_masking_policy_management() -> None:
     assert (
         len(client.get("/admin/masking-policies?tenant_id=tenant-a", headers=auth()).json())
         == 1
+    )
+
+    assert (
+        client.delete(f"/admin/resource-policies/{resource_policy_id}", headers=auth()).status_code
+        == 204
+    )
+    assert (
+        client.delete(f"/admin/field-policies/{field_policy_id}", headers=auth()).status_code
+        == 204
+    )
+    assert (
+        client.delete(f"/admin/masking-policies/{masking_policy_id}", headers=auth()).status_code
+        == 204
     )
 
 
@@ -189,6 +265,15 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert created.status_code == 201
     assert created.json()["api_key"].startswith("adg_")
     key_id = created.json()["id"]
+
+    updated = client.patch(
+        f"/admin/api-keys/{key_id}",
+        json={"name": "runtime readonly", "scopes": ["runtime", "readonly"]},
+        headers=auth(),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "runtime readonly"
+    assert updated.json()["scopes"] == ["runtime", "readonly"]
 
     revoked = client.post(f"/admin/api-keys/{key_id}/revoke", headers=auth())
     assert revoked.status_code == 200
