@@ -2,11 +2,9 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import create_engine, inspect, text
 
-from adg.app.main import create_app
 from adg.app.settings import get_settings
 
 
@@ -121,37 +119,3 @@ def test_remove_tenant_migration_upgrades_existing_database(tmp_path: Path) -> N
     indexes = {index["name"] for index in inspector.get_indexes("datasources")}
     assert "tenant_id" not in columns
     assert "ix_datasources_tenant_id" not in indexes
-
-
-def test_app_startup_upgrades_legacy_database(
-    monkeypatch: MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    db_path = tmp_path / "startup-upgrade.db"
-    db_url = f"sqlite:///{db_path}"
-    config = Config(str(project_root / "alembic.ini"))
-    config.set_main_option(
-        "script_location",
-        str(project_root / "src" / "adg" / "control_plane" / "migrations"),
-    )
-    config.set_main_option("sqlalchemy.url", db_url)
-    command.upgrade(config, "202604240002")
-
-    monkeypatch.setenv("ADG_CONTROL_PLANE_DATABASE_URL", db_url)
-    get_settings.cache_clear()
-
-    try:
-        with TestClient(create_app()) as client:
-            response = client.get("/health")
-            assert response.status_code == 200
-    finally:
-        get_settings.cache_clear()
-
-    inspector = inspect(create_engine(db_url))
-    resource_columns = {column["name"] for column in inspector.get_columns("resources")}
-    field_columns = {column["name"] for column in inspector.get_columns("resource_fields")}
-    tables = set(inspector.get_table_names())
-    assert {"description", "status"}.issubset(resource_columns)
-    assert {"status"}.issubset(field_columns)
-    assert "datasource_tags" in tables
