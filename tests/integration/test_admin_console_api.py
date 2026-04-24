@@ -167,9 +167,15 @@ def test_admin_policy_and_masking_policy_management() -> None:
     )
     assert masking.status_code == 201
 
-    assert len(client.get("/admin/resource-policies?tenant_id=tenant-a", headers=auth()).json()) == 1
+    assert (
+        len(client.get("/admin/resource-policies?tenant_id=tenant-a", headers=auth()).json())
+        == 1
+    )
     assert len(client.get("/admin/field-policies?tenant_id=tenant-a", headers=auth()).json()) == 1
-    assert len(client.get("/admin/masking-policies?tenant_id=tenant-a", headers=auth()).json()) == 1
+    assert (
+        len(client.get("/admin/masking-policies?tenant_id=tenant-a", headers=auth()).json())
+        == 1
+    )
 
 
 def test_admin_api_keys_audit_and_mcp_setup() -> None:

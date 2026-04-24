@@ -1,6 +1,6 @@
 import json
 import secrets
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -122,7 +122,9 @@ def list_tags(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
-    tags = session.execute(select(Tag).where(Tag.tenant_id == tenant_id).order_by(Tag.name)).scalars()
+    tags = session.execute(
+        select(Tag).where(Tag.tenant_id == tenant_id).order_by(Tag.name)
+    ).scalars()
     return [_serialize_tag(tag) for tag in tags]
 
 
@@ -212,7 +214,9 @@ def list_field_policies(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
-    policies = session.execute(select(FieldPolicy).where(FieldPolicy.tenant_id == tenant_id)).scalars()
+    policies = session.execute(
+        select(FieldPolicy).where(FieldPolicy.tenant_id == tenant_id)
+    ).scalars()
     return [_serialize_field_policy(policy) for policy in policies]
 
 
