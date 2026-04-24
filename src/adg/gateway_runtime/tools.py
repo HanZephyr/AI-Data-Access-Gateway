@@ -10,8 +10,8 @@ from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.policy.runtime import IdentityContext, RuntimePolicyService
-from adg.sql_guard.guard import SqlGuard
 from adg.shared.errors import NotFoundError
+from adg.sql_guard.guard import SqlGuard
 
 
 class GatewayRuntimeService:

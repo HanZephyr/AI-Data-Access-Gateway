@@ -1,7 +1,10 @@
+from typing import cast
+
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from adg.audit.models import AuditEvent
-from adg.connectors.base import QueryResult
+from adg.connectors.base import MetadataConnector, MetadataSnapshot, QueryResult
 from adg.connectors.registry import ConnectorRegistry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
@@ -17,7 +20,7 @@ class FakeConnector:
     def test_connection(self, config: dict[str, object]) -> None:
         return None
 
-    def scan_metadata(self, config: dict[str, object]):
+    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
         return {"databases": []}
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
@@ -32,7 +35,12 @@ def identity() -> IdentityContext:
     return IdentityContext(tenant_id="tenant-a", user_id="user-1", roles=["analyst"])
 
 
-def add_datasource(db_session, *, datasource_id: str = "ds_1", status: str = "active"):
+def add_datasource(
+    db_session: Session,
+    *,
+    datasource_id: str = "ds_1",
+    status: str = "active",
+) -> Datasource:
     datasource = Datasource(
         id=datasource_id,
         tenant_id="tenant-a",
@@ -47,12 +55,12 @@ def add_datasource(db_session, *, datasource_id: str = "ds_1", status: str = "ac
 
 
 def add_resource(
-    db_session,
+    db_session: Session,
     *,
     resource_id: str,
     datasource_id: str = "ds_1",
     path: str = "warehouse.public.customers",
-):
+) -> Resource:
     resource = Resource(
         id=resource_id,
         tenant_id="tenant-a",
@@ -83,14 +91,16 @@ def add_resource(
     return resource
 
 
-def runtime(db_session) -> GatewayRuntimeService:
+def runtime(db_session: Session) -> GatewayRuntimeService:
     return GatewayRuntimeService(
         db_session,
-        connector_registry=ConnectorRegistry({"fake": FakeConnector}),
+        connector_registry=ConnectorRegistry(
+            {"fake": cast(type[MetadataConnector], FakeConnector)}
+        ),
     )
 
 
-def test_list_datasources_is_tenant_scoped_and_active_only(db_session) -> None:
+def test_list_datasources_is_tenant_scoped_and_active_only(db_session: Session) -> None:
     add_datasource(db_session, datasource_id="ds_active")
     add_datasource(db_session, datasource_id="ds_disabled", status="disabled")
     db_session.add(
@@ -110,7 +120,7 @@ def test_list_datasources_is_tenant_scoped_and_active_only(db_session) -> None:
     assert [item["id"] for item in response["datasources"]] == ["ds_active"]
 
 
-def test_tags_only_include_accessible_resources(db_session) -> None:
+def test_tags_only_include_accessible_resources(db_session: Session) -> None:
     add_datasource(db_session)
     allowed = add_resource(db_session, resource_id="res_allowed")
     denied = add_resource(db_session, resource_id="res_denied", path="warehouse.public.secret")
@@ -146,7 +156,7 @@ def test_tags_only_include_accessible_resources(db_session) -> None:
     assert response["tags"] == [{"id": "tag_public", "name": "public", "category": None}]
 
 
-def test_describe_resource_marks_denied_fields(db_session) -> None:
+def test_describe_resource_marks_denied_fields(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
     db_session.add(
@@ -173,7 +183,9 @@ def test_describe_resource_marks_denied_fields(db_session) -> None:
     assert fields_by_name["email"]["access"] == "denied"
 
 
-def test_execute_query_rejects_actual_resources_outside_declared_scope(db_session) -> None:
+def test_execute_query_rejects_actual_resources_outside_declared_scope(
+    db_session: Session,
+) -> None:
     add_datasource(db_session)
     add_resource(db_session, resource_id="res_customers")
     add_resource(db_session, resource_id="res_orders", path="warehouse.public.orders")
@@ -193,7 +205,7 @@ def test_execute_query_rejects_actual_resources_outside_declared_scope(db_sessio
     assert event.event_type == "permission_rejected"
 
 
-def test_execute_query_runs_allowed_sql_and_audits_success(db_session) -> None:
+def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
 
@@ -217,7 +229,7 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session) -> None:
     assert event.decision == "allowed"
 
 
-def test_preview_resource_runs_bounded_preview(db_session) -> None:
+def test_preview_resource_runs_bounded_preview(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
 

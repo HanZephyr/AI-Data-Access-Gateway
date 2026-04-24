@@ -10,7 +10,7 @@ from adg.control_plane.models.resource import Resource
 @dataclass(frozen=True)
 class IdentityContext:
     tenant_id: str
-    user_id: str
+    user_id: str | None
     roles: list[str] = field(default_factory=list)
     groups: list[str] = field(default_factory=list)
 
@@ -69,7 +69,9 @@ class RuntimePolicyService:
                 )
             ).scalars()
         )
-        subject_policies = [policy for policy in policies if self._subject_matches(policy, identity)]
+        subject_policies = [
+            policy for policy in policies if self._subject_matches(policy, identity)
+        ]
         if any(policy.effect == "deny" for policy in subject_policies):
             return PolicyDecision(allowed=False, reason="denied_by_policy")
         if any(policy.effect == "allow" for policy in subject_policies):

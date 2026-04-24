@@ -1,3 +1,5 @@
+from sqlalchemy.orm import Session
+
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
 from adg.control_plane.models.resource import Resource
 from adg.policy.runtime import IdentityContext, RuntimePolicyService
@@ -5,7 +7,7 @@ from adg.policy.runtime import IdentityContext, RuntimePolicyService
 
 def add_resource(
     *,
-    db_session,
+    db_session: Session,
     resource_id: str,
     tenant_id: str = "tenant-a",
     datasource_id: str = "ds_1",
@@ -37,7 +39,9 @@ def identity() -> IdentityContext:
     )
 
 
-def test_resource_access_defaults_to_allow_when_no_policies_exist(db_session) -> None:
+def test_resource_access_defaults_to_allow_when_no_policies_exist(
+    db_session: Session,
+) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
 
     decision = RuntimePolicyService(db_session).check_resource_access(
@@ -50,7 +54,9 @@ def test_resource_access_defaults_to_allow_when_no_policies_exist(db_session) ->
     assert decision.reason == "no_policy"
 
 
-def test_resource_access_requires_matching_allow_when_policies_exist(db_session) -> None:
+def test_resource_access_requires_matching_allow_when_policies_exist(
+    db_session: Session,
+) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add(
         ResourcePolicy(
@@ -81,7 +87,7 @@ def test_resource_access_requires_matching_allow_when_policies_exist(db_session)
     assert denied.reason == "no_matching_allow"
 
 
-def test_deny_policy_overrides_allow_policy(db_session) -> None:
+def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add_all(
         [
@@ -116,7 +122,7 @@ def test_deny_policy_overrides_allow_policy(db_session) -> None:
     assert decision.reason == "denied_by_policy"
 
 
-def test_tag_policy_matches_attached_resource_tag(db_session) -> None:
+def test_tag_policy_matches_attached_resource_tag(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     tag = Tag(id="tag_pii", tenant_id="tenant-a", name="pii", category="classification")
     db_session.add(tag)
@@ -143,7 +149,7 @@ def test_tag_policy_matches_attached_resource_tag(db_session) -> None:
     assert decision.reason == "denied_by_policy"
 
 
-def test_field_policy_can_narrow_resource_access(db_session) -> None:
+def test_field_policy_can_narrow_resource_access(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add(
         FieldPolicy(

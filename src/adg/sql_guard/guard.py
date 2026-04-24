@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import cast
 
 import sqlglot
 from sqlglot import exp
@@ -26,7 +27,11 @@ class SqlGuard:
 
     def check(self, sql: str) -> SqlGuardResult:
         try:
-            statements = [statement for statement in sqlglot.parse(sql) if statement is not None]
+            statements = [
+                cast(exp.Expression, statement)
+                for statement in sqlglot.parse(sql)
+                if statement is not None
+            ]
         except sqlglot.errors.SqlglotError as error:
             return SqlGuardResult(
                 allowed=False,
