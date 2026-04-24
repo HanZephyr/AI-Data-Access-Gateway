@@ -100,7 +100,6 @@ const translations = {
     "common.validJson": "{label} must be valid JSON",
     "placeholder.resourceSearch": "Search and select a resource",
     "apiKey.newTitle": "New API key",
-    "field.tenantId": "Tenant ID",
     "field.name": "Name",
     "field.type": "Type",
     "field.status": "Status",
@@ -139,7 +138,6 @@ const translations = {
     "option.mysql": "mysql",
     "option.doris": "doris",
     "column.id": "ID",
-    "column.tenant_id": "Tenant",
     "column.datasource_id": "Datasource",
     "column.resource_id": "Resource",
     "column.resource_label": "Resource",
@@ -217,7 +215,6 @@ const translations = {
     "common.validJson": "{label}必须是有效 JSON",
     "placeholder.resourceSearch": "搜索并选择资源",
     "apiKey.newTitle": "新 API 密钥",
-    "field.tenantId": "租户 ID",
     "field.name": "名称",
     "field.type": "类型",
     "field.status": "状态",
@@ -256,7 +253,6 @@ const translations = {
     "option.mysql": "MySQL",
     "option.doris": "Doris",
     "column.id": "ID",
-    "column.tenant_id": "租户",
     "column.datasource_id": "数据源",
     "column.resource_id": "资源",
     "column.resource_label": "资源",
@@ -334,7 +330,6 @@ const translations = {
     "common.validJson": "{label}必須是有效 JSON",
     "placeholder.resourceSearch": "搜尋並選擇資源",
     "apiKey.newTitle": "新 API 金鑰",
-    "field.tenantId": "租戶 ID",
     "field.name": "名稱",
     "field.type": "類型",
     "field.status": "狀態",
@@ -373,7 +368,6 @@ const translations = {
     "option.mysql": "MySQL",
     "option.doris": "Doris",
     "column.id": "ID",
-    "column.tenant_id": "租戶",
     "column.datasource_id": "資料來源",
     "column.resource_id": "資源",
     "column.resource_label": "資源",
@@ -456,8 +450,6 @@ const pages: Array<{ key: PageKey; labelKey: TranslationKey; icon: React.ReactNo
   { key: "audit", labelKey: "nav.audit", icon: <AuditOutlined /> },
   { key: "mcp", labelKey: "nav.mcp", icon: <ApiOutlined /> }
 ];
-
-const tenantId = "tenant-a";
 
 function getStoredLanguage(): Language {
   const stored = localStorage.getItem("adg.language");
@@ -649,15 +641,15 @@ function Page({ page, api }: { page: PageKey; api: ReturnType<typeof useApi> }) 
   if (page === "policies") return <Policies api={api} />;
   if (page === "masking") return <Masking api={api} />;
   if (page === "apiKeys") return <ApiKeys api={api} />;
-  if (page === "audit") return <EndpointTable api={api} title="nav.audit" path={`/admin/audit-events?tenant_id=${tenantId}`} />;
+  if (page === "audit") return <EndpointTable api={api} title="nav.audit" path="/admin/audit-events" />;
   return <McpSetup api={api} />;
 }
 
 function Overview({ api }: { api: ReturnType<typeof useApi> }) {
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
-  const resources = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
-  const audit = useData<AnyRecord[]>(() => api.request(`/admin/audit-events?tenant_id=${tenantId}`), [api.apiKey]);
+  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
+  const audit = useData<AnyRecord[]>(() => api.request("/admin/audit-events"), [api.apiKey]);
   return (
     <div className="workspace">
       <div className="stats">
@@ -705,14 +697,12 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
       updatePath={(row) => `/admin/datasources/${row.id}`}
       deletePath={(row) => `/admin/datasources/${row.id}`}
       fields={[
-        { name: "tenant_id", label: "field.tenantId", required: true },
         { name: "name", label: "field.name", required: true },
         { name: "type", label: "field.type", input: "select", options: ["postgres", "mysql", "doris"], required: true },
         { name: "status", label: "field.status", input: "select", options: ["active", "disabled"], required: true },
         { name: "config", label: "field.config", input: "json", required: true }
       ]}
       initialValues={{
-        tenant_id: tenantId,
         type: "postgres",
         status: "active",
         config: { host: "localhost", port: 5432, database: "warehouse" }
@@ -722,7 +712,7 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function Resources({ api }: { api: ReturnType<typeof useApi> }) {
-  const state = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
+  const state = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   const [resourceId, setResourceId] = useState<string | null>(null);
   const fields = useData<AnyRecord[]>(
     () => (resourceId ? api.request(`/admin/resources/${resourceId}/fields`) : Promise.resolve([])),
@@ -733,7 +723,7 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
       <CrudPanel
         api={api}
         title="nav.resources"
-        listPath={`/admin/resources?tenant_id=${tenantId}`}
+        listPath="/admin/resources"
         updatePath={(row) => `/admin/resources/${row.id}`}
         deletePath={(row) => `/admin/resources/${row.id}`}
         fields={[
@@ -754,7 +744,7 @@ function Tags({ api }: { api: ReturnType<typeof useApi> }) {
     <CrudPanel
       api={api}
       title="nav.tags"
-      listPath={`/admin/tags?tenant_id=${tenantId}`}
+      listPath="/admin/tags"
       createPath="/admin/tags"
       updatePath={(row) => `/admin/tags/${row.id}`}
       deletePath={(row) => `/admin/tags/${row.id}`}
@@ -763,7 +753,7 @@ function Tags({ api }: { api: ReturnType<typeof useApi> }) {
         { name: "category", label: "field.category" },
         { name: "description", label: "field.description", input: "textarea" }
       ]}
-      initialValues={{ tenant_id: tenantId }}
+      initialValues={{}}
     />
   );
 }
@@ -782,12 +772,12 @@ function Policies({ api }: { api: ReturnType<typeof useApi> }) {
 
 function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "resource" | "field" }) {
   const isField = kind === "field";
-  const resources = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
+  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   return (
     <CrudPanel
       api={api}
       title={isField ? "policy.fieldPolicies" : "policy.resourcePolicies"}
-      listPath={`/admin/${kind}-policies?tenant_id=${tenantId}`}
+      listPath={`/admin/${kind}-policies`}
       createPath={`/admin/${kind}-policies`}
       updatePath={(row) => `/admin/${kind}-policies/${row.id}`}
       deletePath={(row) => `/admin/${kind}-policies/${row.id}`}
@@ -809,18 +799,18 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
         { name: "priority", label: "field.priority", input: "number" as const },
         { name: "status", label: "field.status", input: "select" as const, options: ["active", "disabled"] }
       ]}
-      initialValues={{ tenant_id: tenantId, action: "read", effect: "allow", priority: 0, status: "active" }}
+      initialValues={{ action: "read", effect: "allow", priority: 0, status: "active" }}
     />
   );
 }
 
 function Masking({ api }: { api: ReturnType<typeof useApi> }) {
-  const resources = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
+  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   return (
     <CrudPanel
       api={api}
       title="nav.masking"
-      listPath={`/admin/masking-policies?tenant_id=${tenantId}`}
+      listPath="/admin/masking-policies"
       createPath="/admin/masking-policies"
       updatePath={(row) => `/admin/masking-policies/${row.id}`}
       deletePath={(row) => `/admin/masking-policies/${row.id}`}
@@ -840,7 +830,7 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
         { name: "config", label: "field.config", input: "json", required: true },
         { name: "status", label: "field.status", input: "select", options: ["active", "disabled"] }
       ]}
-      initialValues={{ tenant_id: tenantId, strategy: "fixed", config: { replacement: "REDACTED" }, status: "active" }}
+      initialValues={{ strategy: "fixed", config: { replacement: "REDACTED" }, status: "active" }}
     />
   );
 }
@@ -1081,7 +1071,7 @@ function DataPanel({
 }
 
 function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsType<AnyRecord> {
-  const hiddenKeys = new Set(["id", "tenant_id", "datasource_id", "resource_id", "api_key_id"]);
+  const hiddenKeys = new Set(["id", "datasource_id", "resource_id", "api_key_id"]);
   const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
     .filter((key) => !hiddenKeys.has(key))
     .slice(0, 8);

@@ -31,7 +31,6 @@ def build_console_app() -> TestClient:
         session.add(
             Datasource(
                 id="ds_1",
-                tenant_id="tenant-a",
                 name="Warehouse",
                 type="postgres",
                 datasource_kind="relational",
@@ -41,7 +40,6 @@ def build_console_app() -> TestClient:
         )
         resource = Resource(
             id="res_customers",
-            tenant_id="tenant-a",
             datasource_id="ds_1",
             kind="relational_table",
             name="customers",
@@ -53,7 +51,6 @@ def build_console_app() -> TestClient:
         session.add(resource)
         session.add(
             ResourceField(
-                tenant_id="tenant-a",
                 datasource_id="ds_1",
                 resource_id=resource.id,
                 name="email",
@@ -64,7 +61,6 @@ def build_console_app() -> TestClient:
             )
         )
         AuditService(session).record_event(
-            tenant_id="tenant-a",
             user_id="user-1",
             api_key_id="key_admin",
             event_type="metadata_discovery",
@@ -95,9 +91,10 @@ def auth() -> dict[str, str]:
 def test_admin_resource_and_tag_management() -> None:
     client = build_console_app()
 
-    resources = client.get("/admin/resources?tenant_id=tenant-a", headers=auth())
+    resources = client.get("/admin/resources", headers=auth())
     assert resources.status_code == 200
     assert resources.json()[0]["id"] == "res_customers"
+    assert "tenant_id" not in resources.json()[0]
 
     fields = client.get("/admin/resources/res_customers/fields", headers=auth())
     assert fields.status_code == 200
@@ -105,7 +102,7 @@ def test_admin_resource_and_tag_management() -> None:
 
     created = client.post(
         "/admin/tags",
-        json={"tenant_id": "tenant-a", "name": "pii", "category": "classification"},
+        json={"name": "pii", "category": "classification"},
         headers=auth(),
     )
     assert created.status_code == 201
@@ -113,13 +110,14 @@ def test_admin_resource_and_tag_management() -> None:
 
     bound = client.post(
         "/admin/resource-tags",
-        json={"tenant_id": "tenant-a", "tag_id": tag_id, "resource_id": "res_customers"},
+        json={"tag_id": tag_id, "resource_id": "res_customers"},
         headers=auth(),
     )
     assert bound.status_code == 201
 
-    tags = client.get("/admin/tags?tenant_id=tenant-a", headers=auth())
+    tags = client.get("/admin/tags", headers=auth())
     assert [tag["name"] for tag in tags.json()] == ["pii"]
+    assert "tenant_id" not in tags.json()[0]
 
     fetched_tag = client.get(f"/admin/tags/{tag_id}", headers=auth())
     assert fetched_tag.status_code == 200
@@ -161,7 +159,6 @@ def test_admin_policy_and_masking_policy_management() -> None:
     resource_policy = client.post(
         "/admin/resource-policies",
         json={
-            "tenant_id": "tenant-a",
             "subject_type": "role",
             "subject_id": "analyst",
             "effect": "allow",
@@ -177,7 +174,6 @@ def test_admin_policy_and_masking_policy_management() -> None:
     field_policy = client.post(
         "/admin/field-policies",
         json={
-            "tenant_id": "tenant-a",
             "subject_type": "all",
             "subject_id": "*",
             "effect": "deny",
@@ -194,7 +190,6 @@ def test_admin_policy_and_masking_policy_management() -> None:
     masking = client.post(
         "/admin/masking-policies",
         json={
-            "tenant_id": "tenant-a",
             "resource_id": "res_customers",
             "field_name": "email",
             "strategy": "fixed",
@@ -234,14 +229,15 @@ def test_admin_policy_and_masking_policy_management() -> None:
     assert updated_masking.json()["config"]["prefix"] == 2
 
     assert (
-        len(client.get("/admin/resource-policies?tenant_id=tenant-a", headers=auth()).json())
+        len(client.get("/admin/resource-policies", headers=auth()).json())
         == 1
     )
-    assert len(client.get("/admin/field-policies?tenant_id=tenant-a", headers=auth()).json()) == 1
-    assert (
-        len(client.get("/admin/masking-policies?tenant_id=tenant-a", headers=auth()).json())
-        == 1
-    )
+    field_policies = client.get("/admin/field-policies", headers=auth()).json()
+    masking_policies = client.get("/admin/masking-policies", headers=auth()).json()
+    assert len(field_policies) == 1
+    assert len(masking_policies) == 1
+    assert "tenant_id" not in field_policies[0]
+    assert "tenant_id" not in masking_policies[0]
 
     assert (
         client.delete(f"/admin/resource-policies/{resource_policy_id}", headers=auth()).status_code
@@ -263,7 +259,6 @@ def test_admin_policy_and_masking_reject_unknown_resource() -> None:
     resource_policy = client.post(
         "/admin/resource-policies",
         json={
-            "tenant_id": "tenant-a",
             "subject_type": "role",
             "subject_id": "analyst",
             "effect": "allow",
@@ -277,7 +272,6 @@ def test_admin_policy_and_masking_reject_unknown_resource() -> None:
     field_policy = client.post(
         "/admin/field-policies",
         json={
-            "tenant_id": "tenant-a",
             "subject_type": "all",
             "subject_id": "*",
             "effect": "deny",
@@ -292,7 +286,6 @@ def test_admin_policy_and_masking_reject_unknown_resource() -> None:
     masking = client.post(
         "/admin/masking-policies",
         json={
-            "tenant_id": "tenant-a",
             "resource_id": "missing-resource",
             "field_name": "email",
             "strategy": "fixed",
@@ -328,9 +321,10 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert revoked.status_code == 200
     assert revoked.json()["status"] == "revoked"
 
-    audit = client.get("/admin/audit-events?tenant_id=tenant-a", headers=auth())
+    audit = client.get("/admin/audit-events", headers=auth())
     assert audit.status_code == 200
     assert audit.json()[0]["event_type"] == "metadata_discovery"
+    assert "tenant_id" not in audit.json()[0]
 
     setup = client.get("/admin/mcp/setup", headers=auth())
     assert setup.status_code == 200

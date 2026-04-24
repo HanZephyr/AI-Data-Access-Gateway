@@ -11,7 +11,6 @@ class AuditEvent(Base):
     __tablename__ = "audit_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     api_key_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

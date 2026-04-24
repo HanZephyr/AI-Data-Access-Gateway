@@ -31,7 +31,6 @@ def build_mcp_app() -> tuple[TestClient, sessionmaker[Session]]:
         session.add(
             Datasource(
                 id="ds_1",
-                tenant_id="tenant-a",
                 name="Warehouse",
                 type="postgres",
                 datasource_kind="relational",
@@ -56,7 +55,7 @@ def test_mcp_tool_route_accepts_non_admin_api_key() -> None:
 
     response = client.post(
         "/mcp/tools/list_datasources",
-        json={"tenant_id": "tenant-a", "user_id": "user-1"},
+        json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
 
@@ -69,7 +68,7 @@ def test_mcp_tool_route_rejects_unknown_tool_name() -> None:
 
     response = client.post(
         "/mcp/tools/not_a_tool",
-        json={"tenant_id": "tenant-a", "user_id": "user-1"},
+        json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
 
@@ -82,7 +81,7 @@ def test_mcp_tool_route_commits_runtime_audit_events() -> None:
 
     response = client.post(
         "/mcp/tools/list_datasources",
-        json={"tenant_id": "tenant-a", "user_id": "user-1"},
+        json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
 

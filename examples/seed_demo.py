@@ -29,7 +29,6 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         )
         session.add(api_key)
         datasource = Datasource(
-            tenant_id="tenant-a",
             name="Demo Warehouse",
             type="postgres",
             datasource_kind="relational",
@@ -47,7 +46,6 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         session.add(datasource)
         session.flush()
         resource = Resource(
-            tenant_id="tenant-a",
             datasource_id=datasource.id,
             parent_id=None,
             kind="relational_table",
@@ -61,7 +59,6 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         session.flush()
         session.add(
             ResourceField(
-                tenant_id="tenant-a",
                 datasource_id=datasource.id,
                 resource_id=resource.id,
                 name="email",
@@ -72,17 +69,15 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
             )
         )
         tag = Tag(
-            tenant_id="tenant-a",
             name="pii",
             category="classification",
             description="Personally identifiable information",
         )
         session.add(tag)
         session.flush()
-        session.add(ResourceTag(tenant_id="tenant-a", tag_id=tag.id, resource_id=resource.id))
+        session.add(ResourceTag(tag_id=tag.id, resource_id=resource.id))
         session.add(
             MaskingPolicy(
-                tenant_id="tenant-a",
                 resource_id=resource.id,
                 field_name="email",
                 strategy="partial",
@@ -91,7 +86,6 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
             )
         )
         AuditService(session).record_event(
-            tenant_id="tenant-a",
             user_id="demo-user",
             api_key_id=api_key.id,
             event_type="metadata_discovery",
@@ -108,7 +102,6 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
     return {
         "database_url": database_url,
         "admin_api_key": "adg_admin",
-        "tenant_id": "tenant-a",
     }
 
 

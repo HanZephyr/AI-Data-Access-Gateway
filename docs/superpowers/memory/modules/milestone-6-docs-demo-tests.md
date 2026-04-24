@@ -19,7 +19,7 @@ status: active
 
 ## Responsibilities
 
-- Provide `examples/seed_demo.py` to create a console-ready demo tenant, admin API key, datasource, resource, tag, masking policy, and audit event.
+- Provide `examples/seed_demo.py` to create console-ready demo data with an admin API key, datasource, resource, tag, masking policy, and audit event.
 - Provide `examples/mcp_client_http.py` as the minimal HTTP client for the V1 MCP-style tool facade.
 - Document local V1 quickstart steps in `README.md`.
 - Package the backend demo path with `Dockerfile` and `docker-compose.yml`.
@@ -43,7 +43,7 @@ status: active
 ## Extension points
 
 - Add a true MCP transport adapter when the project moves beyond the V1 HTTP facade.
-- Add richer seed profiles for multi-tenant policy and masking demos.
+- Add richer seed profiles for policy and masking demos.
 - Add an automated browser test harness once the console workflow stabilizes further.
 
 ## Common pitfalls

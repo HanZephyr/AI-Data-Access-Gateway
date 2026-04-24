@@ -22,7 +22,6 @@ router = APIRouter(prefix="/admin", tags=["admin-console"])
 
 
 class TagRequest(BaseModel):
-    tenant_id: str
     name: str
     category: str | None = None
     description: str | None = None
@@ -40,13 +39,11 @@ class ResourceUpdateRequest(BaseModel):
 
 
 class ResourceTagRequest(BaseModel):
-    tenant_id: str
     tag_id: str
     resource_id: str
 
 
 class ResourcePolicyRequest(BaseModel):
-    tenant_id: str
     subject_type: str
     subject_id: str
     effect: str
@@ -69,7 +66,6 @@ class ResourcePolicyUpdateRequest(BaseModel):
 
 
 class FieldPolicyRequest(BaseModel):
-    tenant_id: str
     subject_type: str
     subject_id: str
     effect: str
@@ -92,7 +88,6 @@ class FieldPolicyUpdateRequest(BaseModel):
 
 
 class MaskingPolicyRequest(BaseModel):
-    tenant_id: str
     resource_id: str
     field_name: str
     strategy: str
@@ -126,12 +121,11 @@ class ApiKeyUpdateRequest(BaseModel):
 
 @router.get("/resources")
 def list_resources(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
     datasource_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    conditions = [Resource.tenant_id == tenant_id]
+    conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
     resources = session.execute(
@@ -208,12 +202,11 @@ def list_resource_fields(
 
 @router.get("/tags")
 def list_tags(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
     tags = session.execute(
-        select(Tag).where(Tag.tenant_id == tenant_id).order_by(Tag.name)
+        select(Tag).order_by(Tag.name)
     ).scalars()
     return [_serialize_tag(tag) for tag in tags]
 
@@ -275,14 +268,13 @@ def bind_resource_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
-    _require_resource(session, payload.tenant_id, payload.resource_id)
+    _require_resource(session, payload.resource_id)
     binding = ResourceTag(**payload.model_dump())
     session.add(binding)
     session.commit()
     session.refresh(binding)
     return {
         "id": binding.id,
-        "tenant_id": binding.tenant_id,
         "tag_id": binding.tag_id,
         "resource_id": binding.resource_id,
     }
@@ -290,12 +282,11 @@ def bind_resource_tag(
 
 @router.get("/resource-policies")
 def list_resource_policies(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
     policies = session.execute(
-        select(ResourcePolicy).where(ResourcePolicy.tenant_id == tenant_id)
+        select(ResourcePolicy)
     ).scalars()
     return [_serialize_resource_policy(policy, session) for policy in policies]
 
@@ -307,7 +298,7 @@ def create_resource_policy(
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
     if payload.resource_id is not None:
-        _require_resource(session, payload.tenant_id, payload.resource_id)
+        _require_resource(session, payload.resource_id)
     policy = ResourcePolicy(**payload.model_dump())
     session.add(policy)
     session.commit()
@@ -335,7 +326,7 @@ def update_resource_policy(
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
-        _require_resource(session, policy.tenant_id, data["resource_id"])
+        _require_resource(session, data["resource_id"])
     _apply_updates(policy, data)
     session.commit()
     session.refresh(policy)
@@ -354,12 +345,11 @@ def delete_resource_policy(
 
 @router.get("/field-policies")
 def list_field_policies(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
     policies = session.execute(
-        select(FieldPolicy).where(FieldPolicy.tenant_id == tenant_id)
+        select(FieldPolicy)
     ).scalars()
     return [_serialize_field_policy(policy, session) for policy in policies]
 
@@ -370,7 +360,7 @@ def create_field_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
-    _require_resource(session, payload.tenant_id, payload.resource_id)
+    _require_resource(session, payload.resource_id)
     policy = FieldPolicy(**payload.model_dump())
     session.add(policy)
     session.commit()
@@ -398,7 +388,7 @@ def update_field_policy(
     policy = _get_by_id(session, FieldPolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
-        _require_resource(session, policy.tenant_id, data["resource_id"])
+        _require_resource(session, data["resource_id"])
     _apply_updates(policy, data)
     session.commit()
     session.refresh(policy)
@@ -417,12 +407,11 @@ def delete_field_policy(
 
 @router.get("/masking-policies")
 def list_masking_policies(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
     policies = session.execute(
-        select(MaskingPolicy).where(MaskingPolicy.tenant_id == tenant_id)
+        select(MaskingPolicy)
     ).scalars()
     return [_serialize_masking_policy(policy, session) for policy in policies]
 
@@ -433,7 +422,7 @@ def create_masking_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
-    _require_resource(session, payload.tenant_id, payload.resource_id)
+    _require_resource(session, payload.resource_id)
     data = payload.model_dump()
     config = data.pop("config")
     policy = MaskingPolicy(config_json=json.dumps(config, separators=(",", ":")), **data)
@@ -463,7 +452,7 @@ def update_masking_policy(
     policy = _get_by_id(session, MaskingPolicy, policy_id, "Masking policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
-        _require_resource(session, policy.tenant_id, data["resource_id"])
+        _require_resource(session, data["resource_id"])
     config = data.pop("config", None)
     _apply_updates(policy, data)
     if config is not None:
@@ -557,13 +546,11 @@ def revoke_api_key(
 
 @router.get("/audit-events")
 def list_audit_events(
-    tenant_id: str,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
     events = session.execute(
         select(AuditEvent)
-        .where(AuditEvent.tenant_id == tenant_id)
         .order_by(AuditEvent.created_at.desc())
     ).scalars()
     return [_serialize_audit_event(event) for event in events]
@@ -591,7 +578,6 @@ def get_mcp_setup(
 def _serialize_resource(resource: Resource) -> dict[str, Any]:
     return {
         "id": resource.id,
-        "tenant_id": resource.tenant_id,
         "datasource_id": resource.datasource_id,
         "kind": resource.kind,
         "name": resource.name,
@@ -605,7 +591,6 @@ def _serialize_resource(resource: Resource) -> dict[str, Any]:
 def _serialize_tag(tag: Tag) -> dict[str, Any]:
     return {
         "id": tag.id,
-        "tenant_id": tag.tenant_id,
         "name": tag.name,
         "category": tag.category,
         "description": tag.description,
@@ -615,7 +600,6 @@ def _serialize_tag(tag: Tag) -> dict[str, Any]:
 def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict[str, Any]:
     return {
         "id": policy.id,
-        "tenant_id": policy.tenant_id,
         "subject_type": policy.subject_type,
         "subject_id": policy.subject_id,
         "effect": policy.effect,
@@ -631,7 +615,6 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
 def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, Any]:
     return {
         "id": policy.id,
-        "tenant_id": policy.tenant_id,
         "subject_type": policy.subject_type,
         "subject_id": policy.subject_id,
         "effect": policy.effect,
@@ -647,7 +630,6 @@ def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, 
 def _serialize_masking_policy(policy: MaskingPolicy, session: Session) -> dict[str, Any]:
     return {
         "id": policy.id,
-        "tenant_id": policy.tenant_id,
         "resource_label": _resource_label(session, policy.resource_id),
         "resource_id": policy.resource_id,
         "field_name": policy.field_name,
@@ -673,7 +655,6 @@ def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
 def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
     return {
         "id": event.id,
-        "tenant_id": event.tenant_id,
         "user_id": event.user_id,
         "api_key_id": event.api_key_id,
         "event_type": event.event_type,
@@ -704,9 +685,9 @@ def _get_by_id(session: Session, model: type[Any], item_id: str, detail: str) ->
     return item
 
 
-def _require_resource(session: Session, tenant_id: str, resource_id: str) -> Resource:
+def _require_resource(session: Session, resource_id: str) -> Resource:
     resource = session.get(Resource, resource_id)
-    if resource is None or resource.tenant_id != tenant_id:
+    if resource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
     return resource
 

@@ -70,16 +70,7 @@ def call_tool(
 
 
 def _identity_from_payload(payload: dict[str, Any]) -> IdentityContext:
-    try:
-        tenant_id = str(payload["tenant_id"])
-    except KeyError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="tenant_id is required",
-        ) from error
-
     return IdentityContext(
-        tenant_id=tenant_id,
         user_id=None if payload.get("user_id") is None else str(payload["user_id"]),
         roles=[str(item) for item in payload.get("roles", [])],
         groups=[str(item) for item in payload.get("groups", [])],

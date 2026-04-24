@@ -11,7 +11,6 @@ class MaskingPolicy(Base):
     __tablename__ = "masking_policies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     field_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     subject_type: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
@@ -25,7 +24,6 @@ class DecryptContext(Base):
     __tablename__ = "decrypt_contexts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     query_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)

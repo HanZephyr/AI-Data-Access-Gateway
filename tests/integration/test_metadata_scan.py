@@ -100,7 +100,6 @@ def build_scan_client() -> tuple[TestClient, Session]:
         session.add(
             Datasource(
                 id="ds_123",
-                tenant_id="default",
                 name="Warehouse",
                 type="fake",
                 datasource_kind="relational",

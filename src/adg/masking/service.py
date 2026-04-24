@@ -42,7 +42,6 @@ class MaskingService:
                     continue
                 if policy.strategy == "reversible":
                     masked_row[policy.field_name] = self.mask_reversible_value(
-                        tenant_id=identity.tenant_id,
                         user_id=identity.user_id,
                         datasource_id=datasource_id,
                         query_id=query_id,
@@ -88,7 +87,6 @@ class MaskingService:
     def mask_reversible_value(
         self,
         *,
-        tenant_id: str,
         user_id: str | None,
         datasource_id: str,
         query_id: str,
@@ -102,7 +100,6 @@ class MaskingService:
         ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()
         context = DecryptContext(
             id=context_id,
-            tenant_id=tenant_id,
             query_id=query_id,
             user_id=user_id,
             datasource_id=datasource_id,
@@ -117,21 +114,20 @@ class MaskingService:
     def decrypt_values(
         self,
         *,
-        tenant_id: str,
         user_id: str | None,
         values: list[str],
     ) -> list[str]:
         return [
-            self._decrypt_marker(tenant_id=tenant_id, user_id=user_id, marker=value)
+            self._decrypt_marker(user_id=user_id, marker=value)
             for value in values
         ]
 
-    def _decrypt_marker(self, *, tenant_id: str, user_id: str | None, marker: str) -> str:
+    def _decrypt_marker(self, *, user_id: str | None, marker: str) -> str:
         context_id, ciphertext = self._parse_marker(marker)
         context = self._session.get(DecryptContext, context_id)
         if context is None:
             raise ValidationError("Decrypt context not found")
-        if context.tenant_id != tenant_id or context.user_id != user_id:
+        if context.user_id != user_id:
             raise ValidationError("Decrypt context does not match identity")
         if self._normalize_time(context.expires_at) <= datetime.now(UTC):
             raise ValidationError("Decrypt context expired")
@@ -168,7 +164,6 @@ class MaskingService:
             return []
         policies = self._session.execute(
             select(MaskingPolicy).where(
-                MaskingPolicy.tenant_id == identity.tenant_id,
                 MaskingPolicy.resource_id.in_(resource_ids),
                 MaskingPolicy.status == "active",
             )

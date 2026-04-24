@@ -21,14 +21,12 @@ class DatasourceService:
     def create_datasource(
         self,
         *,
-        tenant_id: str,
         name: str,
         connector_type: str,
         config: dict[str, object],
         status: str = "active",
     ) -> Datasource:
         datasource = Datasource(
-            tenant_id=tenant_id,
             name=name,
             type=connector_type,
             datasource_kind="relational",

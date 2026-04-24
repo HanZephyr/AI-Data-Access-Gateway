@@ -26,14 +26,13 @@ def decrypt_values(
             detail="Internal scope required",
         )
 
-    tenant_id = str(payload["tenant_id"])
     user_id = None if payload.get("user_id") is None else str(payload["user_id"])
     values = [str(value) for value in payload.get("values", [])]
     try:
         plaintext = MaskingService(
             session,
             secret_key=get_settings().secret_key,
-        ).decrypt_values(tenant_id=tenant_id, user_id=user_id, values=values)
+        ).decrypt_values(user_id=user_id, values=values)
     except ValidationError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,7 +40,6 @@ def decrypt_values(
         ) from error
 
     AuditService(session).record_event(
-        tenant_id=tenant_id,
         user_id=user_id,
         api_key_id=api_key.id,
         event_type="decryption",

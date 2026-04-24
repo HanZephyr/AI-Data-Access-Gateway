@@ -13,7 +13,6 @@ class AuditService:
     def record_event(
         self,
         *,
-        tenant_id: str,
         user_id: str | None,
         api_key_id: str | None,
         event_type: str,
@@ -26,7 +25,6 @@ class AuditService:
         metadata: dict[str, Any],
     ) -> AuditEvent:
         event = AuditEvent(
-            tenant_id=tenant_id,
             user_id=user_id,
             api_key_id=api_key_id,
             event_type=event_type,

@@ -39,7 +39,6 @@ The admin API remains authenticated by admin-scoped API keys from Milestone 1. C
 Add a `datasources` table with these fields:
 
 - `id`: UUID string primary key
-- `tenant_id`: tenant identifier
 - `name`: operator-visible datasource name
 - `type`: connector type such as `postgres`, `mysql`, or `doris`
 - `datasource_kind`: `relational`
@@ -55,7 +54,6 @@ V1 stores datasource config in plain JSON text inside SQLite for now. Encryption
 Add a `resources` table for scanned metadata:
 
 - `id`
-- `tenant_id`
 - `datasource_id`
 - `parent_id`
 - `kind`
@@ -78,7 +76,6 @@ For relational datasources:
 Add a `resource_fields` table:
 
 - `id`
-- `tenant_id`
 - `datasource_id`
 - `resource_id`
 - `name`

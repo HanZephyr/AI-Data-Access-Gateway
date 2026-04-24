@@ -9,7 +9,6 @@ def test_audit_service_records_event(db_session: Session) -> None:
     service = AuditService(db_session)
 
     event = service.record_event(
-        tenant_id="default",
         user_id="u_123",
         api_key_id="key_123",
         event_type="metadata",
@@ -25,7 +24,6 @@ def test_audit_service_records_event(db_session: Session) -> None:
 
     stored = db_session.execute(select(AuditEvent)).scalar_one()
     assert stored.id == event.id
-    assert stored.tenant_id == "default"
     assert stored.event_type == "metadata"
     assert stored.resource_ids_json == "[\"res_1\"]"
     assert stored.metadata_json == "{\"tool\":\"list_datasources\"}"

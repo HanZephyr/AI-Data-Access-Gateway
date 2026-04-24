@@ -36,10 +36,10 @@ status: active
 ## Invariants
 
 - Masking happens after SQL Guard, resource policy, and connector execution.
-- Active masking policies match tenant, resource id, field name, optional subject, and strategy.
+- Active masking policies match resource id, field name, optional subject, and strategy.
 - `fixed`, `partial`, and `hash` masking never create decrypt contexts.
 - `reversible` masking returns `$adg_rev$<context_id>$<ciphertext>` markers.
-- Reversible value decryption validates tenant, user, context existence, and TTL before returning plaintext.
+- Reversible value decryption validates user, context existence, and TTL before returning plaintext.
 - Internal decrypt requires an API key with `internal` scope.
 - HTTP routes that create audit events or decrypt contexts must commit their session so side effects survive beyond the request.
 

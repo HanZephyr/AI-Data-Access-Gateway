@@ -18,7 +18,7 @@ Add baseline control-plane tables:
 - `masking_policies`
 - `decrypt_contexts`
 
-Masking policies match tenant, resource id, field name, optional subject, strategy, config, and status. Decrypt contexts store tenant, query id, user id, datasource id, encrypted temporary key, allowed fields JSON, expiry, and creation time.
+Masking policies match resource id, field name, optional subject, strategy, config, and status. Decrypt contexts store query id, user id, datasource id, encrypted temporary key, allowed fields JSON, expiry, and creation time.
 
 ## Masking
 
@@ -37,13 +37,12 @@ Masking applies only to columns present in connector result rows and only when a
 
 ```json
 {
-  "tenant_id": "tenant-a",
   "user_id": "user-1",
   "values": ["$adg_rev$ctx_1$ciphertext"]
 }
 ```
 
-It validates API key, marker format, decrypt context existence, tenant, user, and TTL. It decrypts the stored query key with a service key derived from `Settings.secret_key`, then decrypts each value. Expired contexts are rejected.
+It validates API key, marker format, decrypt context existence, user, and TTL. It decrypts the stored query key with a service key derived from `Settings.secret_key`, then decrypts each value. Expired contexts are rejected.
 
 ## Audit
 

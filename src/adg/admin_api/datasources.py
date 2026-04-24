@@ -18,7 +18,6 @@ router = APIRouter(prefix="/admin/datasources", tags=["admin"])
 
 
 class DatasourceCreateRequest(BaseModel):
-    tenant_id: str
     name: str
     type: str
     config: dict[str, object]
@@ -34,7 +33,6 @@ class DatasourceUpdateRequest(BaseModel):
 def _serialize_datasource(datasource: Datasource) -> dict[str, Any]:
     return {
         "id": datasource.id,
-        "tenant_id": datasource.tenant_id,
         "name": datasource.name,
         "type": datasource.type,
         "datasource_kind": datasource.datasource_kind,
@@ -62,7 +60,6 @@ def create_datasource(
 ) -> dict[str, Any]:
     service = DatasourceService(session)
     datasource = service.create_datasource(
-        tenant_id=payload.tenant_id,
         name=payload.name,
         connector_type=payload.type,
         config=payload.config,

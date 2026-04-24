@@ -35,7 +35,6 @@ def build_internal_app(
         )
         service = MaskingService(session, secret_key=get_settings().secret_key)
         marker = service.mask_reversible_value(
-            tenant_id="tenant-a",
             user_id="user-1",
             datasource_id="ds_1",
             query_id="qry_1",
@@ -64,7 +63,7 @@ def test_internal_decrypt_returns_plaintext_and_audits() -> None:
 
     response = client.post(
         "/internal/decrypt",
-        json={"tenant_id": "tenant-a", "user_id": "user-1", "values": [marker]},
+        json={"user_id": "user-1", "values": [marker]},
         headers={"X-ADG-API-Key": "adg_internal"},
     )
 
@@ -81,7 +80,7 @@ def test_internal_decrypt_rejects_expired_context() -> None:
 
     response = client.post(
         "/internal/decrypt",
-        json={"tenant_id": "tenant-a", "user_id": "user-1", "values": [marker]},
+        json={"user_id": "user-1", "values": [marker]},
         headers={"X-ADG-API-Key": "adg_internal"},
     )
 

@@ -9,7 +9,6 @@ from adg.control_plane.models.resource import Resource
 
 @dataclass(frozen=True)
 class IdentityContext:
-    tenant_id: str
     user_id: str | None
     roles: list[str] = field(default_factory=list)
     groups: list[str] = field(default_factory=list)
@@ -61,7 +60,6 @@ class RuntimePolicyService:
         policies = list(
             self._session.execute(
                 select(FieldPolicy).where(
-                    FieldPolicy.tenant_id == identity.tenant_id,
                     FieldPolicy.status == "active",
                     FieldPolicy.action == action,
                     FieldPolicy.resource_id == resource.id,
@@ -89,7 +87,6 @@ class RuntimePolicyService:
         return list(
             self._session.execute(
                 select(ResourcePolicy).where(
-                    ResourcePolicy.tenant_id == identity.tenant_id,
                     ResourcePolicy.status == "active",
                     ResourcePolicy.action == action,
                 )
@@ -103,7 +100,6 @@ class RuntimePolicyService:
             return (
                 self._session.execute(
                     select(ResourceTag).where(
-                        ResourceTag.tenant_id == resource.tenant_id,
                         ResourceTag.resource_id == resource.id,
                         ResourceTag.tag_id == policy.tag_id,
                     )

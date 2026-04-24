@@ -12,7 +12,6 @@ class Datasource(Base):
     __tablename__ = "datasources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     datasource_kind: Mapped[str] = mapped_column(String(64), nullable=False, default="relational")

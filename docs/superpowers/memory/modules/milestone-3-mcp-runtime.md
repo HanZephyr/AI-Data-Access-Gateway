@@ -40,8 +40,8 @@ status: active
 
 - Runtime tool calls use `require_api_key`, not `require_admin_api_key`; admin scope is not required for MCP-style callers.
 - Request payload identity context is trusted only after API key authentication.
-- Runtime policy evaluation defaults to allow only when no active policies exist for the tenant/action.
-- When active policies exist for a tenant/action, matching allow is required and matching deny wins.
+- Runtime policy evaluation defaults to allow only when no active policies exist for the requested action.
+- When active policies exist for an action, matching allow is required and matching deny wins.
 - Field policies only narrow access after parent resource access has been granted.
 - SQL Guard accepts only one `SELECT`/`WITH` style read-only statement and rejects mutation, DDL, transaction, multi-statement, and non-whitelisted function use.
 - SQL resources extracted from SQL must map to known resource snapshots. Unknown or ambiguous SQL resources must be rejected before connector execution.
@@ -58,5 +58,5 @@ status: active
 
 - Treating `POST /mcp/tools/{tool_name}` as full MCP protocol support. It is a deterministic HTTP facade for the runtime tools.
 - Letting unknown SQL tables execute because the declared resource scope is non-empty. SQL Guard extraction must resolve to known resource snapshots.
-- Assuming tag visibility is global. Tags are visible only through resources the identity can discover.
+- Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.
 - Putting SQL safety checks in connectors. Connectors execute already-approved read-only SQL; SQL Guard and policy checks belong in runtime services.

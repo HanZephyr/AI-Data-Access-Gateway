@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.orm import Session
 
 from adg.app.settings import get_settings
@@ -38,7 +38,6 @@ class GatewayRuntimeService:
         self._session.flush()
         datasources = self._session.execute(
             select(Datasource).where(
-                Datasource.tenant_id == identity.tenant_id,
                 Datasource.status == "active",
             )
         ).scalars()
@@ -65,7 +64,6 @@ class GatewayRuntimeService:
             select(Tag)
             .join(ResourceTag, ResourceTag.tag_id == Tag.id)
             .where(
-                Tag.tenant_id == identity.tenant_id,
                 ResourceTag.resource_id.in_(visible_resource_ids),
             )
             .order_by(Tag.name)
@@ -103,7 +101,7 @@ class GatewayRuntimeService:
     ) -> dict[str, Any]:
         self._session.flush()
         tag_rows = self._session.execute(
-            select(Tag).where(Tag.tenant_id == identity.tenant_id, Tag.name.in_(tag_names))
+            select(Tag).where(Tag.name.in_(tag_names))
         ).scalars()
         tag_ids = [tag.id for tag in tag_rows]
         resources = [
@@ -283,7 +281,6 @@ class GatewayRuntimeService:
             result=result,
         )
         self._audit.record_event(
-            tenant_id=identity.tenant_id,
             user_id=identity.user_id,
             api_key_id=api_key_id,
             event_type=event_type,
@@ -315,8 +312,7 @@ class GatewayRuntimeService:
         identity: IdentityContext,
         datasource_id: str | None = None,
     ) -> list[Resource]:
-        conditions = [
-            Resource.tenant_id == identity.tenant_id,
+        conditions: list[ColumnElement[bool]] = [
             Resource.kind.in_(["relational_table", "relational_view"]),
         ]
         if datasource_id is not None:
@@ -342,7 +338,6 @@ class GatewayRuntimeService:
         resources = list(
             self._session.execute(
                 select(Resource).where(
-                    Resource.tenant_id == identity.tenant_id,
                     Resource.datasource_id == datasource_id,
                     Resource.kind.in_(["relational_table", "relational_view"]),
                 )
@@ -377,7 +372,6 @@ class GatewayRuntimeService:
         return (
             self._session.execute(
                 select(ResourceTag).where(
-                    ResourceTag.tenant_id == resource.tenant_id,
                     ResourceTag.resource_id == resource.id,
                     ResourceTag.tag_id.in_(tag_ids),
                 )
@@ -414,7 +408,6 @@ class GatewayRuntimeService:
         resource_ids: list[str],
     ) -> None:
         self._audit.record_event(
-            tenant_id=identity.tenant_id,
             user_id=identity.user_id,
             api_key_id=api_key_id,
             event_type="metadata_discovery",
@@ -439,7 +432,6 @@ class GatewayRuntimeService:
         reason: str,
     ) -> None:
         self._audit.record_event(
-            tenant_id=identity.tenant_id,
             user_id=identity.user_id,
             api_key_id=api_key_id,
             event_type=event_type,

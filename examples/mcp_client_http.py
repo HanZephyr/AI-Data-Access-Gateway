@@ -23,11 +23,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Call ADG MCP-style HTTP tools.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--api-key", default="adg_admin")
-    parser.add_argument("--tenant-id", default="tenant-a")
     parser.add_argument("--user-id", default="demo-user")
     args = parser.parse_args()
 
-    identity = {"tenant_id": args.tenant_id, "user_id": args.user_id}
+    identity = {"user_id": args.user_id}
     datasources = call_tool(args.base_url, args.api_key, "list_datasources", identity)
     print(json.dumps({"list_datasources": datasources}, indent=2))
 

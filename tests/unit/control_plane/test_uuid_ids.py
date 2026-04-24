@@ -1,5 +1,8 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
+
+from sqlalchemy.orm import Session
 
 from adg.audit.models import AuditEvent
 from adg.control_plane.models.api_key import ApiKey
@@ -15,9 +18,8 @@ def assert_uuidv7(value: str) -> None:
     assert parsed.version == 7
 
 
-def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
+def test_control_plane_primary_keys_default_to_uuidv7(db_session: Session) -> None:
     datasource = Datasource(
-        tenant_id="tenant-a",
         name="Warehouse",
         type="postgres",
         datasource_kind="relational",
@@ -28,7 +30,6 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
     db_session.flush()
 
     resource = Resource(
-        tenant_id="tenant-a",
         datasource_id=datasource.id,
         kind="relational_table",
         name="customers",
@@ -41,7 +42,6 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
     db_session.flush()
 
     field = ResourceField(
-        tenant_id="tenant-a",
         datasource_id=datasource.id,
         resource_id=resource.id,
         name="email",
@@ -50,18 +50,17 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
         ordinal_position=1,
         metadata_json="{}",
     )
-    tag = Tag(tenant_id="tenant-a", name="pii", category="classification")
+    tag = Tag(name="pii", category="classification")
     db_session.add_all([field, tag])
     db_session.flush()
 
-    records = [
+    records: list[Any] = [
         datasource,
         resource,
         field,
         tag,
-        ResourceTag(tenant_id="tenant-a", tag_id=tag.id, resource_id=resource.id),
+        ResourceTag(tag_id=tag.id, resource_id=resource.id),
         ResourcePolicy(
-            tenant_id="tenant-a",
             subject_type="role",
             subject_id="analyst",
             effect="allow",
@@ -69,7 +68,6 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
             resource_id=resource.id,
         ),
         FieldPolicy(
-            tenant_id="tenant-a",
             subject_type="all",
             subject_id="*",
             effect="deny",
@@ -78,14 +76,12 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
             action="read",
         ),
         MaskingPolicy(
-            tenant_id="tenant-a",
             resource_id=resource.id,
             field_name="email",
             strategy="partial",
             config_json='{"prefix":2,"suffix":3}',
         ),
         DecryptContext(
-            tenant_id="tenant-a",
             query_id="query-1",
             user_id="user-1",
             datasource_id=datasource.id,
@@ -95,7 +91,6 @@ def test_control_plane_primary_keys_default_to_uuidv7(db_session) -> None:
         ),
         ApiKey(name="admin", key_hash="hash", status="active", scopes='["admin"]'),
         AuditEvent(
-            tenant_id="tenant-a",
             user_id="user-1",
             api_key_id=None,
             event_type="metadata_discovery",

@@ -23,7 +23,6 @@ def test_datasource_service_crud_cycle(db_session: Session) -> None:
     service = DatasourceService(db_session)
 
     created = service.create_datasource(
-        tenant_id="default",
         name="Warehouse",
         connector_type="postgres",
         config={"host": "localhost", "port": 5432, "database": "warehouse"},
@@ -55,7 +54,6 @@ def test_datasource_service_crud_cycle(db_session: Session) -> None:
 def test_metadata_scan_service_replaces_prior_snapshots(db_session: Session) -> None:
     datasource_service = DatasourceService(db_session)
     datasource = datasource_service.create_datasource(
-        tenant_id="default",
         name="Warehouse",
         connector_type="postgres",
         config={"database": "warehouse"},

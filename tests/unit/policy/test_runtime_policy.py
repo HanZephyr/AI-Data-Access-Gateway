@@ -9,13 +9,11 @@ def add_resource(
     *,
     db_session: Session,
     resource_id: str,
-    tenant_id: str = "tenant-a",
     datasource_id: str = "ds_1",
     path: str = "warehouse.public.customers",
 ) -> Resource:
     resource = Resource(
         id=resource_id,
-        tenant_id=tenant_id,
         datasource_id=datasource_id,
         parent_id=None,
         kind="relational_table",
@@ -32,7 +30,6 @@ def add_resource(
 
 def identity() -> IdentityContext:
     return IdentityContext(
-        tenant_id="tenant-a",
         user_id="user-1",
         roles=["analyst"],
         groups=["finance"],
@@ -60,7 +57,6 @@ def test_resource_access_requires_matching_allow_when_policies_exist(
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add(
         ResourcePolicy(
-            tenant_id="tenant-a",
             subject_type="role",
             subject_id="analyst",
             effect="allow",
@@ -76,7 +72,7 @@ def test_resource_access_requires_matching_allow_when_policies_exist(
         action="read",
     )
     denied = RuntimePolicyService(db_session).check_resource_access(
-        identity=IdentityContext(tenant_id="tenant-a", user_id="user-2"),
+        identity=IdentityContext(user_id="user-2"),
         resource=resource,
         action="read",
     )
@@ -92,7 +88,6 @@ def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
     db_session.add_all(
         [
             ResourcePolicy(
-                tenant_id="tenant-a",
                 subject_type="role",
                 subject_id="analyst",
                 effect="allow",
@@ -101,7 +96,6 @@ def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
                 status="active",
             ),
             ResourcePolicy(
-                tenant_id="tenant-a",
                 subject_type="user",
                 subject_id="user-1",
                 effect="deny",
@@ -124,12 +118,11 @@ def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
 
 def test_tag_policy_matches_attached_resource_tag(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
-    tag = Tag(id="tag_pii", tenant_id="tenant-a", name="pii", category="classification")
+    tag = Tag(id="tag_pii", name="pii", category="classification")
     db_session.add(tag)
-    db_session.add(ResourceTag(tenant_id="tenant-a", tag_id=tag.id, resource_id=resource.id))
+    db_session.add(ResourceTag(tag_id=tag.id, resource_id=resource.id))
     db_session.add(
         ResourcePolicy(
-            tenant_id="tenant-a",
             subject_type="group",
             subject_id="finance",
             effect="deny",
@@ -153,7 +146,6 @@ def test_field_policy_can_narrow_resource_access(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add(
         FieldPolicy(
-            tenant_id="tenant-a",
             subject_type="all",
             subject_id="*",
             effect="deny",

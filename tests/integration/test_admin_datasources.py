@@ -44,7 +44,6 @@ def build_admin_datasource_app() -> TestClient:
 def test_admin_datasource_crud_routes() -> None:
     client = build_admin_datasource_app()
     payload = {
-        "tenant_id": "default",
         "name": "Warehouse",
         "type": "postgres",
         "config": {"host": "localhost", "port": 5432, "database": "warehouse"},
@@ -57,6 +56,7 @@ def test_admin_datasource_crud_routes() -> None:
     )
     assert created.status_code == 201
     created_body = created.json()
+    assert "tenant_id" not in created_body
     datasource_id = created_body["id"]
     assert created_body["datasource_kind"] == "relational"
 

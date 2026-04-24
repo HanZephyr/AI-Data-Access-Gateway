@@ -10,7 +10,7 @@
 
 | ID | Description | Test Type | Preconditions | Expected Result |
 |----|-------------|-----------|---------------|-----------------|
-| AC-001 | Admin-scoped API keys can create a datasource record. | API | Gateway app is running with an active admin API key. | `POST /admin/datasources` returns `201` and a datasource payload containing `id`, `tenant_id`, `name`, `type`, `datasource_kind`, `status`, `created_at`, and `updated_at`. |
+| AC-001 | Admin-scoped API keys can create a datasource record. | API | Gateway app is running with an active admin API key. | `POST /admin/datasources` returns `201` and a datasource payload containing `id`, `name`, `type`, `datasource_kind`, `status`, `created_at`, and `updated_at`. |
 | AC-002 | Admin-scoped API keys can list datasource records. | API | At least one datasource exists. | `GET /admin/datasources` returns `200` and includes the created datasource record. |
 | AC-003 | Admin-scoped API keys can fetch a datasource by id. | API | A datasource exists. | `GET /admin/datasources/{id}` returns `200` with the matching datasource payload. |
 | AC-004 | Admin-scoped API keys can update mutable datasource fields. | API | A datasource exists. | `PATCH /admin/datasources/{id}` returns `200` and reflects the updated `name`, `config_json`, and `status` values. |

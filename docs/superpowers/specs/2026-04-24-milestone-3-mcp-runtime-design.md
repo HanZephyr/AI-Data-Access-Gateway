@@ -31,7 +31,6 @@ Runtime calls use API key authentication plus request-supplied identity context:
 
 ```json
 {
-  "tenant_id": "tenant-a",
   "user_id": "user-1",
   "roles": ["analyst"],
   "groups": ["finance"]
@@ -53,8 +52,8 @@ Policy checks are conservative and deterministic:
 
 - inactive policies are ignored
 - matching deny policies override matching allow policies
-- if at least one active policy exists for a tenant/action, access requires a matching allow
-- if no active policies exist for a tenant/action, access is allowed
+- if at least one active policy exists for an action, access requires a matching allow
+- if no active policies exist for an action, access is allowed
 - field policies can only narrow access after the parent resource is allowed
 
 Supported policy subjects are `user`, `role`, `group`, and `all`. Resource policies may match a specific resource or tag. Field policies match a resource plus field name.
@@ -81,7 +80,7 @@ Connectors gain a relational read-only query method that accepts a normalized SQ
 
 ## Audit
 
-Runtime tools record audit events for metadata discovery, query execution, SQL rejection, and permission rejection. Events include tenant, user, API key id, datasource id when available, resource ids, query id when available, SQL text when applicable, decision, reason, and lightweight metadata.
+Runtime tools record audit events for metadata discovery, query execution, SQL rejection, and permission rejection. Events include user, API key id, datasource id when available, resource ids, query id when available, SQL text when applicable, decision, reason, and lightweight metadata.
 
 ## Testing
 

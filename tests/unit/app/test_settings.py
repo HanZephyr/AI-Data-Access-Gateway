@@ -9,7 +9,6 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.env == "local"
     assert settings.service_name == "AI Data Access Gateway"
     assert settings.api_key_header == "X-ADG-API-Key"
-    assert settings.default_tenant_id == "default"
     assert settings.control_plane_database_url.startswith("sqlite:///")
 
 

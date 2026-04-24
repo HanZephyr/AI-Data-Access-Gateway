@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from examples.seed_demo import seed_demo
@@ -37,7 +38,8 @@ def test_seed_demo_creates_console_ready_data(tmp_path: Path) -> None:
         masking = session.execute(select(MaskingPolicy)).scalar_one()
         audit = session.execute(select(AuditEvent)).scalar_one()
 
-        for record in [api_key, datasource, resource, field, tag, binding, masking, audit]:
+        records: list[Any] = [api_key, datasource, resource, field, tag, binding, masking, audit]
+        for record in records:
             assert_uuidv7(record.id)
 
         assert api_key.name == "Demo Admin"
@@ -56,3 +58,4 @@ def test_seed_demo_creates_console_ready_data(tmp_path: Path) -> None:
         assert audit.event_type == "metadata_discovery"
 
     assert result["admin_api_key"] == "adg_admin"
+    assert "tenant_id" not in result

@@ -41,7 +41,7 @@ class FakeConnector:
 
 
 def identity() -> IdentityContext:
-    return IdentityContext(tenant_id="tenant-a", user_id="user-1", roles=["analyst"])
+    return IdentityContext(user_id="user-1", roles=["analyst"])
 
 
 def add_datasource(
@@ -52,7 +52,6 @@ def add_datasource(
 ) -> Datasource:
     datasource = Datasource(
         id=datasource_id,
-        tenant_id="tenant-a",
         name=f"Datasource {datasource_id}",
         type="fake",
         datasource_kind="relational",
@@ -72,7 +71,6 @@ def add_resource(
 ) -> Resource:
     resource = Resource(
         id=resource_id,
-        tenant_id="tenant-a",
         datasource_id=datasource_id,
         parent_id=None,
         kind="relational_table",
@@ -87,7 +85,6 @@ def add_resource(
     for index, field_name in enumerate(("id", "email"), start=1):
         db_session.add(
             ResourceField(
-                tenant_id="tenant-a",
                 datasource_id=datasource_id,
                 resource_id=resource.id,
                 name=field_name,
@@ -109,20 +106,9 @@ def runtime(db_session: Session) -> GatewayRuntimeService:
     )
 
 
-def test_list_datasources_is_tenant_scoped_and_active_only(db_session: Session) -> None:
+def test_list_datasources_returns_active_only(db_session: Session) -> None:
     add_datasource(db_session, datasource_id="ds_active")
     add_datasource(db_session, datasource_id="ds_disabled", status="disabled")
-    db_session.add(
-        Datasource(
-            id="ds_other",
-            tenant_id="tenant-b",
-            name="Other",
-            type="fake",
-            datasource_kind="relational",
-            config_json="{}",
-            status="active",
-        )
-    )
 
     response = runtime(db_session).list_datasources(identity=identity(), api_key_id="key_1")
 
@@ -133,15 +119,14 @@ def test_tags_only_include_accessible_resources(db_session: Session) -> None:
     add_datasource(db_session)
     allowed = add_resource(db_session, resource_id="res_allowed")
     denied = add_resource(db_session, resource_id="res_denied", path="warehouse.public.secret")
-    public_tag = Tag(id="tag_public", tenant_id="tenant-a", name="public")
-    secret_tag = Tag(id="tag_secret", tenant_id="tenant-a", name="secret")
+    public_tag = Tag(id="tag_public", name="public")
+    secret_tag = Tag(id="tag_secret", name="secret")
     db_session.add_all([public_tag, secret_tag])
     db_session.add_all(
         [
-            ResourceTag(tenant_id="tenant-a", tag_id=public_tag.id, resource_id=allowed.id),
-            ResourceTag(tenant_id="tenant-a", tag_id=secret_tag.id, resource_id=denied.id),
+            ResourceTag(tag_id=public_tag.id, resource_id=allowed.id),
+            ResourceTag(tag_id=secret_tag.id, resource_id=denied.id),
             ResourcePolicy(
-                tenant_id="tenant-a",
                 subject_type="all",
                 subject_id="*",
                 effect="allow",
@@ -149,7 +134,6 @@ def test_tags_only_include_accessible_resources(db_session: Session) -> None:
                 status="active",
             ),
             ResourcePolicy(
-                tenant_id="tenant-a",
                 subject_type="all",
                 subject_id="*",
                 effect="deny",
@@ -170,7 +154,6 @@ def test_describe_resource_marks_denied_fields(db_session: Session) -> None:
     resource = add_resource(db_session, resource_id="res_customers")
     db_session.add(
         FieldPolicy(
-            tenant_id="tenant-a",
             subject_type="all",
             subject_id="*",
             effect="deny",
@@ -262,7 +245,6 @@ def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None
     resource = add_resource(db_session, resource_id="res_customers")
     db_session.add(
         MaskingPolicy(
-            tenant_id="tenant-a",
             resource_id=resource.id,
             field_name="email",
             strategy="fixed",
@@ -291,7 +273,6 @@ def test_execute_query_applies_reversible_masking_policy(db_session: Session) ->
     resource = add_resource(db_session, resource_id="res_customers")
     db_session.add(
         MaskingPolicy(
-            tenant_id="tenant-a",
             resource_id=resource.id,
             field_name="email",
             strategy="reversible",

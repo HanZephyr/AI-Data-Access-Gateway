@@ -32,6 +32,10 @@ def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
         "tags",
         "alembic_version",
     }.issubset(tables)
+    inspector = inspect(engine)
+    for table_name in tables - {"alembic_version"}:
+        column_names = {column["name"] for column in inspector.get_columns(table_name)}
+        assert "tenant_id" not in column_names
 
 
 def test_migration_uses_database_url_from_environment(

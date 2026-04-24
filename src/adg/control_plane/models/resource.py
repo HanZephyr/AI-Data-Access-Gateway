@@ -11,7 +11,6 @@ class Resource(Base):
     __tablename__ = "resources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -32,7 +31,6 @@ class ResourceField(Base):
     __tablename__ = "resource_fields"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
-    tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)

@@ -88,7 +88,6 @@ class MetadataScanService:
                             continue
                         for index, column_payload in enumerate(column_items, start=1):
                             field = ResourceField(
-                                tenant_id=datasource.tenant_id,
                                 datasource_id=datasource.id,
                                 resource_id=relation.id,
                                 name=str(column_payload["name"]),
@@ -122,7 +121,6 @@ class MetadataScanService:
         scanned_at: datetime,
     ) -> Resource:
         resource = Resource(
-            tenant_id=datasource.tenant_id,
             datasource_id=datasource.id,
             parent_id=parent_id,
             kind=kind,

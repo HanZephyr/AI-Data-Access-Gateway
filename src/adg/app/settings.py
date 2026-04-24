@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     control_plane_database_url: str = "sqlite:///./data/adg-control-plane.db"
     api_key_header: str = "X-ADG-API-Key"
     secret_key: str = Field(default="change-me-to-a-long-random-secret", min_length=16)
-    default_tenant_id: str = "default"
     log_level: str = "INFO"
 
 

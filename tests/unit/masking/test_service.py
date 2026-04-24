@@ -48,7 +48,6 @@ def test_reversible_masking_creates_marker_and_decrypts(db_session: Session) -> 
     service = MaskingService(db_session, secret_key=SECRET)
 
     marker = service.mask_reversible_value(
-        tenant_id="tenant-a",
         user_id="user-1",
         datasource_id="ds_1",
         query_id="qry_1",
@@ -56,7 +55,6 @@ def test_reversible_masking_creates_marker_and_decrypts(db_session: Session) -> 
         value="alice@example.com",
     )
     plaintext = service.decrypt_values(
-        tenant_id="tenant-a",
         user_id="user-1",
         values=[marker],
     )
@@ -68,7 +66,6 @@ def test_reversible_masking_creates_marker_and_decrypts(db_session: Session) -> 
 def test_decrypt_rejects_expired_contexts(db_session: Session) -> None:
     service = MaskingService(db_session, secret_key=SECRET)
     marker = service.mask_reversible_value(
-        tenant_id="tenant-a",
         user_id="user-1",
         datasource_id="ds_1",
         query_id="qry_1",
@@ -78,4 +75,4 @@ def test_decrypt_rejects_expired_contexts(db_session: Session) -> None:
     )
 
     with pytest.raises(ValidationError, match="Decrypt context expired"):
-        service.decrypt_values(tenant_id="tenant-a", user_id="user-1", values=[marker])
+        service.decrypt_values(user_id="user-1", values=[marker])

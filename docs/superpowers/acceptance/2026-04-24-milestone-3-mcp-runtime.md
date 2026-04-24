@@ -10,9 +10,9 @@
 
 | ID | Description | Test Type | Preconditions | Expected Result |
 |----|-------------|-----------|---------------|-----------------|
-| AC-001 | Runtime tool calls require a valid API key but do not require admin scope. | API | A non-admin active API key exists and `POST /mcp/tools/list_datasources` receives identity context. | The response status is 200 and includes visible datasources for the tenant. |
+| AC-001 | Runtime tool calls require a valid API key but do not require admin scope. | API | A non-admin active API key exists and `POST /mcp/tools/list_datasources` receives identity context. | The response status is 200 and includes visible datasources. |
 | AC-002 | Unsupported runtime tool names are rejected deterministically. | API | A valid API key exists. | `POST /mcp/tools/not_a_tool` returns 404 with detail `Unknown MCP tool`. |
-| AC-003 | Datasource listing is tenant-scoped and excludes inactive datasources. | Logic | Active and inactive datasources exist across two tenants. | `list_datasources` returns only active datasources for the identity tenant. |
+| AC-003 | Datasource listing excludes inactive datasources. | Logic | Active and inactive datasources exist. | `list_datasources` returns only active datasources. |
 | AC-004 | Tags are visible only when attached to resources visible to the identity. | Logic | Two tags exist, but only one is attached to an allowed resource. | `list_tags` returns only the tag attached to the allowed resource. |
 | AC-005 | Resource discovery and tag-based discovery apply resource policies. | Logic | A denied resource and an allowed resource exist under one datasource. | `list_resources` and `list_resources_by_tag` omit the denied resource. |
 | AC-006 | Resource description returns fields with access decisions. | Logic | A resource has two fields and an active deny field policy for one field. | `describe_resource` returns both fields and marks the denied field access as `denied`. |
