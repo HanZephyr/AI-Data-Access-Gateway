@@ -21,38 +21,34 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
     session_factory = create_session_factory(engine)
 
     with session_factory() as session:
-        session.add(
-            ApiKey(
-                id="demo_admin_key",
-                name="Demo Admin",
-                key_hash=hash_api_key("adg_admin"),
-                status="active",
-                scopes='["admin","runtime","internal"]',
-            )
+        api_key = ApiKey(
+            name="Demo Admin",
+            key_hash=hash_api_key("adg_admin"),
+            status="active",
+            scopes='["admin","runtime","internal"]',
         )
-        session.add(
-            Datasource(
-                id="demo_ds",
-                tenant_id="tenant-a",
-                name="Demo Warehouse",
-                type="postgres",
-                datasource_kind="relational",
-                config_json=json.dumps(
-                    {
-                        "host": "localhost",
-                        "port": 5432,
-                        "database": "warehouse",
-                        "username": "demo",
-                    },
-                    separators=(",", ":"),
-                ),
-                status="active",
-            )
-        )
-        resource = Resource(
-            id="demo_res_customers",
+        session.add(api_key)
+        datasource = Datasource(
             tenant_id="tenant-a",
-            datasource_id="demo_ds",
+            name="Demo Warehouse",
+            type="postgres",
+            datasource_kind="relational",
+            config_json=json.dumps(
+                {
+                    "host": "localhost",
+                    "port": 5432,
+                    "database": "warehouse",
+                    "username": "demo",
+                },
+                separators=(",", ":"),
+            ),
+            status="active",
+        )
+        session.add(datasource)
+        session.flush()
+        resource = Resource(
+            tenant_id="tenant-a",
+            datasource_id=datasource.id,
             parent_id=None,
             kind="relational_table",
             name="customers",
@@ -62,10 +58,11 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
             metadata_json="{}",
         )
         session.add(resource)
+        session.flush()
         session.add(
             ResourceField(
                 tenant_id="tenant-a",
-                datasource_id="demo_ds",
+                datasource_id=datasource.id,
                 resource_id=resource.id,
                 name="email",
                 data_type="varchar",
@@ -75,13 +72,13 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
             )
         )
         tag = Tag(
-            id="demo_tag_pii",
             tenant_id="tenant-a",
             name="pii",
             category="classification",
             description="Personally identifiable information",
         )
         session.add(tag)
+        session.flush()
         session.add(ResourceTag(tenant_id="tenant-a", tag_id=tag.id, resource_id=resource.id))
         session.add(
             MaskingPolicy(
@@ -96,10 +93,10 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         AuditService(session).record_event(
             tenant_id="tenant-a",
             user_id="demo-user",
-            api_key_id="demo_admin_key",
+            api_key_id=api_key.id,
             event_type="metadata_discovery",
             decision="allowed",
-            datasource_id="demo_ds",
+            datasource_id=datasource.id,
             resource_ids=[resource.id],
             query_id=None,
             sql_text=None,

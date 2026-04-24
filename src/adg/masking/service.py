@@ -3,7 +3,6 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import select
@@ -14,6 +13,7 @@ from adg.control_plane.models.masking import DecryptContext, MaskingPolicy
 from adg.control_plane.models.resource import Resource
 from adg.policy.runtime import IdentityContext
 from adg.shared.errors import ValidationError
+from adg.shared.ids import uuidv7
 
 
 class MaskingService:
@@ -96,7 +96,7 @@ class MaskingService:
         value: object,
         expires_at: datetime | None = None,
     ) -> str:
-        context_id = str(uuid4())
+        context_id = uuidv7()
         temporary_key = Fernet.generate_key()
         temporary_fernet = Fernet(temporary_key)
         ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()

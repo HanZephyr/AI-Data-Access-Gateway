@@ -1,15 +1,14 @@
-from uuid import uuid4
-
 from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from adg.control_plane.models.base import Base
+from adg.shared.ids import uuidv7
 
 
 class Tag(Base):
     __tablename__ = "tags"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -19,7 +18,7 @@ class Tag(Base):
 class ResourceTag(Base):
     __tablename__ = "resource_tags"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     tag_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
@@ -28,7 +27,7 @@ class ResourceTag(Base):
 class ResourcePolicy(Base):
     __tablename__ = "resource_policies"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     subject_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     subject_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
@@ -43,7 +42,7 @@ class ResourcePolicy(Base):
 class FieldPolicy(Base):
     __tablename__ = "field_policies"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     subject_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     subject_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)

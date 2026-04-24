@@ -98,6 +98,7 @@ const translations = {
     "common.revokeConfirm": "Revoke this key?",
     "common.required": "{label} is required",
     "common.validJson": "{label} must be valid JSON",
+    "placeholder.resourceSearch": "Search and select a resource",
     "apiKey.newTitle": "New API key",
     "field.tenantId": "Tenant ID",
     "field.name": "Name",
@@ -112,7 +113,7 @@ const translations = {
     "field.subject": "Subject",
     "field.effect": "Effect",
     "field.action": "Action",
-    "field.resourceId": "Resource ID",
+    "field.resourceId": "Resource",
     "field.field": "Field",
     "field.tagId": "Tag ID",
     "field.priority": "Priority",
@@ -141,6 +142,7 @@ const translations = {
     "column.tenant_id": "Tenant",
     "column.datasource_id": "Datasource",
     "column.resource_id": "Resource",
+    "column.resource_label": "Resource",
     "column.api_key_id": "API key",
     "column.user_id": "User",
     "column.name": "Name",
@@ -213,6 +215,7 @@ const translations = {
     "common.revokeConfirm": "确认撤销该密钥？",
     "common.required": "请输入{label}",
     "common.validJson": "{label}必须是有效 JSON",
+    "placeholder.resourceSearch": "搜索并选择资源",
     "apiKey.newTitle": "新 API 密钥",
     "field.tenantId": "租户 ID",
     "field.name": "名称",
@@ -227,7 +230,7 @@ const translations = {
     "field.subject": "主体",
     "field.effect": "效果",
     "field.action": "操作",
-    "field.resourceId": "资源 ID",
+    "field.resourceId": "资源",
     "field.field": "字段",
     "field.tagId": "标签 ID",
     "field.priority": "优先级",
@@ -256,6 +259,7 @@ const translations = {
     "column.tenant_id": "租户",
     "column.datasource_id": "数据源",
     "column.resource_id": "资源",
+    "column.resource_label": "资源",
     "column.api_key_id": "API 密钥",
     "column.user_id": "用户",
     "column.name": "名称",
@@ -328,6 +332,7 @@ const translations = {
     "common.revokeConfirm": "確認撤銷此金鑰？",
     "common.required": "請輸入{label}",
     "common.validJson": "{label}必須是有效 JSON",
+    "placeholder.resourceSearch": "搜尋並選擇資源",
     "apiKey.newTitle": "新 API 金鑰",
     "field.tenantId": "租戶 ID",
     "field.name": "名稱",
@@ -342,7 +347,7 @@ const translations = {
     "field.subject": "主體",
     "field.effect": "效果",
     "field.action": "操作",
-    "field.resourceId": "資源 ID",
+    "field.resourceId": "資源",
     "field.field": "欄位",
     "field.tagId": "標籤 ID",
     "field.priority": "優先順序",
@@ -371,6 +376,7 @@ const translations = {
     "column.tenant_id": "租戶",
     "column.datasource_id": "資料來源",
     "column.resource_id": "資源",
+    "column.resource_label": "資源",
     "column.api_key_id": "API 金鑰",
     "column.user_id": "使用者",
     "column.name": "名稱",
@@ -420,9 +426,11 @@ const I18nContext = React.createContext<I18nContextValue | null>(null);
 type FieldConfig = {
   name: string;
   label: TranslationKey;
-  input?: "text" | "textarea" | "json" | "number" | "tags" | "select";
+  input?: "text" | "textarea" | "json" | "number" | "tags" | "select" | "resource-select";
   required?: boolean;
   options?: string[];
+  resourceOptions?: AnyRecord[];
+  loading?: boolean;
 };
 
 const languages: Array<{ value: Language; label: string }> = [
@@ -774,6 +782,7 @@ function Policies({ api }: { api: ReturnType<typeof useApi> }) {
 
 function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "resource" | "field" }) {
   const isField = kind === "field";
+  const resources = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
   return (
     <CrudPanel
       api={api}
@@ -787,7 +796,14 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
         { name: "subject_id", label: "field.subject", required: true },
         { name: "effect", label: "field.effect", input: "select", options: ["allow", "deny"], required: true },
         { name: "action", label: "field.action", required: true },
-        { name: "resource_id", label: "field.resourceId" },
+        {
+          name: "resource_id",
+          label: "field.resourceId",
+          input: "resource-select",
+          resourceOptions: resources.data || [],
+          loading: resources.loading,
+          required: isField
+        },
         ...(isField ? [{ name: "field_name", label: "field.field" as const, required: true }] : []),
         ...(!isField ? [{ name: "tag_id", label: "field.tagId" as const }] : []),
         { name: "priority", label: "field.priority", input: "number" as const },
@@ -799,6 +815,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
 }
 
 function Masking({ api }: { api: ReturnType<typeof useApi> }) {
+  const resources = useData<AnyRecord[]>(() => api.request(`/admin/resources?tenant_id=${tenantId}`), [api.apiKey]);
   return (
     <CrudPanel
       api={api}
@@ -808,7 +825,14 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
       updatePath={(row) => `/admin/masking-policies/${row.id}`}
       deletePath={(row) => `/admin/masking-policies/${row.id}`}
       fields={[
-        { name: "resource_id", label: "field.resourceId", required: true },
+        {
+          name: "resource_id",
+          label: "field.resourceId",
+          input: "resource-select",
+          resourceOptions: resources.data || [],
+          loading: resources.loading,
+          required: true
+        },
         { name: "field_name", label: "field.field", required: true },
         { name: "subject_type", label: "field.subjectType" },
         { name: "subject_id", label: "field.subject" },
@@ -1057,7 +1081,10 @@ function DataPanel({
 }
 
 function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsType<AnyRecord> {
-  const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row)))).slice(0, 8);
+  const hiddenKeys = new Set(["id", "tenant_id", "datasource_id", "resource_id", "api_key_id"]);
+  const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
+    .filter((key) => !hiddenKeys.has(key))
+    .slice(0, 8);
   return keys.map((key) => ({
     title: columnLabel(key, t),
     dataIndex: key,
@@ -1109,6 +1136,52 @@ function RecordDetails({
   );
 }
 
+function ResourceSelect({
+  resources,
+  loading,
+  t,
+  value,
+  onChange,
+  id
+}: {
+  resources: AnyRecord[];
+  loading?: boolean;
+  t: I18nContextValue["t"];
+  value?: string;
+  onChange?: (value?: string) => void;
+  id?: string;
+}) {
+  const options = resources.map((resource) => {
+    const name = String(resource.display_name || resource.name || resource.id);
+    const path = String(resource.path || "");
+    const kind = String(resource.kind || "");
+    const label = [name, path].filter(Boolean).join(" / ");
+    return {
+      value: resource.id,
+      label,
+      searchText: `${name} ${path} ${kind} ${resource.id}`
+    };
+  });
+  return (
+    <Select
+      id={id}
+      value={value}
+      onChange={onChange}
+      showSearch
+      allowClear
+      loading={loading}
+      className="resource-select"
+      placeholder={t("placeholder.resourceSearch")}
+      options={options}
+      filterOption={(input, option) =>
+        String((option as { searchText?: string } | undefined)?.searchText || "")
+          .toLowerCase()
+          .includes(input.toLowerCase())
+      }
+    />
+  );
+}
+
 function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
   const label = t(field.label);
   const rules = field.required ? [{ required: true, message: t("common.required", { label }) }] : undefined;
@@ -1121,6 +1194,8 @@ function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
     control = <Select mode="tags" />;
   } else if (field.input === "select") {
     control = <Select options={(field.options || []).map((value) => ({ label: optionLabel(value, t), value }))} />;
+  } else if (field.input === "resource-select") {
+    control = <ResourceSelect resources={field.resourceOptions || []} loading={field.loading} t={t} />;
   }
   return (
     <Form.Item key={field.name} name={field.name} label={label} rules={rules}>
