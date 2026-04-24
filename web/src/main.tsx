@@ -57,6 +57,7 @@ import {
   maskingFormValuesFromConfig,
 } from "./configForms";
 import { AdminOnboarding } from "./AdminOnboarding";
+import { validateAdminApiKey } from "./adminAuth";
 import { findTreePathByKey } from "./catalogNavigation";
 import { CompactActionButton } from "./CompactActionButton";
 import "./styles.css";
@@ -676,6 +677,7 @@ function useApi() {
 
   const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
   const saveApiKey = (value: string) => {
     if (value) {
       localStorage.setItem("adg.apiKey", value);
@@ -684,6 +686,24 @@ function useApi() {
     }
     setApiKey(value);
     setAuthError(null);
+  };
+  const validateAndSaveApiKey = async (value: string) => {
+    const candidate = value.trim();
+    if (!candidate) {
+      saveApiKey("");
+      return;
+    }
+    setValidating(true);
+    try {
+      await validateAdminApiKey(fetch, candidate);
+      saveApiKey(candidate);
+    } catch (error) {
+      localStorage.removeItem("adg.apiKey");
+      setApiKey("");
+      setAuthError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setValidating(false);
+    }
   };
   const request = async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
     // The frontend talks to relative paths so Vite and production hosting can proxy them.
@@ -708,7 +728,7 @@ function useApi() {
     }
     return (await response.json()) as T;
   };
-  return { apiKey, authError, saveApiKey, request };
+  return { apiKey, authError, validating, saveApiKey, validateAndSaveApiKey, request };
 }
 
 function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
@@ -801,8 +821,9 @@ function ConsoleApp() {
       <AdminOnboarding
         apiKey={draftApiKey}
         authError={api.authError}
+        validating={api.validating}
         onApiKeyChange={setDraftApiKey}
-        onContinue={() => api.saveApiKey(draftApiKey.trim())}
+        onContinue={() => void api.validateAndSaveApiKey(draftApiKey)}
         copy={{
           title: t("onboarding.title"),
           description: t("onboarding.description"),

@@ -16,6 +16,7 @@ describe("AdminOnboarding", () => {
       <AdminOnboarding
         apiKey=""
         authError={null}
+        validating={false}
         onApiKeyChange={() => undefined}
         onContinue={() => undefined}
         copy={{
@@ -60,6 +61,7 @@ describe("AdminOnboarding", () => {
       <AdminOnboarding
         apiKey=""
         authError={null}
+        validating={false}
         onApiKeyChange={() => undefined}
         onContinue={() => undefined}
         copy={{

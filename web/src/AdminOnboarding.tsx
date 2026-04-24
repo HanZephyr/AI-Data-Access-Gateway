@@ -27,19 +27,21 @@ export type AdminOnboardingCopy = {
 export function AdminOnboarding({
   apiKey,
   authError,
+  validating,
   onApiKeyChange,
   onContinue,
   copy,
 }: {
   apiKey: string;
   authError: string | null;
+  validating: boolean;
   onApiKeyChange: (value: string) => void;
   onContinue: () => void;
   copy: AdminOnboardingCopy;
 }) {
   /** Guide operators through bootstrap before the authenticated console becomes available. */
 
-  const isDisabled = apiKey.trim().length === 0;
+  const isDisabled = apiKey.trim().length === 0 || validating;
 
   return (
     <section className="admin-login-page">
@@ -64,6 +66,7 @@ export function AdminOnboarding({
               autoComplete="off"
               size="large"
               value={apiKey}
+              disabled={validating}
               placeholder={copy.inputPlaceholder}
               onChange={(event) => onApiKeyChange(event.target.value)}
               onPressEnter={() => {
@@ -73,7 +76,7 @@ export function AdminOnboarding({
               }}
             />
           </div>
-          <Button type="primary" size="large" block disabled={isDisabled} onClick={onContinue}>
+          <Button type="primary" size="large" block disabled={isDisabled} loading={validating} onClick={onContinue}>
             {copy.continueLabel}
           </Button>
           <Collapse
