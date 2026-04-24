@@ -49,3 +49,5 @@ http://127.0.0.1:8000/health
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.
 
 Milestone 2 adds datasource CRUD, connector registry and thin relational adapters, metadata scanning, and resource snapshot persistence.
+
+Milestone 3 adds MCP-style runtime tool handlers, an authenticated HTTP tool facade, conservative SQL Guard, runtime resource and field policy checks, tag visibility, read-only connector execution, and runtime audit events.
