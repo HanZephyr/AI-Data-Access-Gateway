@@ -74,3 +74,5 @@ Milestone 3 adds MCP-style runtime tool handlers, an authenticated HTTP tool fac
 Milestone 4 adds masking policies, fixed/partial/hash/reversible masking, decrypt contexts, internal decrypt API support, and masking/decrypt audit events.
 
 Milestone 5 adds admin APIs for console workflows and a Vite React + Ant Design web console under `web/`.
+
+Milestone 6 adds demo seed data, a minimal HTTP MCP client example, Docker Compose packaging, V1 quickstart instructions, and final quality gates for the demo path.
