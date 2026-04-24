@@ -7,11 +7,14 @@ import {
   DatabaseOutlined,
   DeleteOutlined,
   EditOutlined,
+  ExperimentOutlined,
   EyeOutlined,
   KeyOutlined,
   LockOutlined,
+  PlusOutlined,
   SafetyOutlined,
   StopOutlined,
+  SyncOutlined,
   TagsOutlined
 } from "@ant-design/icons";
 import {
@@ -48,7 +51,6 @@ import "./styles.css";
 type PageKey =
   | "overview"
   | "datasources"
-  | "resources"
   | "tags"
   | "policies"
   | "masking"
@@ -57,10 +59,10 @@ type PageKey =
   | "mcp";
 
 type AnyRecord = Record<string, any>;
-type ResourceTreeNode = AnyRecord & {
+type CatalogTreeNode = AnyRecord & {
   key: string;
-  type: "resource" | "field";
-  children?: ResourceTreeNode[];
+  type: "datasource" | "resource" | "field";
+  children?: CatalogTreeNode[];
 };
 type Language = "zh-CN" | "zh-TW" | "en-US";
 type TranslationParams = Record<string, string | number>;
@@ -73,7 +75,6 @@ const translations = {
     "topbar.language": "Language",
     "nav.overview": "Overview",
     "nav.datasources": "Data Sources",
-    "nav.resources": "Resources",
     "nav.tags": "Tags",
     "nav.policies": "Policies",
     "nav.masking": "Masking",
@@ -129,9 +130,15 @@ const translations = {
     "policy.resourcePolicies": "Resource Policies",
     "policy.fieldPolicies": "Field Policies",
     "section.fields": "Fields",
-    "catalog.search": "Search databases, tables, or fields",
-    "catalog.selectPrompt": "Select a database, table, or field to edit catalog notes.",
-    "catalog.treeTitle": "Asset Catalog",
+    "datasource.new": "New data source",
+    "datasource.test": "Test",
+    "datasource.scan": "Sync metadata",
+    "datasource.tested": "Connection test passed",
+    "datasource.scanned": "Metadata synced",
+    "datasource.deleteConfirm": "Delete this data source and scanned metadata?",
+    "catalog.search": "Search data sources, databases, tables, or fields",
+    "catalog.selectPrompt": "Select a data source, database, table, or field to edit details.",
+    "catalog.treeTitle": "Data Sources",
     "catalog.detailsTitle": "Catalog Details",
     "catalog.nodeType": "Node type",
     "catalog.fieldInfo": "Field information",
@@ -200,7 +207,6 @@ const translations = {
     "topbar.language": "语言",
     "nav.overview": "概览",
     "nav.datasources": "数据源",
-    "nav.resources": "资源",
     "nav.tags": "标签",
     "nav.policies": "权限策略",
     "nav.masking": "脱敏",
@@ -255,9 +261,15 @@ const translations = {
     "policy.resourcePolicies": "资源权限策略",
     "policy.fieldPolicies": "字段权限策略",
     "section.fields": "字段",
-    "catalog.search": "搜索库、表或字段",
-    "catalog.selectPrompt": "选择一个数据库、数据表或字段来维护目录说明。",
-    "catalog.treeTitle": "资产目录",
+    "datasource.new": "新建数据源",
+    "datasource.test": "测试连接",
+    "datasource.scan": "同步元数据",
+    "datasource.tested": "连接测试通过",
+    "datasource.scanned": "元数据已同步",
+    "datasource.deleteConfirm": "确认删除该数据源及其扫描元数据？",
+    "catalog.search": "搜索数据源、库、表或字段",
+    "catalog.selectPrompt": "选择一个数据源、数据库、数据表或字段来维护详情。",
+    "catalog.treeTitle": "数据源",
     "catalog.detailsTitle": "目录详情",
     "catalog.nodeType": "节点类型",
     "catalog.fieldInfo": "字段信息",
@@ -326,7 +338,6 @@ const translations = {
     "topbar.language": "語言",
     "nav.overview": "總覽",
     "nav.datasources": "資料來源",
-    "nav.resources": "資源",
     "nav.tags": "標籤",
     "nav.policies": "權限策略",
     "nav.masking": "遮罩",
@@ -381,9 +392,15 @@ const translations = {
     "policy.resourcePolicies": "資源權限策略",
     "policy.fieldPolicies": "欄位權限策略",
     "section.fields": "欄位",
-    "catalog.search": "搜尋資料庫、資料表或欄位",
-    "catalog.selectPrompt": "選擇一個資料庫、資料表或欄位來維護目錄說明。",
-    "catalog.treeTitle": "資產目錄",
+    "datasource.new": "新增資料來源",
+    "datasource.test": "測試連線",
+    "datasource.scan": "同步中繼資料",
+    "datasource.tested": "連線測試通過",
+    "datasource.scanned": "中繼資料已同步",
+    "datasource.deleteConfirm": "確認刪除此資料來源及其掃描中繼資料？",
+    "catalog.search": "搜尋資料來源、資料庫、資料表或欄位",
+    "catalog.selectPrompt": "選擇一個資料來源、資料庫、資料表或欄位來維護詳情。",
+    "catalog.treeTitle": "資料來源",
     "catalog.detailsTitle": "目錄詳情",
     "catalog.nodeType": "節點類型",
     "catalog.fieldInfo": "欄位資訊",
@@ -485,7 +502,6 @@ const antdLocales: Record<Language, typeof zhCN> = {
 const pages: Array<{ key: PageKey; labelKey: TranslationKey; icon: React.ReactNode }> = [
   { key: "overview", labelKey: "nav.overview", icon: <ClusterOutlined /> },
   { key: "datasources", labelKey: "nav.datasources", icon: <DatabaseOutlined /> },
-  { key: "resources", labelKey: "nav.resources", icon: <ClusterOutlined /> },
   { key: "tags", labelKey: "nav.tags", icon: <TagsOutlined /> },
   { key: "policies", labelKey: "nav.policies", icon: <SafetyOutlined /> },
   { key: "masking", labelKey: "nav.masking", icon: <LockOutlined /> },
@@ -700,7 +716,6 @@ function Page({ page, api }: { page: PageKey; api: ReturnType<typeof useApi> }) 
 
   if (page === "overview") return <Overview api={api} />;
   if (page === "datasources") return <Datasources api={api} />;
-  if (page === "resources") return <Resources api={api} />;
   if (page === "tags") return <Tags api={api} />;
   if (page === "policies") return <Policies api={api} />;
   if (page === "masking") return <Masking api={api} />;
@@ -756,60 +771,48 @@ function EndpointTable({ api, title, path }: { api: ReturnType<typeof useApi>; t
 }
 
 function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Datasource CRUD page with JSON config editing. */
-
-  return (
-    <CrudPanel
-      api={api}
-      title="nav.datasources"
-      listPath="/admin/datasources"
-      createPath="/admin/datasources"
-      updatePath={(row) => `/admin/datasources/${row.id}`}
-      deletePath={(row) => `/admin/datasources/${row.id}`}
-      fields={[
-        { name: "name", label: "field.name", required: true },
-        { name: "type", label: "field.type", input: "select", options: ["postgres", "mysql", "doris"], required: true },
-        { name: "status", label: "field.status", input: "select", options: ["active", "disabled"], required: true },
-        { name: "config", label: "field.config", input: "json", required: true }
-      ]}
-      initialValues={{
-        type: "postgres",
-        status: "active",
-        config: { host: "localhost", port: 5432, database: "warehouse" }
-      }}
-    />
-  );
-}
-
-function Resources({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Database-asset catalog with a DBeaver-style tree and editable right pane. */
+  /** Unified datasource and asset catalog workspace. */
 
   const { t } = useI18n();
-  const state = useData<ResourceTreeNode[]>(() => api.request("/admin/resource-tree"), [api.apiKey]);
+  const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
+  const resources = useData<CatalogTreeNode[]>(() => api.request("/admin/resource-tree"), [api.apiKey]);
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
-  const treeData = filterResourceTree(state.data || [], search);
-  const flatNodes = flattenResourceTree(state.data || []);
-  const visibleKeys = flattenResourceTree(treeData).map((node) => node.key);
+  const [createOpen, setCreateOpen] = useState(false);
+  const sourceTree = buildDatasourceTree(datasources.data || [], resources.data || []);
+  const treeData = filterCatalogTree(sourceTree, search);
+  const flatNodes = flattenCatalogTree(sourceTree);
+  const visibleKeys = flattenCatalogTree(treeData).map((node) => node.key);
   const selected = flatNodes.find((node) => node.key === selectedKey) || null;
+  const loading = datasources.loading || resources.loading;
+  const error = datasources.error || resources.error;
+  const reloadAll = () => {
+    datasources.reload();
+    resources.reload();
+  };
 
   useEffect(() => {
-    if (state.data) {
+    if (datasources.data && resources.data) {
       setExpandedKeys(
-        flattenResourceTree(state.data)
+        flattenCatalogTree(sourceTree)
           .filter((node) => (node.children || []).length > 0)
           .map((node) => node.key)
       );
     }
-  }, [state.data]);
+  }, [datasources.data, resources.data]);
 
   return (
     <section className="resource-catalog">
       <div className="catalog-tree panel">
         <div className="panel-head">
           <Typography.Title level={4}>{t("catalog.treeTitle")}</Typography.Title>
-          <Button onClick={state.reload}>{t("common.refresh")}</Button>
+          <Space>
+            <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
+              {t("datasource.new")}
+            </Button>
+            <Button onClick={reloadAll}>{t("common.refresh")}</Button>
+          </Space>
         </div>
         <div className="catalog-tree-body">
           <Input.Search
@@ -819,9 +822,10 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
-          {state.error ? <Alert type="error" message={state.error} /> : null}
+          {error ? <Alert type="error" message={error} /> : null}
           <Tree
             blockNode
+            className={loading ? "catalog-tree-loading" : undefined}
             showLine
             treeData={toAntTreeData(treeData, t)}
             selectedKeys={selectedKey ? [selectedKey] : []}
@@ -832,7 +836,15 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
         </div>
       </div>
       {selected ? (
-        <CatalogDetail api={api} selected={selected} onSaved={state.reload} />
+        <CatalogDetail
+          api={api}
+          selected={selected}
+          onSaved={reloadAll}
+          onDeleted={() => {
+            setSelectedKey(null);
+            reloadAll();
+          }}
+        />
       ) : (
         <div className="catalog-detail panel">
           <div className="panel-head">
@@ -842,6 +854,12 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
           <Empty className="catalog-empty" description={t("catalog.selectPrompt")} />
         </div>
       )}
+      <DatasourceCreateDrawer
+        api={api}
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={reloadAll}
+      />
     </section>
   );
 }
@@ -849,13 +867,126 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
 function CatalogDetail({
   api,
   selected,
+  onSaved,
+  onDeleted
+}: {
+  api: ReturnType<typeof useApi>;
+  selected: CatalogTreeNode;
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
+  /** Route the selected catalog node to the correct detail editor. */
+
+  if (selected.type === "datasource") {
+    return (
+      <DatasourceDetail
+        api={api}
+        selected={selected}
+        onSaved={onSaved}
+        onDeleted={onDeleted}
+      />
+    );
+  }
+  return <AssetDetail api={api} selected={selected} onSaved={onSaved} />;
+}
+
+function DatasourceDetail({
+  api,
+  selected,
+  onSaved,
+  onDeleted
+}: {
+  api: ReturnType<typeof useApi>;
+  selected: CatalogTreeNode;
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
+  /** Editable datasource form embedded in the catalog detail pane. */
+
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    form.setFieldsValue(toDatasourceFormValues(selected));
+  }, [form, selected]);
+
+  const save = async () => {
+    const values = await form.validateFields();
+    await api.request(`/admin/datasources/${selected.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(normalizeDatasourceValues(values))
+    });
+    messageApi.success(t("common.saved"));
+    onSaved();
+  };
+  const test = async () => {
+    await api.request(`/admin/datasources/${selected.id}/test`, { method: "POST" });
+    messageApi.success(t("datasource.tested"));
+  };
+  const scan = async () => {
+    await api.request(`/admin/datasources/${selected.id}/scan`, { method: "POST" });
+    messageApi.success(t("datasource.scanned"));
+    onSaved();
+  };
+  const remove = async () => {
+    await api.request(`/admin/datasources/${selected.id}`, { method: "DELETE" });
+    messageApi.success(t("common.deleted"));
+    onDeleted();
+  };
+
+  return (
+    <div className="catalog-detail panel">
+      <div className="panel-head">
+        <Typography.Title level={4}>{t("catalog.detailsTitle")}</Typography.Title>
+        <Space>
+          <Tag>{optionLabel(String(selected.status || "active"), t)}</Tag>
+          <Button icon={<ExperimentOutlined />} onClick={test}>{t("datasource.test")}</Button>
+          <Button icon={<SyncOutlined />} onClick={scan}>{t("datasource.scan")}</Button>
+          <Popconfirm title={t("datasource.deleteConfirm")} onConfirm={remove}>
+            <Button icon={<DeleteOutlined />} />
+          </Popconfirm>
+          <Button type="primary" onClick={save}>{t("common.save")}</Button>
+        </Space>
+      </div>
+      <div className="catalog-detail-body">
+        <Descriptions bordered column={1} size="small">
+          <Descriptions.Item label={t("catalog.nodeType")}>
+            {t("nav.datasources")}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("field.type")}>
+            {optionLabel(String(selected.datasource_type || selected.type_name || selected.type), t)}
+          </Descriptions.Item>
+          <Descriptions.Item label={t("column.datasource_kind")}>
+            {String(selected.datasource_kind || "")}
+          </Descriptions.Item>
+        </Descriptions>
+        <Form form={form} layout="vertical">
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+          <Form.Item name="config" label={t("field.config")} rules={[{ required: true }]}>
+            <Input.TextArea autoComplete="off" autoSize={{ minRows: 8, maxRows: 16 }} />
+          </Form.Item>
+        </Form>
+      </div>
+    </div>
+  );
+}
+
+function AssetDetail({
+  api,
+  selected,
   onSaved
 }: {
   api: ReturnType<typeof useApi>;
-  selected: ResourceTreeNode;
+  selected: CatalogTreeNode;
   onSaved: () => void;
 }) {
-  /** Editable detail pane for the selected catalog resource or field node. */
+  /** Editable detail pane for database, table, and field catalog nodes. */
 
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
@@ -926,27 +1057,115 @@ function CatalogDetail({
   );
 }
 
-function flattenResourceTree(nodes: ResourceTreeNode[]): ResourceTreeNode[] {
-  /** Flatten the catalog tree for selection lookup and expansion control. */
+function DatasourceCreateDrawer({
+  api,
+  open,
+  onClose,
+  onCreated
+}: {
+  api: ReturnType<typeof useApi>;
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  /** Drawer for creating a datasource without leaving the catalog workspace. */
 
-  return nodes.flatMap((node) => [node, ...flattenResourceTree(node.children || [])]);
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
+  const [form] = Form.useForm();
+  const create = async () => {
+    const values = await form.validateFields();
+    await api.request("/admin/datasources", {
+      method: "POST",
+      body: JSON.stringify(normalizeDatasourceValues(values))
+    });
+    messageApi.success(t("common.saved"));
+    onClose();
+    onCreated();
+  };
+
+  return (
+    <Drawer
+      title={t("common.createTitle", { title: t("nav.datasources") })}
+      open={open}
+      onClose={onClose}
+      extra={<Button type="primary" onClick={create}>{t("common.save")}</Button>}
+      width={520}
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{
+          type: "postgres",
+          status: "active",
+          config: JSON.stringify(
+            { host: "localhost", port: 5432, database: "warehouse" },
+            null,
+            2
+          )
+        }}
+      >
+        <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
+          <Input autoComplete="off" />
+        </Form.Item>
+        <Form.Item name="type" label={t("field.type")} rules={[{ required: true }]}>
+          <Select options={["postgres", "mysql", "doris"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+        </Form.Item>
+        <Form.Item name="status" label={t("field.status")} rules={[{ required: true }]}>
+          <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+        </Form.Item>
+        <Form.Item name="config" label={t("field.config")} rules={[{ required: true }]}>
+          <Input.TextArea autoComplete="off" autoSize={{ minRows: 8, maxRows: 16 }} />
+        </Form.Item>
+      </Form>
+    </Drawer>
+  );
 }
 
-function filterResourceTree(nodes: ResourceTreeNode[], search: string): ResourceTreeNode[] {
+function buildDatasourceTree(
+  datasources: AnyRecord[],
+  resourceRoots: CatalogTreeNode[],
+): CatalogTreeNode[] {
+  /** Attach scanned assets under their owning datasource root node. */
+
+  return datasources.map((datasource) => ({
+    key: `datasource:${datasource.id}`,
+    type: "datasource",
+    id: datasource.id,
+    name: datasource.name,
+    display_name: datasource.name,
+    datasource_type: datasource.type,
+    type_name: datasource.type,
+    datasource_kind: datasource.datasource_kind,
+    config: datasource.config,
+    status: datasource.status,
+    children: resourceRoots.filter((resource) => resource.datasource_id === datasource.id),
+  }));
+}
+
+function flattenCatalogTree(nodes: CatalogTreeNode[]): CatalogTreeNode[] {
+  /** Flatten the catalog tree for selection lookup and expansion control. */
+
+  return nodes.flatMap((node) => [node, ...flattenCatalogTree(node.children || [])]);
+}
+
+function filterCatalogTree(nodes: CatalogTreeNode[], search: string): CatalogTreeNode[] {
   /** Keep matching nodes and ancestors so search still preserves hierarchy. */
 
   const needle = search.trim().toLowerCase();
   if (!needle) return nodes;
-  const filtered: ResourceTreeNode[] = [];
+  const filtered: CatalogTreeNode[] = [];
   for (const node of nodes) {
-    const children = filterResourceTree(node.children || [], search);
+    const children = filterCatalogTree(node.children || [], search);
     const haystack = [
       node.name,
       node.display_name,
       node.path,
       node.kind,
       node.data_type,
-      node.description
+      node.description,
+      node.datasource_type,
+      JSON.stringify(node.config || {})
     ].join(" ").toLowerCase();
     if (haystack.includes(needle) || children.length) {
       filtered.push({ ...node, children });
@@ -955,7 +1174,7 @@ function filterResourceTree(nodes: ResourceTreeNode[], search: string): Resource
   return filtered;
 }
 
-function toCatalogFormValues(node: ResourceTreeNode) {
+function toCatalogFormValues(node: CatalogTreeNode) {
   /** Extract only editable catalog fields from the selected tree node. */
 
   return node.type === "field"
@@ -968,16 +1187,38 @@ function toCatalogFormValues(node: ResourceTreeNode) {
       };
 }
 
-function toAntTreeData(nodes: ResourceTreeNode[], t: I18nContextValue["t"]): AnyRecord[] {
+function toDatasourceFormValues(node: CatalogTreeNode) {
+  /** Convert datasource nodes into form values with pretty JSON config text. */
+
+  return {
+    name: node.name,
+    status: node.status || "active",
+    config: JSON.stringify(node.config || {}, null, 2),
+  };
+}
+
+function normalizeDatasourceValues(values: AnyRecord) {
+  /** Parse datasource config text before sending it to the admin API. */
+
+  return {
+    ...values,
+    config: typeof values.config === "string" ? JSON.parse(values.config) : values.config,
+  };
+}
+
+function toAntTreeData(nodes: CatalogTreeNode[], t: I18nContextValue["t"]): AnyRecord[] {
   /** Convert API tree nodes into Ant Design tree data with status-aware labels. */
 
   return nodes.map((node) => {
     const children = toAntTreeData(node.children || [], t);
+    const label = String(node.display_name || node.name);
+    const meta = node.type === "datasource" ? String(node.datasource_type || "") : "";
     return {
       key: node.key,
       title: (
         <Space size={6} className="catalog-node-title">
-          <span>{String(node.display_name || node.name)}</span>
+          <span>{label}</span>
+          {meta ? <Tag>{optionLabel(meta, t)}</Tag> : null}
           {node.status === "disabled" ? <Tag>{optionLabel("disabled", t)}</Tag> : null}
         </Space>
       ),
