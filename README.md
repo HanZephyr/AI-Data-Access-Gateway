@@ -51,3 +51,5 @@ Milestone 1 includes the backend package skeleton, settings, FastAPI health endp
 Milestone 2 adds datasource CRUD, connector registry and thin relational adapters, metadata scanning, and resource snapshot persistence.
 
 Milestone 3 adds MCP-style runtime tool handlers, an authenticated HTTP tool facade, conservative SQL Guard, runtime resource and field policy checks, tag visibility, read-only connector execution, and runtime audit events.
+
+Milestone 4 adds masking policies, fixed/partial/hash/reversible masking, decrypt contexts, internal decrypt API support, and masking/decrypt audit events.
