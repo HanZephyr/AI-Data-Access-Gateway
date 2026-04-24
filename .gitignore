@@ -2,8 +2,11 @@
 .codex
 .agents
 .venv
+web/dist/
+web/node_modules/
+web/tsconfig.tsbuildinfo
 *.pyc
 
+data/
 dev-docs/
 .worktrees/
-
