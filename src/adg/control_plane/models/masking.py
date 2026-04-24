@@ -31,7 +31,11 @@ class DecryptContext(Base):
     datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     key_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     allowed_fields_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -33,7 +33,8 @@ def build_internal_app(
                 scopes='["internal"]',
             )
         )
-        marker = MaskingService(session, secret_key=get_settings().secret_key).mask_reversible_value(
+        service = MaskingService(session, secret_key=get_settings().secret_key)
+        marker = service.mask_reversible_value(
             tenant_id="tenant-a",
             user_id="user-1",
             datasource_id="ds_1",

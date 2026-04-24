@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from adg.masking.service import MaskingService
 from adg.shared.errors import ValidationError
 
-
 SECRET = "unit-test-secret-value"
 
 
@@ -27,6 +26,7 @@ def test_partial_masking_preserves_prefix_and_suffix(db_session: Session) -> Non
         config={"prefix": 2, "suffix": 2, "fill": "#"},
     )
 
+    assert masked is not None
     assert masked.startswith("al")
     assert masked.endswith("om")
     assert set(masked[2:-2]) == {"#"}
@@ -38,6 +38,7 @@ def test_hash_masking_is_deterministic_and_not_plaintext(db_session: Session) ->
     first = service.mask_plain_value("alice@example.com", strategy="hash", config={})
     second = service.mask_plain_value("alice@example.com", strategy="hash", config={})
 
+    assert first is not None
     assert first == second
     assert first != "alice@example.com"
     assert len(first) == 64

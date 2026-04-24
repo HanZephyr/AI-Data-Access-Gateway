@@ -34,7 +34,6 @@ class MaskingService:
         policies = self._matching_policies(identity=identity, resources=resources)
         masked_columns: list[dict[str, str]] = []
         rows: list[dict[str, object]] = []
-        resource_by_id = {resource.id: resource for resource in resources}
 
         for row in result.rows:
             masked_row = dict(row)
@@ -42,7 +41,6 @@ class MaskingService:
                 if policy.field_name not in masked_row or masked_row[policy.field_name] is None:
                     continue
                 if policy.strategy == "reversible":
-                    resource = resource_by_id[policy.resource_id]
                     masked_row[policy.field_name] = self.mask_reversible_value(
                         tenant_id=identity.tenant_id,
                         user_id=identity.user_id,
@@ -70,15 +68,15 @@ class MaskingService:
         *,
         strategy: str,
         config: dict[str, object],
-    ) -> object:
+    ) -> str | None:
         if value is None:
             return None
         text = str(value)
         if strategy == "fixed":
             return str(config.get("replacement", "***"))
         if strategy == "partial":
-            prefix = int(config.get("prefix", 2))
-            suffix = int(config.get("suffix", 2))
+            prefix = int(str(config.get("prefix", 2)))
+            suffix = int(str(config.get("suffix", 2)))
             fill = str(config.get("fill", "*"))[:1] or "*"
             if len(text) <= prefix + suffix:
                 return fill * len(text)
