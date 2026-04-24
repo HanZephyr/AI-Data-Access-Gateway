@@ -4,46 +4,65 @@ AI Data Access Gateway is a secure data access gateway for AI agents. It exposes
 
 ## Development
 
-Install development dependencies:
+Install backend development dependencies:
 
 ```bash
-pip install -e ".[dev]"
+uv run --extra dev pytest
 ```
 
-Run tests:
+Seed demo data:
 
 ```bash
-pytest
-```
-
-Run linting:
-
-```bash
-ruff check .
-```
-
-Run type checks:
-
-```bash
-mypy src tests
-```
-
-Run database migrations:
-
-```bash
-alembic upgrade head
+uv run --extra dev python examples/seed_demo.py --database-url sqlite:///./data/adg-control-plane.db
 ```
 
 Run the backend:
 
 ```bash
-uvicorn adg.app.main:create_app --factory --reload
+$env:ADG_CONTROL_PLANE_DATABASE_URL="sqlite:///./data/adg-control-plane.db"
+uv run --extra dev uvicorn adg.app.main:create_app --factory --reload
 ```
 
-Health endpoint:
+Run the web console:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open the console:
 
 ```text
-http://127.0.0.1:8000/health
+http://127.0.0.1:5173
+API key: adg_admin
+```
+
+Run backend verification:
+
+```bash
+uv run --extra dev pytest
+uv run --extra dev ruff check .
+uv run --extra dev mypy src tests
+```
+
+Run frontend verification:
+
+```bash
+cd web
+npm run build
+```
+
+Call MCP-style HTTP tools:
+
+```bash
+uv run --extra dev python examples/mcp_client_http.py --api-key adg_admin
+```
+
+Run with Docker Compose:
+
+```bash
+docker compose up --build
 ```
 
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.
