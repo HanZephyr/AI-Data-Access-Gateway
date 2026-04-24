@@ -65,17 +65,17 @@ Production bootstrap flow:
 
 ```bash
 uv run --extra dev alembic upgrade head
-uv run --extra dev adg-init-admin --database-url sqlite:///./data/adg-control-plane.db
+uv run --extra dev init-admin --database-url sqlite:///./data/adg-control-plane.db
 ```
 
-`adg-init-admin` prints a one-time random admin API key for the control plane. Store it immediately, then use it to create scoped replacement keys from the console.
+`init-admin` prints a one-time random admin API key for the control plane. Store it immediately, then use it to create scoped replacement keys from the console.
 
 Run with Docker Compose:
 
 ```bash
 $env:ADG_SECRET_KEY = "<generate-a-long-random-secret>"
 docker compose up --build
-docker compose exec backend adg-init-admin --database-url sqlite:///./data/adg-control-plane.db
+docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db
 ```
 
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.

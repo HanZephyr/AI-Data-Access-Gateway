@@ -35,7 +35,7 @@ dev = [
 
 [project.scripts]
 adg-api = "adg.app.main:run"
-adg-init-admin = "adg.control_plane.bootstrap:main"
+init-admin = "adg.control_plane.bootstrap:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adg"]

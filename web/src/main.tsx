@@ -56,6 +56,7 @@ import {
   maskingConfigFromFormValues,
   maskingFormValuesFromConfig,
 } from "./configForms";
+import { AdminOnboarding } from "./AdminOnboarding";
 import { findTreePathByKey } from "./catalogNavigation";
 import { CompactActionButton } from "./CompactActionButton";
 import "./styles.css";
@@ -180,6 +181,18 @@ const translations = {
     "tag.relatedAssets": "Linked assets",
     "tag.relatedAssetsTitle": "{name} linked assets",
     "tag.noLinkedAssets": "No data assets are currently linked to this tag.",
+    "onboarding.title": "Admin Access Required",
+    "onboarding.description":
+      "Initialize one admin API key first, then use it to enter the control plane and mint scoped replacement keys.",
+    "onboarding.commandLabel": "Bootstrap command",
+    "onboarding.inputLabel": "Admin API key",
+    "onboarding.inputPlaceholder": "Paste the key printed by init-admin",
+    "onboarding.continue": "Enter Console",
+    "onboarding.hintTitle": "Recommended flow",
+    "onboarding.step1": "Run alembic upgrade head against the control-plane database.",
+    "onboarding.step2": "Run init-admin once to print a one-time admin API key.",
+    "onboarding.step3": "Paste the key here and rotate to narrower scoped keys after sign-in.",
+    "onboarding.authErrorTitle": "Authentication failed",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
     "mcp.tools": "Tools",
@@ -332,6 +345,17 @@ const translations = {
     "tag.relatedAssets": "关联资源",
     "tag.relatedAssetsTitle": "{name} 的关联资源",
     "tag.noLinkedAssets": "当前没有数据资产关联到这个标签。",
+    "onboarding.title": "管理员初始化",
+    "onboarding.description": "先初始化一个管理员 API Key，再进入控制台，然后尽快生成权限更小的替代密钥用于日常使用。",
+    "onboarding.commandLabel": "初始化命令",
+    "onboarding.inputLabel": "管理员 API Key",
+    "onboarding.inputPlaceholder": "输入 init-admin 输出的密钥",
+    "onboarding.continue": "进入控制台",
+    "onboarding.hintTitle": "推荐流程",
+    "onboarding.step1": "先对控制平面数据库执行 alembic upgrade head。",
+    "onboarding.step2": "执行一次 init-admin，拿到一次性输出的管理员密钥。",
+    "onboarding.step3": "把密钥粘贴到这里登录，随后在控制台中创建更小权限范围的替代密钥。",
+    "onboarding.authErrorTitle": "认证失败",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
     "mcp.tools": "工具",
@@ -484,6 +508,17 @@ const translations = {
     "tag.relatedAssets": "關聯資源",
     "tag.relatedAssetsTitle": "{name} 的關聯資源",
     "tag.noLinkedAssets": "目前沒有資料資產關聯到這個標籤。",
+    "onboarding.title": "管理員初始化",
+    "onboarding.description": "先初始化一個管理員 API 金鑰，再進入控制台，之後盡快建立權限更小的替代金鑰供日常使用。",
+    "onboarding.commandLabel": "初始化命令",
+    "onboarding.inputLabel": "管理員 API 金鑰",
+    "onboarding.inputPlaceholder": "輸入 init-admin 輸出的金鑰",
+    "onboarding.continue": "進入控制台",
+    "onboarding.hintTitle": "推薦流程",
+    "onboarding.step1": "先對控制平面資料庫執行 alembic upgrade head。",
+    "onboarding.step2": "執行一次 init-admin，取得一次性輸出的管理員金鑰。",
+    "onboarding.step3": "把金鑰貼到這裡登入，接著在控制台中建立權限更小的替代金鑰。",
+    "onboarding.authErrorTitle": "認證失敗",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
     "mcp.tools": "工具",
@@ -634,9 +669,15 @@ function useApi() {
   /** Keep the API key in local storage and attach it to every console request. */
 
   const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "");
+  const [authError, setAuthError] = useState<string | null>(null);
   const saveApiKey = (value: string) => {
-    localStorage.setItem("adg.apiKey", value);
+    if (value) {
+      localStorage.setItem("adg.apiKey", value);
+    } else {
+      localStorage.removeItem("adg.apiKey");
+    }
     setApiKey(value);
+    setAuthError(null);
   };
   const request = async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
     // The frontend talks to relative paths so Vite and production hosting can proxy them.
@@ -649,14 +690,19 @@ function useApi() {
       }
     });
     if (!response.ok) {
-      throw new Error((await response.text()) || response.statusText);
+      const message = (await response.text()) || response.statusText;
+      if (response.status === 401 || response.status === 403) {
+        setAuthError(message);
+      }
+      throw new Error(message);
     }
+    setAuthError(null);
     if (response.status === 204) {
       return undefined as T;
     }
     return (await response.json()) as T;
   };
-  return { apiKey, saveApiKey, request };
+  return { apiKey, authError, saveApiKey, request };
 }
 
 function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
@@ -724,13 +770,22 @@ function ConsoleApp() {
   const { language, setLanguage, t } = useI18n();
   const [page, setPage] = useState<PageKey>("overview");
   const [catalogJumpTarget, setCatalogJumpTarget] = useState<CatalogJumpTarget | null>(null);
+  const [draftApiKey, setDraftApiKey] = useState("");
   const api = useApi();
+  const showOnboarding = !api.apiKey || Boolean(api.authError);
   const navigationItems = pages.map((item) => ({
     key: item.key,
     icon: item.icon,
     label: t(item.labelKey)
   }));
-  const currentPageTitle = t(pages.find((item) => item.key === page)?.labelKey || "nav.overview");
+  const currentPageTitle = showOnboarding
+    ? t("onboarding.title")
+    : t(pages.find((item) => item.key === page)?.labelKey || "nav.overview");
+
+  useEffect(() => {
+    setDraftApiKey(api.apiKey);
+  }, [api.apiKey, api.authError]);
+
   const openCatalogNode = (target: CatalogJumpTarget) => {
     setPage("datasources");
     setCatalogJumpTarget(target);
@@ -781,20 +836,48 @@ function ConsoleApp() {
                 id="adg-api-key"
                 name="adg-api-key"
                 autoComplete="off"
-                value={api.apiKey}
-                onChange={(event) => api.saveApiKey(event.target.value)}
+                value={showOnboarding ? draftApiKey : api.apiKey}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (showOnboarding) {
+                    setDraftApiKey(value);
+                  } else {
+                    api.saveApiKey(value);
+                  }
+                }}
               />
             </Space.Compact>
           </div>
         </Layout.Header>
         <Layout.Content className="content">
-          <Page
-            page={page}
-            api={api}
-            catalogJumpTarget={catalogJumpTarget}
-            onCatalogJumpHandled={() => setCatalogJumpTarget(null)}
-            onOpenCatalogNode={openCatalogNode}
-          />
+          {showOnboarding ? (
+            <AdminOnboarding
+              apiKey={draftApiKey}
+              authError={api.authError}
+              onApiKeyChange={setDraftApiKey}
+              onContinue={() => api.saveApiKey(draftApiKey.trim())}
+              copy={{
+                title: t("onboarding.title"),
+                description: t("onboarding.description"),
+                commandLabel: t("onboarding.commandLabel"),
+                commandValue: "uv run --extra dev init-admin --database-url sqlite:///./data/adg-control-plane.db",
+                inputLabel: t("onboarding.inputLabel"),
+                inputPlaceholder: t("onboarding.inputPlaceholder"),
+                continueLabel: t("onboarding.continue"),
+                hintTitle: t("onboarding.hintTitle"),
+                hintSteps: [t("onboarding.step1"), t("onboarding.step2"), t("onboarding.step3")],
+                authErrorTitle: t("onboarding.authErrorTitle"),
+              }}
+            />
+          ) : (
+            <Page
+              page={page}
+              api={api}
+              catalogJumpTarget={catalogJumpTarget}
+              onCatalogJumpHandled={() => setCatalogJumpTarget(null)}
+              onOpenCatalogNode={openCatalogNode}
+            />
+          )}
         </Layout.Content>
       </Layout>
     </Layout>
