@@ -9,9 +9,11 @@ import {
   EditOutlined,
   ExperimentOutlined,
   EyeOutlined,
+  LinkOutlined,
   KeyOutlined,
   LockOutlined,
   PlusOutlined,
+  RightCircleOutlined,
   SafetyOutlined,
   StopOutlined,
   SyncOutlined,
@@ -55,6 +57,7 @@ import {
   maskingFormValuesFromConfig,
 } from "./configForms";
 import { findTreePathByKey } from "./catalogNavigation";
+import { CompactActionButton } from "./CompactActionButton";
 import "./styles.css";
 
 type PageKey =
@@ -1627,12 +1630,11 @@ function toTagCatalogTreeData(
             {meta ? <Tag>{optionLabel(meta, t)}</Tag> : null}
             {node.status === "disabled" ? <Tag>{optionLabel("disabled", t)}</Tag> : null}
           </Space>
-          <Button size="small" type="link" onClick={(event) => {
-            event.stopPropagation();
-            onOpenNode(node);
-          }}>
-            {t("catalog.jump")}
-          </Button>
+          <CompactActionButton
+            title={t("catalog.jump")}
+            icon={<RightCircleOutlined />}
+            onClick={() => onOpenNode(node)}
+          />
         </div>
       ),
       ...(children.length ? { children } : {}),
@@ -1703,17 +1705,17 @@ function Tags({
         {t("common.create")}
       </Button>
       <DataPanel
-        title={t("nav.tags")}
-        state={state}
-        columns={columnsFromRows(state.data || [], t)}
-        actionsColumnWidth={248}
+      title={t("nav.tags")}
+      state={state}
+      columns={columnsFromRows(state.data || [], t)}
+        actionsColumnWidth={156}
         actions={(row) => (
           <Space size={4} onClick={(event) => event.stopPropagation()}>
-            <Tooltip title={t("tag.relatedAssets")}>
-              <Button size="small" onClick={() => setCatalogTag(row)}>
-                {t("tag.relatedAssets")}
-              </Button>
-            </Tooltip>
+            <CompactActionButton
+              title={t("tag.relatedAssets")}
+              icon={<LinkOutlined />}
+              onClick={() => setCatalogTag(row)}
+            />
             <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
             <IconAction
               title={t("common.edit")}
