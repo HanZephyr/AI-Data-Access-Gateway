@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from examples.seed_demo import seed_demo
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
@@ -9,7 +10,6 @@ from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
-from examples.seed_demo import seed_demo
 
 
 def test_seed_demo_creates_console_ready_data(tmp_path: Path) -> None:
