@@ -16,6 +16,7 @@ status: active
 - Implemented Milestone 4 masking policies, fixed/partial/hash/reversible masking, decrypt contexts, and internal decrypt API.
 - Implemented Milestone 5 admin console APIs and the React + Ant Design web console.
 - Implemented Milestone 6 V1 quickstart, demo seed data, Docker Compose packaging, MCP client example, and final demo-path verification.
+- Post-V1 hardening commit `34840fd` standardized new control-plane primary keys on UUIDv7 and improved admin console resource association UX.
 
 ## Primary docs
 
@@ -49,6 +50,7 @@ status: active
 - Milestone 4 implementation commit `64aa10c`
 - Milestone 5 implementation commit `d3eaeab`
 - Milestone 6 implementation range `288432c..c1ba4dd`
+- UUIDv7/resource-picker hardening commit `34840fd`
 
 ## Major gaps
 

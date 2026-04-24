@@ -171,6 +171,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert resource_policy.status_code == 201
+    assert resource_policy.json()["resource_label"] == "customers / warehouse.public.customers"
     resource_policy_id = resource_policy.json()["id"]
 
     field_policy = client.post(
@@ -187,6 +188,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert field_policy.status_code == 201
+    assert field_policy.json()["resource_label"] == "customers / warehouse.public.customers"
     field_policy_id = field_policy.json()["id"]
 
     masking = client.post(
@@ -201,6 +203,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
         headers=auth(),
     )
     assert masking.status_code == 201
+    assert masking.json()["resource_label"] == "customers / warehouse.public.customers"
     masking_policy_id = masking.json()["id"]
 
     updated_resource_policy = client.patch(
@@ -252,6 +255,52 @@ def test_admin_policy_and_masking_policy_management() -> None:
         client.delete(f"/admin/masking-policies/{masking_policy_id}", headers=auth()).status_code
         == 204
     )
+
+
+def test_admin_policy_and_masking_reject_unknown_resource() -> None:
+    client = build_console_app()
+
+    resource_policy = client.post(
+        "/admin/resource-policies",
+        json={
+            "tenant_id": "tenant-a",
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "resource_id": "missing-resource",
+        },
+        headers=auth(),
+    )
+    assert resource_policy.status_code == 404
+
+    field_policy = client.post(
+        "/admin/field-policies",
+        json={
+            "tenant_id": "tenant-a",
+            "subject_type": "all",
+            "subject_id": "*",
+            "effect": "deny",
+            "resource_id": "missing-resource",
+            "field_name": "email",
+            "action": "read",
+        },
+        headers=auth(),
+    )
+    assert field_policy.status_code == 404
+
+    masking = client.post(
+        "/admin/masking-policies",
+        json={
+            "tenant_id": "tenant-a",
+            "resource_id": "missing-resource",
+            "field_name": "email",
+            "strategy": "fixed",
+            "config": {"replacement": "REDACTED"},
+        },
+        headers=auth(),
+    )
+    assert masking.status_code == 404
 
 
 def test_admin_api_keys_audit_and_mcp_setup() -> None:
