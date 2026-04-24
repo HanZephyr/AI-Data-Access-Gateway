@@ -180,8 +180,62 @@ def upgrade() -> None:
     op.create_index("ix_field_policies_action", "field_policies", ["action"])
     op.create_index("ix_field_policies_status", "field_policies", ["status"])
 
+    op.create_table(
+        "masking_policies",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("resource_id", sa.String(length=36), nullable=False),
+        sa.Column("field_name", sa.String(length=200), nullable=False),
+        sa.Column("subject_type", sa.String(length=32), nullable=True),
+        sa.Column("subject_id", sa.String(length=200), nullable=True),
+        sa.Column("strategy", sa.String(length=32), nullable=False),
+        sa.Column("config_json", sa.Text(), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_masking_policies_tenant_id", "masking_policies", ["tenant_id"])
+    op.create_index("ix_masking_policies_resource_id", "masking_policies", ["resource_id"])
+    op.create_index("ix_masking_policies_field_name", "masking_policies", ["field_name"])
+    op.create_index("ix_masking_policies_subject_type", "masking_policies", ["subject_type"])
+    op.create_index("ix_masking_policies_subject_id", "masking_policies", ["subject_id"])
+    op.create_index("ix_masking_policies_strategy", "masking_policies", ["strategy"])
+    op.create_index("ix_masking_policies_status", "masking_policies", ["status"])
+
+    op.create_table(
+        "decrypt_contexts",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("query_id", sa.String(length=64), nullable=False),
+        sa.Column("user_id", sa.String(length=200), nullable=True),
+        sa.Column("datasource_id", sa.String(length=36), nullable=False),
+        sa.Column("key_ciphertext", sa.Text(), nullable=False),
+        sa.Column("allowed_fields_json", sa.Text(), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_decrypt_contexts_tenant_id", "decrypt_contexts", ["tenant_id"])
+    op.create_index("ix_decrypt_contexts_query_id", "decrypt_contexts", ["query_id"])
+    op.create_index("ix_decrypt_contexts_user_id", "decrypt_contexts", ["user_id"])
+    op.create_index("ix_decrypt_contexts_datasource_id", "decrypt_contexts", ["datasource_id"])
+    op.create_index("ix_decrypt_contexts_expires_at", "decrypt_contexts", ["expires_at"])
+
 
 def downgrade() -> None:
+    op.drop_index("ix_decrypt_contexts_expires_at", table_name="decrypt_contexts")
+    op.drop_index("ix_decrypt_contexts_datasource_id", table_name="decrypt_contexts")
+    op.drop_index("ix_decrypt_contexts_user_id", table_name="decrypt_contexts")
+    op.drop_index("ix_decrypt_contexts_query_id", table_name="decrypt_contexts")
+    op.drop_index("ix_decrypt_contexts_tenant_id", table_name="decrypt_contexts")
+    op.drop_table("decrypt_contexts")
+    op.drop_index("ix_masking_policies_status", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_strategy", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_subject_id", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_subject_type", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_field_name", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_resource_id", table_name="masking_policies")
+    op.drop_index("ix_masking_policies_tenant_id", table_name="masking_policies")
+    op.drop_table("masking_policies")
     op.drop_index("ix_field_policies_status", table_name="field_policies")
     op.drop_index("ix_field_policies_action", table_name="field_policies")
     op.drop_index("ix_field_policies_field_name", table_name="field_policies")
