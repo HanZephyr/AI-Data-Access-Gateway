@@ -123,9 +123,19 @@ function App() {
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: "#0f766e",
+          colorPrimary: "#12766f",
+          colorInfo: "#12766f",
+          colorSuccess: "#168a5b",
+          colorWarning: "#b7791f",
+          colorError: "#b42318",
           borderRadius: 6,
-          fontFamily: "ui-sans-serif, Segoe UI, sans-serif"
+          fontFamily: "Segoe UI, ui-sans-serif, system-ui, sans-serif",
+          fontSize: 13,
+          colorBgLayout: "#eef3f1",
+          colorBgContainer: "#ffffff",
+          colorText: "#17211f",
+          colorTextSecondary: "#61716c",
+          colorBorder: "#d7e1de"
         }
       }}
     >
@@ -142,7 +152,13 @@ function ConsoleApp() {
   return (
     <Layout className="shell">
       <Layout.Sider width={248} className="sider">
-        <div className="brand">AI Data Access Gateway</div>
+        <div className="brand">
+          <span className="brand-mark">ADG</span>
+          <span>
+            <span className="brand-name">AI Data Access Gateway</span>
+            <span className="brand-subtitle">Control Plane</span>
+          </span>
+        </div>
         <Menu
           mode="inline"
           selectedKeys={[page]}
@@ -152,7 +168,12 @@ function ConsoleApp() {
       </Layout.Sider>
       <Layout>
         <Layout.Header className="topbar">
-          <Typography.Text strong>{pages.find((item) => item.key === page)?.label}</Typography.Text>
+          <div>
+            <Typography.Text className="page-kicker">Secure data operations</Typography.Text>
+            <Typography.Title level={3} className="page-title">
+              {pages.find((item) => item.key === page)?.label}
+            </Typography.Title>
+          </div>
           <Space.Compact className="key-input">
             <Button>API key</Button>
             <Input
@@ -200,6 +221,7 @@ function Overview({ api }: { api: ReturnType<typeof useApi> }) {
         showIcon
         message="Runtime pipeline"
         description="API key auth, SQL Guard, policy checks, masking, decrypt contexts, and audit events are active in this V1 backend."
+        className="runtime-alert"
       />
     </div>
   );
