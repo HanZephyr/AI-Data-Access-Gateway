@@ -1,24 +1,25 @@
-import { Alert, Button, Input, Space, Typography } from "antd";
+import { Alert, Button, Collapse, Input, Tabs, Typography } from "antd";
 
 export type AdminOnboardingCopy = {
   /** Main heading shown when the console has no authenticated admin key yet. */
   title: string;
   /** Introductory summary explaining why the key is needed. */
   description: string;
-  /** Label displayed above the bootstrap command. */
-  commandLabel: string;
-  /** Exact command operators should run to create an admin key. */
-  commandValue: string;
   /** Label for the admin key input field. */
   inputLabel: string;
   /** Placeholder for the admin key input field. */
   inputPlaceholder: string;
   /** Primary CTA text used to enter the console after a key is supplied. */
   continueLabel: string;
-  /** Title for the recommended setup sequence. */
-  hintTitle: string;
-  /** Ordered setup steps shown beside the command. */
-  hintSteps: string[];
+  /** Title for the collapsible initialization guidance. */
+  methodsTitle: string;
+  /** Initialization methods grouped by deployment style. */
+  methods: Array<{
+    key: string;
+    label: string;
+    description: string;
+    commandValue: string;
+  }>;
   /** Title used by the authentication failure alert. */
   authErrorTitle: string;
 };
@@ -41,30 +42,14 @@ export function AdminOnboarding({
   const isDisabled = apiKey.trim().length === 0;
 
   return (
-    <section className="admin-onboarding">
-      <div className="admin-onboarding-hero">
-        <Typography.Text className="admin-onboarding-kicker">ADG</Typography.Text>
-        <Typography.Title level={1}>{copy.title}</Typography.Title>
-        <Typography.Paragraph>{copy.description}</Typography.Paragraph>
-      </div>
-      <div className="admin-onboarding-grid">
-        <section className="admin-onboarding-panel">
-          <Typography.Text className="admin-onboarding-label">{copy.commandLabel}</Typography.Text>
-          <Input.TextArea
-            autoSize={{ minRows: 3, maxRows: 5 }}
-            readOnly
-            value={copy.commandValue}
-          />
-          <div className="admin-onboarding-hints">
-            <Typography.Text className="admin-onboarding-label">{copy.hintTitle}</Typography.Text>
-            <ol>
-              {copy.hintSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          </div>
-        </section>
-        <section className="admin-onboarding-panel">
+    <section className="admin-login-page">
+      <div className="admin-login-card">
+        <div className="admin-login-header">
+          <Typography.Text className="admin-login-mark">ADG</Typography.Text>
+          <Typography.Title level={1}>{copy.title}</Typography.Title>
+          <Typography.Paragraph>{copy.description}</Typography.Paragraph>
+        </div>
+        <section className="admin-login-panel">
           {authError ? (
             <Alert
               showIcon
@@ -73,10 +58,11 @@ export function AdminOnboarding({
               description={authError}
             />
           ) : null}
-          <Space direction="vertical" size={12} className="full">
-            <Typography.Text className="admin-onboarding-label">{copy.inputLabel}</Typography.Text>
+          <div className="admin-login-field">
+            <Typography.Text className="admin-login-label">{copy.inputLabel}</Typography.Text>
             <Input.Password
               autoComplete="off"
+              size="large"
               value={apiKey}
               placeholder={copy.inputPlaceholder}
               onChange={(event) => onApiKeyChange(event.target.value)}
@@ -86,10 +72,39 @@ export function AdminOnboarding({
                 }
               }}
             />
-            <Button type="primary" size="large" disabled={isDisabled} onClick={onContinue}>
-              {copy.continueLabel}
-            </Button>
-          </Space>
+          </div>
+          <Button type="primary" size="large" block disabled={isDisabled} onClick={onContinue}>
+            {copy.continueLabel}
+          </Button>
+          <Collapse
+            ghost
+            className="admin-login-collapse"
+            items={[
+              {
+                key: "init-methods",
+                label: copy.methodsTitle,
+                children: (
+                  <Tabs
+                    defaultActiveKey={copy.methods[0]?.key}
+                    items={copy.methods.map((method) => ({
+                      key: method.key,
+                      label: method.label,
+                      children: (
+                        <div className="admin-login-method">
+                          <Typography.Paragraph>{method.description}</Typography.Paragraph>
+                          <Input.TextArea
+                            autoSize={{ minRows: 3, maxRows: 6 }}
+                            readOnly
+                            value={method.commandValue}
+                          />
+                        </div>
+                      ),
+                    }))}
+                  />
+                ),
+              },
+            ]}
+          />
         </section>
       </div>
     </section>

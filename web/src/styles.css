@@ -266,25 +266,29 @@ body {
   width: 100%;
 }
 
-.admin-onboarding {
-  min-height: calc(100vh - 170px);
-  min-height: calc(100dvh - 170px);
+.admin-login-page {
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  align-content: start;
-  gap: 18px;
-}
-
-.admin-onboarding-hero {
-  padding: 24px 28px;
-  border: 1px solid rgba(18, 118, 111, 0.16);
+  place-items: center;
+  padding: 24px;
   background:
-    linear-gradient(140deg, rgba(18, 118, 111, 0.16), rgba(255, 255, 255, 0.92) 52%),
-    #ffffff;
-  box-shadow: var(--shadow-1);
+    radial-gradient(circle at top, rgba(18, 118, 111, 0.14), rgba(18, 118, 111, 0) 34%),
+    linear-gradient(180deg, #f5faf8 0%, #edf3f1 100%);
 }
 
-.admin-onboarding-kicker,
-.admin-onboarding-label {
+.admin-login-card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border: 1px solid rgba(18, 118, 111, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-2);
+}
+
+.admin-login-mark,
+.admin-login-label {
   display: block;
   color: var(--ink-500);
   font-size: 11px;
@@ -293,61 +297,71 @@ body {
   text-transform: uppercase;
 }
 
-.admin-onboarding-hero .ant-typography {
-  max-width: 780px;
+.admin-login-header .ant-typography {
+  margin-bottom: 0;
 }
 
-.admin-onboarding-hero .ant-typography h1,
-.admin-onboarding-hero .ant-typography.ant-typography-h1,
-.admin-onboarding-hero .ant-typography h2,
-.admin-onboarding-hero .ant-typography.ant-typography-h2,
-.admin-onboarding-hero .ant-typography h3,
-.admin-onboarding-hero .ant-typography.ant-typography-h3,
-.admin-onboarding-hero .ant-typography h4,
-.admin-onboarding-hero .ant-typography.ant-typography-h4,
-.admin-onboarding-hero .ant-typography h5,
-.admin-onboarding-hero .ant-typography.ant-typography-h5 {
+.admin-login-header .ant-typography h1,
+.admin-login-header .ant-typography.ant-typography-h1,
+.admin-login-header .ant-typography h2,
+.admin-login-header .ant-typography.ant-typography-h2,
+.admin-login-header .ant-typography h3,
+.admin-login-header .ant-typography.ant-typography-h3,
+.admin-login-header .ant-typography h4,
+.admin-login-header .ant-typography.ant-typography-h4,
+.admin-login-header .ant-typography h5,
+.admin-login-header .ant-typography.ant-typography-h5 {
   margin-top: 8px;
   margin-bottom: 10px;
 }
 
-.admin-onboarding-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
-  gap: 16px;
+.admin-login-header .ant-typography.ant-typography-h1 {
+  font-size: 34px;
+  line-height: 1.05;
 }
 
-.admin-onboarding-panel {
-  min-width: 0;
+.admin-login-panel {
   display: grid;
   align-content: start;
   gap: 14px;
-  padding: 22px;
-  border: 1px solid var(--mist-300);
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: var(--shadow-1);
 }
 
-.admin-onboarding-panel .ant-input-textarea textarea {
-  min-height: 84px;
-  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.admin-onboarding-hints {
+.admin-login-field {
   display: grid;
   gap: 10px;
 }
 
-.admin-onboarding-hints ol {
-  margin: 0;
-  padding-left: 20px;
-  color: var(--ink-800);
+.admin-login-panel .ant-input-affix-wrapper {
+  min-height: 48px;
 }
 
-.admin-onboarding-hints li + li {
-  margin-top: 10px;
+.admin-login-collapse {
+  border-top: 1px solid var(--mist-300);
+  padding-top: 6px;
+}
+
+.admin-login-collapse .ant-collapse-header {
+  padding-inline: 0 !important;
+}
+
+.admin-login-collapse .ant-collapse-content-box {
+  padding: 8px 0 0 !important;
+}
+
+.admin-login-method {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-login-method .ant-typography {
+  margin: 0;
+}
+
+.admin-login-method .ant-input-textarea textarea {
+  min-height: 84px;
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .workspace {
@@ -754,17 +768,12 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .admin-onboarding {
-    min-height: auto;
+  .admin-login-page {
+    padding: 14px;
   }
 
-  .admin-onboarding-hero,
-  .admin-onboarding-panel {
+  .admin-login-card {
     padding: 18px;
-  }
-
-  .admin-onboarding-grid {
-    grid-template-columns: 1fr;
   }
 
   .resource-catalog {

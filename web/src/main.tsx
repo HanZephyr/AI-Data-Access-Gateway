@@ -181,17 +181,19 @@ const translations = {
     "tag.relatedAssets": "Linked assets",
     "tag.relatedAssetsTitle": "{name} linked assets",
     "tag.noLinkedAssets": "No data assets are currently linked to this tag.",
-    "onboarding.title": "Admin Access Required",
+    "onboarding.title": "Admin Login",
     "onboarding.description":
-      "Initialize one admin API key first, then use it to enter the control plane and mint scoped replacement keys.",
-    "onboarding.commandLabel": "Bootstrap command",
+      "Enter an admin API key to unlock the control plane. If you have not created one yet, expand the initialization guide below and choose the path that matches your deployment style.",
     "onboarding.inputLabel": "Admin API key",
     "onboarding.inputPlaceholder": "Paste the key printed by init-admin",
-    "onboarding.continue": "Enter Console",
-    "onboarding.hintTitle": "Recommended flow",
-    "onboarding.step1": "Run alembic upgrade head against the control-plane database.",
-    "onboarding.step2": "Run init-admin once to print a one-time admin API key.",
-    "onboarding.step3": "Paste the key here and rotate to narrower scoped keys after sign-in.",
+    "onboarding.continue": "Sign In",
+    "onboarding.methodsTitle": "How to initialize an admin API key",
+    "onboarding.method.python": "Native Python",
+    "onboarding.method.pythonDescription": "Use this when the project is installed into a regular Python environment without uv wrappers.",
+    "onboarding.method.uv": "uv",
+    "onboarding.method.uvDescription": "Use this when you manage the project with uv and want the shortest local bootstrap path.",
+    "onboarding.method.docker": "Docker",
+    "onboarding.method.dockerDescription": "Use this when the backend is already running inside Docker Compose and you want to initialize the key from the container.",
     "onboarding.authErrorTitle": "Authentication failed",
     "mcp.toolUrl": "Tool URL",
     "mcp.apiKeyHeader": "API key header",
@@ -345,16 +347,18 @@ const translations = {
     "tag.relatedAssets": "关联资源",
     "tag.relatedAssetsTitle": "{name} 的关联资源",
     "tag.noLinkedAssets": "当前没有数据资产关联到这个标签。",
-    "onboarding.title": "管理员初始化",
-    "onboarding.description": "先初始化一个管理员 API Key，再进入控制台，然后尽快生成权限更小的替代密钥用于日常使用。",
-    "onboarding.commandLabel": "初始化命令",
+    "onboarding.title": "管理员登录",
+    "onboarding.description": "请输入管理员 API Key 进入控制台。如果你还没有初始化管理员密钥，可以展开下方的初始化说明，并按自己的部署方式选择命令。",
     "onboarding.inputLabel": "管理员 API Key",
     "onboarding.inputPlaceholder": "输入 init-admin 输出的密钥",
-    "onboarding.continue": "进入控制台",
-    "onboarding.hintTitle": "推荐流程",
-    "onboarding.step1": "先对控制平面数据库执行 alembic upgrade head。",
-    "onboarding.step2": "执行一次 init-admin，拿到一次性输出的管理员密钥。",
-    "onboarding.step3": "把密钥粘贴到这里登录，随后在控制台中创建更小权限范围的替代密钥。",
+    "onboarding.continue": "登录控制台",
+    "onboarding.methodsTitle": "初始化管理员 API Key",
+    "onboarding.method.python": "原生 Python",
+    "onboarding.method.pythonDescription": "适合已经在原生 Python 环境中安装项目的部署方式。",
+    "onboarding.method.uv": "uv",
+    "onboarding.method.uvDescription": "适合通过 uv 管理依赖、命令和本地开发流程的部署方式。",
+    "onboarding.method.docker": "Docker",
+    "onboarding.method.dockerDescription": "适合已经通过 Docker Compose 启动后端容器的部署方式。",
     "onboarding.authErrorTitle": "认证失败",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 密钥请求头",
@@ -508,16 +512,18 @@ const translations = {
     "tag.relatedAssets": "關聯資源",
     "tag.relatedAssetsTitle": "{name} 的關聯資源",
     "tag.noLinkedAssets": "目前沒有資料資產關聯到這個標籤。",
-    "onboarding.title": "管理員初始化",
-    "onboarding.description": "先初始化一個管理員 API 金鑰，再進入控制台，之後盡快建立權限更小的替代金鑰供日常使用。",
-    "onboarding.commandLabel": "初始化命令",
+    "onboarding.title": "管理員登入",
+    "onboarding.description": "請輸入管理員 API 金鑰進入控制台。如果你還沒有初始化管理員金鑰，可以展開下方說明，依照自己的部署方式選擇命令。",
     "onboarding.inputLabel": "管理員 API 金鑰",
     "onboarding.inputPlaceholder": "輸入 init-admin 輸出的金鑰",
-    "onboarding.continue": "進入控制台",
-    "onboarding.hintTitle": "推薦流程",
-    "onboarding.step1": "先對控制平面資料庫執行 alembic upgrade head。",
-    "onboarding.step2": "執行一次 init-admin，取得一次性輸出的管理員金鑰。",
-    "onboarding.step3": "把金鑰貼到這裡登入，接著在控制台中建立權限更小的替代金鑰。",
+    "onboarding.continue": "登入控制台",
+    "onboarding.methodsTitle": "初始化管理員 API 金鑰",
+    "onboarding.method.python": "原生 Python",
+    "onboarding.method.pythonDescription": "適合已經在原生 Python 環境中安裝專案的部署方式。",
+    "onboarding.method.uv": "uv",
+    "onboarding.method.uvDescription": "適合透過 uv 管理依賴、命令與本地開發流程的部署方式。",
+    "onboarding.method.docker": "Docker",
+    "onboarding.method.dockerDescription": "適合已經透過 Docker Compose 啟動後端容器的部署方式。",
     "onboarding.authErrorTitle": "認證失敗",
     "mcp.toolUrl": "工具 URL",
     "mcp.apiKeyHeader": "API 金鑰標頭",
@@ -790,6 +796,45 @@ function ConsoleApp() {
     setPage("datasources");
     setCatalogJumpTarget(target);
   };
+  if (showOnboarding) {
+    return (
+      <AdminOnboarding
+        apiKey={draftApiKey}
+        authError={api.authError}
+        onApiKeyChange={setDraftApiKey}
+        onContinue={() => api.saveApiKey(draftApiKey.trim())}
+        copy={{
+          title: t("onboarding.title"),
+          description: t("onboarding.description"),
+          inputLabel: t("onboarding.inputLabel"),
+          inputPlaceholder: t("onboarding.inputPlaceholder"),
+          continueLabel: t("onboarding.continue"),
+          methodsTitle: t("onboarding.methodsTitle"),
+          methods: [
+            {
+              key: "python",
+              label: t("onboarding.method.python"),
+              description: t("onboarding.method.pythonDescription"),
+              commandValue: "python -m adg.control_plane.bootstrap --database-url sqlite:///./data/adg-control-plane.db",
+            },
+            {
+              key: "uv",
+              label: t("onboarding.method.uv"),
+              description: t("onboarding.method.uvDescription"),
+              commandValue: "uv run --extra dev init-admin --database-url sqlite:///./data/adg-control-plane.db",
+            },
+            {
+              key: "docker",
+              label: t("onboarding.method.docker"),
+              description: t("onboarding.method.dockerDescription"),
+              commandValue: "docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db",
+            },
+          ],
+          authErrorTitle: t("onboarding.authErrorTitle"),
+        }}
+      />
+    );
+  }
   return (
     <Layout className="shell">
       <Layout.Sider width={248} className="sider">
@@ -850,34 +895,13 @@ function ConsoleApp() {
           </div>
         </Layout.Header>
         <Layout.Content className="content">
-          {showOnboarding ? (
-            <AdminOnboarding
-              apiKey={draftApiKey}
-              authError={api.authError}
-              onApiKeyChange={setDraftApiKey}
-              onContinue={() => api.saveApiKey(draftApiKey.trim())}
-              copy={{
-                title: t("onboarding.title"),
-                description: t("onboarding.description"),
-                commandLabel: t("onboarding.commandLabel"),
-                commandValue: "uv run --extra dev init-admin --database-url sqlite:///./data/adg-control-plane.db",
-                inputLabel: t("onboarding.inputLabel"),
-                inputPlaceholder: t("onboarding.inputPlaceholder"),
-                continueLabel: t("onboarding.continue"),
-                hintTitle: t("onboarding.hintTitle"),
-                hintSteps: [t("onboarding.step1"), t("onboarding.step2"), t("onboarding.step3")],
-                authErrorTitle: t("onboarding.authErrorTitle"),
-              }}
-            />
-          ) : (
-            <Page
-              page={page}
-              api={api}
-              catalogJumpTarget={catalogJumpTarget}
-              onCatalogJumpHandled={() => setCatalogJumpTarget(null)}
-              onOpenCatalogNode={openCatalogNode}
-            />
-          )}
+          <Page
+            page={page}
+            api={api}
+            catalogJumpTarget={catalogJumpTarget}
+            onCatalogJumpHandled={() => setCatalogJumpTarget(null)}
+            onOpenCatalogNode={openCatalogNode}
+          />
         </Layout.Content>
       </Layout>
     </Layout>
