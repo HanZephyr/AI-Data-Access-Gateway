@@ -2,8 +2,9 @@
 .codex
 .agents
 .venv
+web/dist/
+web/node_modules/
 *.pyc
 
 dev-docs/
 .worktrees/
-
