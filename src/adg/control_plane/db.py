@@ -1,6 +1,8 @@
 from collections.abc import Generator
+from pathlib import Path
 
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +16,10 @@ def create_engine_from_url(database_url: str) -> Engine:
         connect_args["check_same_thread"] = False
         if database_url == "sqlite:///:memory:":
             poolclass = StaticPool
+        else:
+            url = make_url(database_url)
+            if url.database:
+                Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
     return create_engine(
         database_url,
