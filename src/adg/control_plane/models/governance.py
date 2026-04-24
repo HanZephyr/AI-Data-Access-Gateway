@@ -6,6 +6,8 @@ from adg.shared.ids import uuidv7
 
 
 class Tag(Base):
+    """Operator-defined label used to group and govern resources."""
+
     __tablename__ = "tags"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -15,6 +17,8 @@ class Tag(Base):
 
 
 class ResourceTag(Base):
+    """Many-to-many binding between a resource and a tag."""
+
     __tablename__ = "resource_tags"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -23,6 +27,8 @@ class ResourceTag(Base):
 
 
 class ResourcePolicy(Base):
+    """Resource-level allow or deny rule for a user, role, group, or everyone."""
+
     __tablename__ = "resource_policies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -37,6 +43,8 @@ class ResourcePolicy(Base):
 
 
 class FieldPolicy(Base):
+    """Field-level allow or deny rule applied after resource access is granted."""
+
     __tablename__ = "field_policies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)

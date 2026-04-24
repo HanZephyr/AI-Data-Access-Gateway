@@ -26,10 +26,13 @@ TENANT_TABLES = (
 
 
 def upgrade() -> None:
+    """Drop legacy tenant columns when upgrading an already-created V1 database."""
+
     inspector = sa.inspect(op.get_bind())
     existing_tables = set(inspector.get_table_names())
 
     for table_name in TENANT_TABLES:
+        # Fresh databases already use the tenant-free baseline, so this migration is a no-op.
         if table_name not in existing_tables:
             continue
         columns = {column["name"] for column in inspector.get_columns(table_name)}
@@ -41,6 +44,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Recreate legacy tenant columns for downgrade compatibility."""
+
     inspector = sa.inspect(op.get_bind())
     existing_tables = set(inspector.get_table_names())
 
@@ -66,6 +71,8 @@ def _drop_tenant_index_if_present(
     inspector: sa.Inspector,
     table_name: str,
 ) -> None:
+    """Drop the tenant index only when it exists in the inspected legacy schema."""
+
     index_name = f"ix_{table_name}_tenant_id"
     if any(index["name"] == index_name for index in inspector.get_indexes(table_name)):
         op.drop_index(index_name, table_name=table_name)

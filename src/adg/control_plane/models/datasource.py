@@ -9,6 +9,8 @@ from adg.shared.ids import uuidv7
 
 
 class Datasource(Base):
+    """Stored connection definition for a database asset source."""
+
     __tablename__ = "datasources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -30,6 +32,8 @@ class Datasource(Base):
     )
 
     def config(self) -> dict[str, object]:
+        """Decode the persisted JSON config into a dictionary."""
+
         loaded = json.loads(self.config_json)
         if not isinstance(loaded, dict):
             return {}

@@ -410,14 +410,18 @@ const translations = {
 
 type TranslationKey = keyof (typeof translations)["en-US"];
 type I18nContextValue = {
+  /** Currently selected console language. */
   language: Language;
+  /** Persist and apply a new console language. */
   setLanguage: (language: Language) => void;
+  /** Translate a key and interpolate optional named parameters. */
   t: (key: TranslationKey, params?: TranslationParams) => string;
 };
 
 const I18nContext = React.createContext<I18nContextValue | null>(null);
 
 type FieldConfig = {
+  /** Backend payload field name used by Ant Design forms. */
   name: string;
   label: TranslationKey;
   input?: "text" | "textarea" | "json" | "number" | "tags" | "select" | "resource-select";
@@ -452,11 +456,15 @@ const pages: Array<{ key: PageKey; labelKey: TranslationKey; icon: React.ReactNo
 ];
 
 function getStoredLanguage(): Language {
+  /** Return the persisted language, falling back to Simplified Chinese. */
+
   const stored = localStorage.getItem("adg.language");
   return languages.some((item) => item.value === stored) ? (stored as Language) : "zh-CN";
 }
 
 function translate(language: Language, key: TranslationKey, params: TranslationParams = {}) {
+  /** Resolve a translation key and replace simple `{name}` placeholders. */
+
   let text: string = translations[language][key] || translations["en-US"][key] || key;
   for (const [name, value] of Object.entries(params)) {
     text = text.split(`{${name}}`).join(String(value));
@@ -465,6 +473,8 @@ function translate(language: Language, key: TranslationKey, params: TranslationP
 }
 
 function useI18n() {
+  /** Read the i18n context and fail loudly if the provider is missing. */
+
   const context = React.useContext(I18nContext);
   if (!context) {
     throw new Error("I18n context is missing");
@@ -473,22 +483,29 @@ function useI18n() {
 }
 
 function optionLabel(value: string, t: I18nContextValue["t"]) {
+  /** Translate known enum-like values while leaving custom values untouched. */
+
   const key = `option.${value}` as TranslationKey;
   return key in translations["en-US"] ? t(key) : value;
 }
 
 function columnLabel(key: string, t: I18nContextValue["t"]) {
+  /** Translate known table column keys while preserving unknown backend fields. */
+
   const translationKey = `column.${key}` as TranslationKey;
   return translationKey in translations["en-US"] ? t(translationKey) : key;
 }
 
 function useApi() {
+  /** Keep the API key in local storage and attach it to every console request. */
+
   const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "adg_admin");
   const saveApiKey = (value: string) => {
     localStorage.setItem("adg.apiKey", value);
     setApiKey(value);
   };
   const request = async <T,>(path: string, options: RequestInit = {}): Promise<T> => {
+    // The frontend talks to relative paths so Vite and production hosting can proxy them.
     const response = await fetch(path, {
       ...options,
       headers: {
@@ -509,6 +526,8 @@ function useApi() {
 }
 
 function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
+  /** Load async table/detail data with a reload function and simple error state. */
+
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -525,6 +544,8 @@ function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
 }
 
 function App() {
+  /** Configure Ant Design theming and provide translation state to the console. */
+
   const [language, setLanguageState] = useState<Language>(getStoredLanguage);
   const setLanguage = (value: Language) => {
     localStorage.setItem("adg.language", value);
@@ -564,6 +585,8 @@ function App() {
 }
 
 function ConsoleApp() {
+  /** Render the fixed shell, navigation, language switcher, and active page. */
+
   const { language, setLanguage, t } = useI18n();
   const [page, setPage] = useState<PageKey>("overview");
   const api = useApi();
@@ -634,6 +657,8 @@ function ConsoleApp() {
 }
 
 function Page({ page, api }: { page: PageKey; api: ReturnType<typeof useApi> }) {
+  /** Route the selected navigation key to its console page component. */
+
   if (page === "overview") return <Overview api={api} />;
   if (page === "datasources") return <Datasources api={api} />;
   if (page === "resources") return <Resources api={api} />;
@@ -646,6 +671,8 @@ function Page({ page, api }: { page: PageKey; api: ReturnType<typeof useApi> }) 
 }
 
 function Overview({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Show a compact operational summary for the current control-plane data. */
+
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
@@ -669,6 +696,8 @@ function Overview({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function EndpointTable({ api, title, path }: { api: ReturnType<typeof useApi>; title: TranslationKey; path: string }) {
+  /** Render read-only endpoint data with row details in a drawer. */
+
   const { t } = useI18n();
   const state = useData<AnyRecord[]>(() => (path === "__empty__" ? Promise.resolve([]) : api.request(path)), [api.apiKey, path]);
   const [selected, setSelected] = useState<AnyRecord | null>(null);
@@ -688,6 +717,8 @@ function EndpointTable({ api, title, path }: { api: ReturnType<typeof useApi>; t
 }
 
 function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Datasource CRUD page with JSON config editing. */
+
   return (
     <CrudPanel
       api={api}
@@ -712,6 +743,8 @@ function Datasources({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function Resources({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Resource table plus field detail table for the selected resource. */
+
   const state = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   const [resourceId, setResourceId] = useState<string | null>(null);
   const fields = useData<AnyRecord[]>(
@@ -740,6 +773,8 @@ function Resources({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function Tags({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Governance tag CRUD page. */
+
   return (
     <CrudPanel
       api={api}
@@ -759,6 +794,8 @@ function Tags({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function Policies({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Policy area split into resource-level and field-level tabs. */
+
   const { t } = useI18n();
   return (
     <Tabs
@@ -771,6 +808,8 @@ function Policies({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "resource" | "field" }) {
+  /** Shared policy CRUD page that adapts required fields by policy kind. */
+
   const isField = kind === "field";
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   return (
@@ -805,6 +844,8 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
 }
 
 function Masking({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Masking policy CRUD page with searchable resource association. */
+
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   return (
     <CrudPanel
@@ -836,6 +877,8 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
+  /** API key management page; raw keys are shown only after creation. */
+
   const { message: messageApi, modal } = AntApp.useApp();
   const { t } = useI18n();
   const state = useData<AnyRecord[]>(() => api.request("/admin/api-keys"), [api.apiKey]);
@@ -912,6 +955,8 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function McpSetup({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Display the HTTP facade details needed by MCP-style clients. */
+
   const { t } = useI18n();
   const state = useData<AnyRecord>(() => api.request("/admin/mcp/setup"), [api.apiKey]);
   if (state.error) return <Alert type="error" message={state.error} />;
@@ -948,6 +993,8 @@ function CrudPanel({
   onRow?: (row: AnyRecord) => React.HTMLAttributes<HTMLElement>;
   stateOverride?: { data: AnyRecord[] | null; loading: boolean; error: string | null; reload: () => void };
 }) {
+  /** Generic CRUD shell used by most console tables and drawer forms. */
+
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
   const titleText = t(title);
@@ -959,6 +1006,7 @@ function CrudPanel({
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const save = async () => {
+    // Create payloads merge defaults with form values before JSON normalization.
     if (!createPath) return;
     const values = await form.validateFields();
     await api.request(createPath, {
@@ -970,6 +1018,7 @@ function CrudPanel({
     state.reload();
   };
   const update = async () => {
+    // Update payloads include only the edit drawer values.
     if (!editing || !updatePath) return;
     const values = await editForm.validateFields();
     await api.request(updatePath(editing), {
@@ -1043,6 +1092,8 @@ function DataPanel({
   actions?: (row: AnyRecord) => React.ReactNode;
   onRow?: (row: AnyRecord) => React.HTMLAttributes<HTMLElement>;
 }) {
+  /** Shared table panel with optional row actions and a reload control. */
+
   const { t } = useI18n();
   const count = state.data?.length || 0;
   const tableColumns = actions
@@ -1071,6 +1122,8 @@ function DataPanel({
 }
 
 function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsType<AnyRecord> {
+  /** Infer table columns from backend rows while hiding technical foreign keys. */
+
   const hiddenKeys = new Set(["id", "datasource_id", "resource_id", "api_key_id"]);
   const keys = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
     .filter((key) => !hiddenKeys.has(key))
@@ -1092,6 +1145,8 @@ function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsTy
 }
 
 function IconAction({ title, icon, onClick }: { title: string; icon: React.ReactNode; onClick: () => void }) {
+  /** Render a compact icon button with an accessible tooltip label. */
+
   return (
     <Tooltip title={title}>
       <Button size="small" icon={icon} onClick={onClick} />
@@ -1108,6 +1163,8 @@ function RecordDetails({
   title: string;
   onClose: () => void;
 }) {
+  /** Show all fields of a selected row in a copy-friendly details drawer. */
+
   const { t } = useI18n();
   return (
     <Drawer title={t("common.detailsTitle", { title })} open={Boolean(record)} onClose={onClose} width={560}>
@@ -1141,6 +1198,8 @@ function ResourceSelect({
   onChange?: (value?: string) => void;
   id?: string;
 }) {
+  /** Searchable resource picker used by policy and masking forms. */
+
   const options = resources.map((resource) => {
     const name = String(resource.display_name || resource.name || resource.id);
     const path = String(resource.path || "");
@@ -1173,6 +1232,8 @@ function ResourceSelect({
 }
 
 function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
+  /** Convert declarative field config into the matching Ant Design form control. */
+
   const label = t(field.label);
   const rules = field.required ? [{ required: true, message: t("common.required", { label }) }] : undefined;
   let control: React.ReactNode = <Input autoComplete="off" />;
@@ -1195,6 +1256,8 @@ function renderField(field: FieldConfig, t: I18nContextValue["t"]) {
 }
 
 function toFormValues(values: AnyRecord, fields: FieldConfig[]) {
+  /** Convert API values into form-friendly values, including pretty JSON text. */
+
   const result = { ...values };
   for (const field of fields) {
     if (field.input === "json" && result[field.name] !== undefined) {
@@ -1205,6 +1268,8 @@ function toFormValues(values: AnyRecord, fields: FieldConfig[]) {
 }
 
 function normalizeValues(values: AnyRecord, fields: FieldConfig[], t?: I18nContextValue["t"]) {
+  /** Convert form values back into API payloads and validate JSON fields. */
+
   const result = { ...values };
   for (const field of fields) {
     if (field.input === "json" && typeof result[field.name] === "string") {

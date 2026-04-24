@@ -18,6 +18,8 @@ router = APIRouter(prefix="/admin/datasources", tags=["admin"])
 
 
 class DatasourceCreateRequest(BaseModel):
+    """Payload for creating a datasource connection definition."""
+
     name: str
     type: str
     config: dict[str, object]
@@ -25,12 +27,16 @@ class DatasourceCreateRequest(BaseModel):
 
 
 class DatasourceUpdateRequest(BaseModel):
+    """Partial update payload for datasource metadata and connection config."""
+
     name: str | None = None
     config: dict[str, object] | None = None
     status: str | None = None
 
 
 def _serialize_datasource(datasource: Datasource) -> dict[str, Any]:
+    """Return the admin-console datasource representation."""
+
     return {
         "id": datasource.id,
         "name": datasource.name,
@@ -48,6 +54,8 @@ def list_datasources(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List datasource records for the admin console."""
+
     service = DatasourceService(session)
     return [_serialize_datasource(item) for item in service.list_datasources()]
 
@@ -58,6 +66,8 @@ def create_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create a datasource record without testing the connection immediately."""
+
     service = DatasourceService(session)
     datasource = service.create_datasource(
         name=payload.name,
@@ -76,6 +86,8 @@ def get_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one datasource by id."""
+
     service = DatasourceService(session)
     try:
         datasource = service.get_datasource(datasource_id)
@@ -91,6 +103,8 @@ def update_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Patch datasource fields and return the updated record."""
+
     service = DatasourceService(session)
     try:
         datasource = service.update_datasource(
@@ -112,6 +126,8 @@ def delete_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a datasource and its scanned metadata snapshots."""
+
     service = DatasourceService(session)
     try:
         service.delete_datasource(datasource_id)
@@ -127,6 +143,8 @@ def test_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, str]:
+    """Validate that the stored datasource config can open a live connection."""
+
     service = DatasourceService(session)
     try:
         datasource = service.get_datasource(datasource_id)
@@ -145,6 +163,8 @@ def scan_datasource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, int | str]:
+    """Scan live metadata through the connector and replace stored snapshots."""
+
     datasource_service = DatasourceService(session)
     scan_service = MetadataScanService(session)
     try:

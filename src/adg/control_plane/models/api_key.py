@@ -8,6 +8,8 @@ from adg.shared.ids import uuidv7
 
 
 class ApiKey(Base):
+    """Hashed API key record with scopes used by admin and runtime routes."""
+
     __tablename__ = "api_keys"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)

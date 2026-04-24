@@ -17,7 +17,11 @@ from adg.shared.ids import uuidv7
 
 
 class MaskingService:
+    """Applies masking policies and manages reversible decrypt contexts."""
+
     def __init__(self, session: Session, *, secret_key: str) -> None:
+        """Create a masking service using the configured service-level secret."""
+
         self._session = session
         self._secret_key = secret_key
         self._service_fernet = Fernet(self._derive_fernet_key(secret_key))
@@ -31,6 +35,8 @@ class MaskingService:
         resources: list[Resource],
         result: QueryResult,
     ) -> tuple[QueryResult, list[dict[str, str]]]:
+        """Return a masked query result plus metadata about changed columns."""
+
         policies = self._matching_policies(identity=identity, resources=resources)
         masked_columns: list[dict[str, str]] = []
         rows: list[dict[str, object]] = []
@@ -40,6 +46,7 @@ class MaskingService:
             for policy in policies:
                 if policy.field_name not in masked_row or masked_row[policy.field_name] is None:
                     continue
+                # Reversible masking stores a decrypt context; other strategies are stateless.
                 if policy.strategy == "reversible":
                     masked_row[policy.field_name] = self.mask_reversible_value(
                         user_id=identity.user_id,
@@ -68,6 +75,8 @@ class MaskingService:
         strategy: str,
         config: dict[str, object],
     ) -> str | None:
+        """Mask a scalar value using a non-reversible strategy."""
+
         if value is None:
             return None
         text = str(value)
@@ -77,6 +86,7 @@ class MaskingService:
             prefix = int(str(config.get("prefix", 2)))
             suffix = int(str(config.get("suffix", 2)))
             fill = str(config.get("fill", "*"))[:1] or "*"
+            # When the visible prefix and suffix would overlap, hide the whole value.
             if len(text) <= prefix + suffix:
                 return fill * len(text)
             return f"{text[:prefix]}{fill * (len(text) - prefix - suffix)}{text[-suffix:]}"
@@ -94,10 +104,13 @@ class MaskingService:
         value: object,
         expires_at: datetime | None = None,
     ) -> str:
+        """Encrypt one value and return an ADG marker that can be decrypted later."""
+
         context_id = uuidv7()
         temporary_key = Fernet.generate_key()
         temporary_fernet = Fernet(temporary_key)
         ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()
+        # The per-query key is encrypted with the service key before being stored.
         context = DecryptContext(
             id=context_id,
             query_id=query_id,
@@ -117,12 +130,16 @@ class MaskingService:
         user_id: str | None,
         values: list[str],
     ) -> list[str]:
+        """Decrypt a batch of reversible ADG markers for the requesting user."""
+
         return [
             self._decrypt_marker(user_id=user_id, marker=value)
             for value in values
         ]
 
     def _decrypt_marker(self, *, user_id: str | None, marker: str) -> str:
+        """Validate marker ownership and TTL before decrypting the value payload."""
+
         context_id, ciphertext = self._parse_marker(marker)
         context = self._session.get(DecryptContext, context_id)
         if context is None:
@@ -140,15 +157,21 @@ class MaskingService:
         return plaintext
 
     def _parse_marker(self, marker: str) -> tuple[str, str]:
+        """Parse the reversible marker format into context id and ciphertext."""
+
         parts = marker.split("$", 3)
         if len(parts) != 4 or parts[0] != "" or parts[1] != "adg_rev":
             raise ValidationError("Invalid reversible value marker")
         return parts[2], parts[3]
 
     def _derive_fernet_key(self, secret_key: str) -> bytes:
+        """Derive a Fernet-compatible key from the configured application secret."""
+
         return base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest())
 
     def _normalize_time(self, value: datetime) -> datetime:
+        """Treat stored naive timestamps as UTC for consistent TTL checks."""
+
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value
@@ -159,6 +182,8 @@ class MaskingService:
         identity: IdentityContext,
         resources: list[Resource],
     ) -> list[MaskingPolicy]:
+        """Load active masking policies that apply to the queried resources and identity."""
+
         resource_ids = [resource.id for resource in resources]
         if not resource_ids:
             return []
@@ -171,6 +196,8 @@ class MaskingService:
         return [policy for policy in policies if self._subject_matches(policy, identity)]
 
     def _subject_matches(self, policy: MaskingPolicy, identity: IdentityContext) -> bool:
+        """Match optional masking-policy subjects against the runtime identity."""
+
         if policy.subject_type is None:
             return True
         if policy.subject_type == "all":
@@ -184,6 +211,8 @@ class MaskingService:
         return False
 
     def _policy_config(self, policy: MaskingPolicy) -> dict[str, object]:
+        """Decode stored JSON config while protecting callers from malformed shapes."""
+
         loaded: Any = json.loads(policy.config_json)
         if not isinstance(loaded, dict):
             return {}

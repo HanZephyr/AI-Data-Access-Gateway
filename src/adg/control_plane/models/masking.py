@@ -8,6 +8,8 @@ from adg.shared.ids import uuidv7
 
 
 class MaskingPolicy(Base):
+    """Masking rule for one field on one resource, optionally scoped to a subject."""
+
     __tablename__ = "masking_policies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -21,6 +23,8 @@ class MaskingPolicy(Base):
 
 
 class DecryptContext(Base):
+    """Temporary server-side context needed to decrypt reversible masking markers."""
+
     __tablename__ = "decrypt_contexts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)

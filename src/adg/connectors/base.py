@@ -13,15 +13,25 @@ type QueryColumn = Mapping[str, object]
 
 @dataclass(frozen=True)
 class QueryResult:
+    """Normalized query output returned by all connector implementations."""
+
     columns: Sequence[QueryColumn]
     rows: Sequence[QueryRow]
 
 
 class MetadataConnector(Protocol):
+    """Connector contract required by metadata scanning and runtime query services."""
+
     connector_type: str
 
-    def test_connection(self, config: dict[str, object]) -> None: ...
+    def test_connection(self, config: dict[str, object]) -> None:
+        """Validate that a datasource config can connect."""
+        ...
 
-    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot: ...
+    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
+        """Return normalized database/schema/relation metadata."""
+        ...
 
-    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult: ...
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        """Execute already-authorized read-only SQL."""
+        ...

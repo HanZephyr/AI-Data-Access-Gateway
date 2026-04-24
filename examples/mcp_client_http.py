@@ -5,6 +5,8 @@ from urllib import request
 
 
 def call_tool(base_url: str, api_key: str, tool_name: str, payload: dict[str, Any]) -> Any:
+    """Call one ADG MCP-style HTTP tool and decode its JSON response."""
+
     body = json.dumps(payload).encode()
     http_request = request.Request(
         f"{base_url.rstrip('/')}/mcp/tools/{tool_name}",
@@ -20,6 +22,8 @@ def call_tool(base_url: str, api_key: str, tool_name: str, payload: dict[str, An
 
 
 def main() -> None:
+    """Run a tiny discovery flow against a local ADG server."""
+
     parser = argparse.ArgumentParser(description="Call ADG MCP-style HTTP tools.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--api-key", default="adg_admin")

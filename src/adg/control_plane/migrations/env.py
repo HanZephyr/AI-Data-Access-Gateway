@@ -15,6 +15,8 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
+    """Resolve the database URL from environment-backed settings or Alembic config."""
+
     settings = get_settings()
     if "control_plane_database_url" in settings.model_fields_set:
         return settings.control_plane_database_url
@@ -26,6 +28,8 @@ def get_url() -> str:
 
 
 def run_migrations_offline() -> None:
+    """Run Alembic migrations without creating an engine."""
+
     context.configure(
         url=get_url(),
         target_metadata=target_metadata,
@@ -38,6 +42,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    """Run Alembic migrations through a live database connection."""
+
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = get_url()
     connectable = engine_from_config(

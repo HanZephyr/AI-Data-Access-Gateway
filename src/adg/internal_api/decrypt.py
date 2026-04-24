@@ -20,6 +20,8 @@ def decrypt_values(
     session: Annotated[Session, Depends(get_session)],
     api_key: Annotated[AuthenticatedApiKey, Depends(require_api_key)],
 ) -> dict[str, list[str]]:
+    """Decrypt reversible masking markers for trusted internal callers."""
+
     if "internal" not in json.loads(api_key.scopes):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -29,6 +31,7 @@ def decrypt_values(
     user_id = None if payload.get("user_id") is None else str(payload["user_id"])
     values = [str(value) for value in payload.get("values", [])]
     try:
+        # The masking service validates marker ownership and expiry before decrypting.
         plaintext = MaskingService(
             session,
             secret_key=get_settings().secret_key,

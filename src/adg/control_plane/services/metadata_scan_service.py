@@ -10,6 +10,8 @@ from adg.control_plane.models.resource import Resource, ResourceField
 
 
 class MetadataScanService:
+    """Persists connector metadata snapshots into normalized resource tables."""
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
@@ -19,6 +21,9 @@ class MetadataScanService:
         datasource: Datasource,
         snapshot: Mapping[str, Sequence[Mapping[str, object]]],
     ) -> dict[str, int]:
+        """Replace all scanned resources for a datasource in one deterministic pass."""
+
+        # Snapshot replacement deliberately deletes fields first because they reference resources.
         self._session.execute(
             delete(ResourceField).where(ResourceField.datasource_id == datasource.id)
         )
@@ -29,6 +34,7 @@ class MetadataScanService:
         field_count = 0
         scanned_at = datetime.now(UTC)
 
+        # The connector contract is hierarchical: database -> schema -> relation -> column.
         for database_payload in snapshot.get("databases", []):
             database = self._create_resource(
                 datasource=datasource,
@@ -66,6 +72,7 @@ class MetadataScanService:
                     ("tables", "relational_table"),
                     ("views", "relational_view"),
                 ):
+                    # Tables and views share the same persistence shape but keep distinct kinds.
                     relation_items = schema_payload.get(relation_key, [])
                     if not isinstance(relation_items, Sequence):
                         continue
@@ -120,6 +127,8 @@ class MetadataScanService:
         metadata: dict[str, object],
         scanned_at: datetime,
     ) -> Resource:
+        """Create one resource row and flush so child rows can reference its id."""
+
         resource = Resource(
             datasource_id=datasource.id,
             parent_id=parent_id,

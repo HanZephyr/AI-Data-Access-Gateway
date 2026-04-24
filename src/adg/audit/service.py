@@ -7,6 +7,8 @@ from adg.audit.models import AuditEvent
 
 
 class AuditService:
+    """Writes audit events using the caller-owned SQLAlchemy session."""
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
@@ -24,6 +26,8 @@ class AuditService:
         reason: str | None,
         metadata: dict[str, Any],
     ) -> AuditEvent:
+        """Create an audit event row without committing the surrounding transaction."""
+
         event = AuditEvent(
             user_id=user_id,
             api_key_id=api_key_id,

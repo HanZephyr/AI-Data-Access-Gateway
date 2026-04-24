@@ -22,28 +22,38 @@ router = APIRouter(prefix="/admin", tags=["admin-console"])
 
 
 class TagRequest(BaseModel):
+    """Payload for creating a governance tag."""
+
     name: str
     category: str | None = None
     description: str | None = None
 
 
 class TagUpdateRequest(BaseModel):
+    """Partial update payload for a governance tag."""
+
     name: str | None = None
     category: str | None = None
     description: str | None = None
 
 
 class ResourceUpdateRequest(BaseModel):
+    """Editable resource fields exposed by the admin console."""
+
     display_name: str | None = None
     query_language: str | None = None
 
 
 class ResourceTagRequest(BaseModel):
+    """Payload for attaching an existing tag to an existing resource."""
+
     tag_id: str
     resource_id: str
 
 
 class ResourcePolicyRequest(BaseModel):
+    """Payload for creating a resource-level policy."""
+
     subject_type: str
     subject_id: str
     effect: str
@@ -55,6 +65,8 @@ class ResourcePolicyRequest(BaseModel):
 
 
 class ResourcePolicyUpdateRequest(BaseModel):
+    """Partial update payload for resource-level policies."""
+
     subject_type: str | None = None
     subject_id: str | None = None
     effect: str | None = None
@@ -66,6 +78,8 @@ class ResourcePolicyUpdateRequest(BaseModel):
 
 
 class FieldPolicyRequest(BaseModel):
+    """Payload for creating a field-level policy."""
+
     subject_type: str
     subject_id: str
     effect: str
@@ -77,6 +91,8 @@ class FieldPolicyRequest(BaseModel):
 
 
 class FieldPolicyUpdateRequest(BaseModel):
+    """Partial update payload for field-level policies."""
+
     subject_type: str | None = None
     subject_id: str | None = None
     effect: str | None = None
@@ -88,6 +104,8 @@ class FieldPolicyUpdateRequest(BaseModel):
 
 
 class MaskingPolicyRequest(BaseModel):
+    """Payload for creating a field masking policy."""
+
     resource_id: str
     field_name: str
     strategy: str
@@ -98,6 +116,8 @@ class MaskingPolicyRequest(BaseModel):
 
 
 class MaskingPolicyUpdateRequest(BaseModel):
+    """Partial update payload for masking policies."""
+
     resource_id: str | None = None
     field_name: str | None = None
     strategy: str | None = None
@@ -108,12 +128,16 @@ class MaskingPolicyUpdateRequest(BaseModel):
 
 
 class ApiKeyCreateRequest(BaseModel):
+    """Payload for minting a new API key."""
+
     name: str
     scopes: list[str]
     expires_at: datetime | None = None
 
 
 class ApiKeyUpdateRequest(BaseModel):
+    """Partial update payload for API key metadata."""
+
     name: str | None = None
     scopes: list[str] | None = None
     expires_at: datetime | None = None
@@ -125,6 +149,8 @@ def list_resources(
     session: Annotated[Session, Depends(get_session)],
     datasource_id: str | None = None,
 ) -> list[dict[str, Any]]:
+    """List resources, optionally filtered by datasource, for admin tables."""
+
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
@@ -140,6 +166,8 @@ def get_resource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one resource by id."""
+
     resource = _get_by_id(session, Resource, resource_id, "Resource not found")
     return _serialize_resource(resource)
 
@@ -151,6 +179,8 @@ def update_resource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update resource display metadata controlled by the admin console."""
+
     resource = _get_by_id(session, Resource, resource_id, "Resource not found")
     _apply_updates(resource, payload.model_dump(exclude_unset=True))
     session.commit()
@@ -164,6 +194,8 @@ def delete_resource(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a resource and dependent governance, field, and masking rows."""
+
     resource = _get_by_id(session, Resource, resource_id, "Resource not found")
     session.execute(delete(ResourceField).where(ResourceField.resource_id == resource_id))
     session.execute(delete(ResourceTag).where(ResourceTag.resource_id == resource_id))
@@ -181,6 +213,8 @@ def list_resource_fields(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List fields scanned for one resource."""
+
     fields = session.execute(
         select(ResourceField)
         .where(ResourceField.resource_id == resource_id)
@@ -205,6 +239,8 @@ def list_tags(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List all governance tags."""
+
     tags = session.execute(
         select(Tag).order_by(Tag.name)
     ).scalars()
@@ -217,6 +253,8 @@ def create_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create a governance tag."""
+
     tag = Tag(**payload.model_dump())
     session.add(tag)
     session.commit()
@@ -230,6 +268,8 @@ def get_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one tag by id."""
+
     tag = _get_by_id(session, Tag, tag_id, "Tag not found")
     return _serialize_tag(tag)
 
@@ -241,6 +281,8 @@ def update_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update tag metadata."""
+
     tag = _get_by_id(session, Tag, tag_id, "Tag not found")
     _apply_updates(tag, payload.model_dump(exclude_unset=True))
     session.commit()
@@ -254,6 +296,8 @@ def delete_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a tag and any resource bindings that reference it."""
+
     session.execute(delete(ResourceTag).where(ResourceTag.tag_id == tag_id))
     tag = session.get(Tag, tag_id)
     if tag is not None:
@@ -268,6 +312,8 @@ def bind_resource_tag(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Attach a tag to a resource after validating the resource exists."""
+
     _require_resource(session, payload.resource_id)
     binding = ResourceTag(**payload.model_dump())
     session.add(binding)
@@ -285,6 +331,8 @@ def list_resource_policies(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List resource-level policies with resource labels for display."""
+
     policies = session.execute(
         select(ResourcePolicy)
     ).scalars()
@@ -297,6 +345,8 @@ def create_resource_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create a resource-level policy, validating optional resource references."""
+
     if payload.resource_id is not None:
         _require_resource(session, payload.resource_id)
     policy = ResourcePolicy(**payload.model_dump())
@@ -312,6 +362,8 @@ def get_resource_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one resource-level policy."""
+
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     return _serialize_resource_policy(policy, session)
 
@@ -323,6 +375,8 @@ def update_resource_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update a resource-level policy."""
+
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
@@ -339,6 +393,8 @@ def delete_resource_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a resource-level policy."""
+
     _delete_by_id(session, ResourcePolicy, policy_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -348,6 +404,8 @@ def list_field_policies(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List field-level policies with resource labels for display."""
+
     policies = session.execute(
         select(FieldPolicy)
     ).scalars()
@@ -360,6 +418,8 @@ def create_field_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create a field-level policy for an existing resource."""
+
     _require_resource(session, payload.resource_id)
     policy = FieldPolicy(**payload.model_dump())
     session.add(policy)
@@ -374,6 +434,8 @@ def get_field_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one field-level policy."""
+
     policy = _get_by_id(session, FieldPolicy, policy_id, "Policy not found")
     return _serialize_field_policy(policy, session)
 
@@ -385,6 +447,8 @@ def update_field_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update a field-level policy."""
+
     policy = _get_by_id(session, FieldPolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
@@ -401,6 +465,8 @@ def delete_field_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a field-level policy."""
+
     _delete_by_id(session, FieldPolicy, policy_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -410,6 +476,8 @@ def list_masking_policies(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List masking policies with decoded config and resource labels."""
+
     policies = session.execute(
         select(MaskingPolicy)
     ).scalars()
@@ -422,6 +490,8 @@ def create_masking_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create a masking policy with compact JSON config storage."""
+
     _require_resource(session, payload.resource_id)
     data = payload.model_dump()
     config = data.pop("config")
@@ -438,6 +508,8 @@ def get_masking_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one masking policy."""
+
     policy = _get_by_id(session, MaskingPolicy, policy_id, "Masking policy not found")
     return _serialize_masking_policy(policy, session)
 
@@ -449,6 +521,8 @@ def update_masking_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update a masking policy and re-encode config when supplied."""
+
     policy = _get_by_id(session, MaskingPolicy, policy_id, "Masking policy not found")
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
@@ -468,6 +542,8 @@ def delete_masking_policy(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
+    """Delete a masking policy."""
+
     _delete_by_id(session, MaskingPolicy, policy_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -477,6 +553,8 @@ def list_api_keys(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List API key metadata without exposing raw key values."""
+
     keys = session.execute(select(ApiKey).order_by(ApiKey.created_at.desc())).scalars()
     return [_serialize_api_key(key) for key in keys]
 
@@ -487,6 +565,8 @@ def get_api_key(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Fetch one API key metadata record."""
+
     api_key = _get_by_id(session, ApiKey, api_key_id, "API key not found")
     return _serialize_api_key(api_key)
 
@@ -497,6 +577,8 @@ def create_api_key(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Create an API key and return the raw value exactly once."""
+
     plaintext = f"adg_{secrets.token_urlsafe(24)}"
     api_key = ApiKey(
         name=payload.name,
@@ -518,6 +600,8 @@ def update_api_key(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Update API key metadata and status."""
+
     api_key = _get_by_id(session, ApiKey, api_key_id, "API key not found")
     data = payload.model_dump(exclude_unset=True)
     scopes = data.pop("scopes", None)
@@ -535,6 +619,8 @@ def revoke_api_key(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> dict[str, Any]:
+    """Disable an API key without deleting its audit history reference."""
+
     api_key = session.get(ApiKey, api_key_id)
     if api_key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API key not found")
@@ -549,6 +635,8 @@ def list_audit_events(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
+    """List audit events newest-first for the admin console."""
+
     events = session.execute(
         select(AuditEvent)
         .order_by(AuditEvent.created_at.desc())
@@ -560,6 +648,8 @@ def list_audit_events(
 def get_mcp_setup(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
 ) -> dict[str, Any]:
+    """Return minimal MCP HTTP facade setup information for operators."""
+
     return {
         "tool_url": "/mcp/tools/{tool_name}",
         "api_key_header": get_settings().api_key_header,
@@ -576,6 +666,8 @@ def get_mcp_setup(
 
 
 def _serialize_resource(resource: Resource) -> dict[str, Any]:
+    """Convert a resource ORM object into a JSON-ready admin payload."""
+
     return {
         "id": resource.id,
         "datasource_id": resource.datasource_id,
@@ -589,6 +681,8 @@ def _serialize_resource(resource: Resource) -> dict[str, Any]:
 
 
 def _serialize_tag(tag: Tag) -> dict[str, Any]:
+    """Convert a tag ORM object into a JSON-ready admin payload."""
+
     return {
         "id": tag.id,
         "name": tag.name,
@@ -598,6 +692,8 @@ def _serialize_tag(tag: Tag) -> dict[str, Any]:
 
 
 def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict[str, Any]:
+    """Convert a resource policy into a JSON-ready payload with display labels."""
+
     return {
         "id": policy.id,
         "subject_type": policy.subject_type,
@@ -613,6 +709,8 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
 
 
 def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, Any]:
+    """Convert a field policy into a JSON-ready payload with display labels."""
+
     return {
         "id": policy.id,
         "subject_type": policy.subject_type,
@@ -628,6 +726,8 @@ def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, 
 
 
 def _serialize_masking_policy(policy: MaskingPolicy, session: Session) -> dict[str, Any]:
+    """Convert a masking policy into a JSON-ready payload with decoded config."""
+
     return {
         "id": policy.id,
         "resource_label": _resource_label(session, policy.resource_id),
@@ -642,6 +742,8 @@ def _serialize_masking_policy(policy: MaskingPolicy, session: Session) -> dict[s
 
 
 def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
+    """Return API key metadata safe for repeated display."""
+
     return {
         "id": api_key.id,
         "name": api_key.name,
@@ -653,6 +755,8 @@ def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
 
 
 def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
+    """Decode audit JSON fields for admin-console display."""
+
     return {
         "id": event.id,
         "user_id": event.user_id,
@@ -670,6 +774,8 @@ def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
 
 
 def _resource_label(session: Session, resource_id: str | None) -> str | None:
+    """Build a human-readable resource label used by policy and masking tables."""
+
     if resource_id is None:
         return None
     resource = session.get(Resource, resource_id)
@@ -679,6 +785,8 @@ def _resource_label(session: Session, resource_id: str | None) -> str | None:
 
 
 def _get_by_id(session: Session, model: type[Any], item_id: str, detail: str) -> Any:
+    """Load one ORM row or raise a FastAPI 404 with the supplied detail."""
+
     item = session.get(model, item_id)
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
@@ -686,6 +794,8 @@ def _get_by_id(session: Session, model: type[Any], item_id: str, detail: str) ->
 
 
 def _require_resource(session: Session, resource_id: str) -> Resource:
+    """Validate that a referenced resource exists."""
+
     resource = session.get(Resource, resource_id)
     if resource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
@@ -693,11 +803,15 @@ def _require_resource(session: Session, resource_id: str) -> Resource:
 
 
 def _apply_updates(item: Any, data: dict[str, Any]) -> None:
+    """Assign patch payload fields onto an ORM object."""
+
     for key, value in data.items():
         setattr(item, key, value)
 
 
 def _delete_by_id(session: Session, model: type[Any], item_id: str) -> None:
+    """Delete one ORM row by id and commit the change."""
+
     item = session.get(model, item_id)
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Item not found")

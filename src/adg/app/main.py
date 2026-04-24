@@ -10,6 +10,8 @@ from adg.mcp_api.tools import router as mcp_tools_router
 
 
 def create_app() -> FastAPI:
+    """Build the FastAPI application and attach all V1 routers."""
+
     settings = get_settings()
     app = FastAPI(title=settings.service_name)
     app.include_router(admin_console_router)
@@ -20,14 +22,20 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:
+        """Return a lightweight liveness response."""
+
         return {"status": "ok", "service": settings.service_name}
 
     @app.get("/ready", tags=["system"])
     def ready() -> dict[str, str]:
+        """Return readiness for the current single-process service."""
+
         return {"status": "ready"}
 
     return app
 
 
 def run() -> None:
+    """Run the local development server entry point."""
+
     uvicorn.run("adg.app.main:create_app", factory=True, host="127.0.0.1", port=8000)

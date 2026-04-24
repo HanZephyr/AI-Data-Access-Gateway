@@ -8,6 +8,8 @@ from adg.shared.ids import uuidv7
 
 
 class Resource(Base):
+    """Scanned metadata node such as a database, schema, table, or view."""
+
     __tablename__ = "resources"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
@@ -28,6 +30,8 @@ class Resource(Base):
 
 
 class ResourceField(Base):
+    """Scanned column or field metadata for a relational resource."""
+
     __tablename__ = "resource_fields"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)

@@ -12,6 +12,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def system(
     api_key: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
 ) -> dict[str, str]:
+    """Return basic service metadata for an authenticated admin caller."""
+
     return {
         "service": get_settings().service_name,
         "api_key_id": api_key.id,

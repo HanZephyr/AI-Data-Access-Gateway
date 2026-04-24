@@ -8,6 +8,8 @@ from adg.shared.ids import uuidv7
 
 
 class AuditEvent(Base):
+    """Append-only audit record for admin, runtime, masking, and decrypt events."""
+
     __tablename__ = "audit_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)

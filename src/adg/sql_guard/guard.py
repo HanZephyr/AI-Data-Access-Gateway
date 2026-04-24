@@ -7,6 +7,8 @@ from sqlglot import exp
 
 @dataclass(frozen=True)
 class SqlGuardResult:
+    """Structured verdict produced after parsing and normalizing a SQL statement."""
+
     allowed: bool
     normalized_sql: str | None
     statement_type: str | None
@@ -19,13 +21,19 @@ class SqlGuardResult:
 
 
 class SqlGuard:
+    """Conservative SQL allowlist for read-only runtime query execution."""
+
     allowed_functions = {"count", "sum", "avg", "min", "max"}
 
     def __init__(self, *, default_limit: int = 100, max_limit: int = 1000) -> None:
+        """Configure the default and maximum row limits applied to accepted queries."""
+
         self._default_limit = default_limit
         self._max_limit = max_limit
 
     def check(self, sql: str) -> SqlGuardResult:
+        """Parse, validate, and normalize a single read-only SQL statement."""
+
         try:
             statements = [
                 cast(exp.Expression, statement)
@@ -50,6 +58,7 @@ class SqlGuard:
 
         statement = statements[0]
         statement_type = statement.key.upper()
+        # V1 intentionally accepts only SELECT-shaped AST nodes; mutation and DDL are rejected.
         if not isinstance(statement, exp.Select):
             return SqlGuardResult(
                 allowed=False,
@@ -61,6 +70,7 @@ class SqlGuard:
             )
 
         used_functions = self._used_functions(statement)
+        # Function allowlisting keeps expensive or unsafe database functions out of runtime SQL.
         rejection_reasons = [
             f"function_not_allowed:{function_name}"
             for function_name in used_functions
@@ -81,6 +91,8 @@ class SqlGuard:
         )
 
     def _with_effective_limit(self, statement: exp.Select) -> tuple[str, list[str]]:
+        """Return SQL with a bounded LIMIT and warnings describing limit changes."""
+
         warnings: list[str] = []
         current_limit = self._limit_value(statement)
         effective_limit = self._default_limit if current_limit is None else current_limit
@@ -95,6 +107,8 @@ class SqlGuard:
         return limited.sql(), warnings
 
     def _limit_value(self, statement: exp.Select) -> int | None:
+        """Extract a literal LIMIT or treat non-literal limits as the configured maximum."""
+
         limit = statement.args.get("limit")
         if not isinstance(limit, exp.Limit):
             return None
@@ -104,6 +118,8 @@ class SqlGuard:
         return self._max_limit
 
     def _accessed_resources(self, statement: exp.Expression) -> list[str]:
+        """Collect referenced table names for later resource-policy resolution."""
+
         resources = {
             ".".join(part for part in (table.db, table.name) if part)
             for table in statement.find_all(exp.Table)
@@ -111,10 +127,14 @@ class SqlGuard:
         return sorted(resources)
 
     def _accessed_fields(self, statement: exp.Expression) -> list[str]:
+        """Collect referenced column names for audit metadata."""
+
         fields = {column.name for column in statement.find_all(exp.Column) if column.name != "*"}
         return sorted(fields)
 
     def _used_functions(self, statement: exp.Expression) -> list[str]:
+        """Collect SQL function names used by the statement."""
+
         names: set[str] = set()
         for function in statement.find_all(exp.Func):
             sql_name = function.sql_name().lower()

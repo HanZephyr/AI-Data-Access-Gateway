@@ -18,9 +18,12 @@ def call_tool(
     session: Annotated[Session, Depends(get_session)],
     api_key: Annotated[AuthenticatedApiKey, Depends(require_api_key)],
 ) -> dict[str, Any]:
+    """Dispatch one MCP-style HTTP tool call to the shared runtime service."""
+
     identity = _identity_from_payload(payload)
     runtime = GatewayRuntimeService(session)
 
+    # Keep transport routing thin so future MCP transports can reuse GatewayRuntimeService.
     if tool_name == "list_datasources":
         response = runtime.list_datasources(identity=identity, api_key_id=api_key.id)
     elif tool_name == "list_tags":
@@ -70,6 +73,8 @@ def call_tool(
 
 
 def _identity_from_payload(payload: dict[str, Any]) -> IdentityContext:
+    """Build runtime identity attributes from the trusted tool-call payload."""
+
     return IdentityContext(
         user_id=None if payload.get("user_id") is None else str(payload["user_id"]),
         roles=[str(item) for item in payload.get("roles", [])],

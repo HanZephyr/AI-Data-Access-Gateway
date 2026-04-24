@@ -18,6 +18,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    """Create the complete tenant-free V1 control-plane schema."""
+
     op.create_table(
         "datasources",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -202,6 +204,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Drop V1 control-plane tables in reverse dependency order."""
+
     op.drop_index("ix_decrypt_contexts_expires_at", table_name="decrypt_contexts")
     op.drop_index("ix_decrypt_contexts_datasource_id", table_name="decrypt_contexts")
     op.drop_index("ix_decrypt_contexts_user_id", table_name="decrypt_contexts")

@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    """Environment-driven application configuration."""
+
     model_config = SettingsConfigDict(
         env_prefix="ADG_",
         env_file=".env",
@@ -23,4 +25,6 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return cached settings so dependencies do not rebuild them per request."""
+
     return Settings()

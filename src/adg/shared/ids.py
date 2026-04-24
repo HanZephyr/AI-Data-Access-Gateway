@@ -4,6 +4,8 @@ from uuid import UUID
 
 
 def uuidv7() -> str:
+    """Generate a sortable UUIDv7 string for control-plane primary keys."""
+
     unix_ts_ms = time_ns() // 1_000_000
     rand_a = randbits(12)
     rand_b = randbits(62)

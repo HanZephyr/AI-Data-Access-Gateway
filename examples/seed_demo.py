@@ -14,6 +14,8 @@ from adg.shared.security import hash_api_key
 
 
 def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
+    """Create a small console-ready dataset for local demos and screenshots."""
+
     engine = create_engine_from_url(database_url)
     if reset:
         Base.metadata.drop_all(engine)
@@ -21,6 +23,7 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
     session_factory = create_session_factory(engine)
 
     with session_factory() as session:
+        # The demo key intentionally carries all scopes so quickstart flows stay simple.
         api_key = ApiKey(
             name="Demo Admin",
             key_hash=hash_api_key("adg_admin"),
@@ -45,6 +48,7 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
         )
         session.add(datasource)
         session.flush()
+        # Seed one table resource with one PII-like field so masking UI has useful data.
         resource = Resource(
             datasource_id=datasource.id,
             parent_id=None,
@@ -106,6 +110,8 @@ def seed_demo(database_url: str, *, reset: bool = True) -> dict[str, Any]:
 
 
 def main() -> None:
+    """Parse CLI arguments and print seed credentials as JSON."""
+
     parser = argparse.ArgumentParser(description="Seed AI Data Access Gateway demo data.")
     parser.add_argument(
         "--database-url",

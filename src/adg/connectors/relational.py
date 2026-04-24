@@ -8,12 +8,16 @@ from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationEr
 
 
 class RelationalConnector:
+    """Base implementation for SQLAlchemy-backed relational metadata connectors."""
+
     connector_type = ""
     sqlalchemy_drivername = ""
     dependency_name = ""
     install_extra = ""
 
     def _require_dependency(self) -> None:
+        """Fail early with an install hint when an optional DB driver is missing."""
+
         try:
             importlib.import_module(self.dependency_name)
         except ModuleNotFoundError as error:
@@ -22,6 +26,8 @@ class RelationalConnector:
             ) from error
 
     def _build_url(self, config: dict[str, object]) -> URL:
+        """Translate persisted datasource config into a SQLAlchemy URL."""
+
         port_value = config.get("port")
         return URL.create(
             drivername=self.sqlalchemy_drivername,
@@ -33,6 +39,8 @@ class RelationalConnector:
         )
 
     def test_connection(self, config: dict[str, object]) -> None:
+        """Open a connection and run a minimal query to validate connectivity."""
+
         self._require_dependency()
         try:
             engine = create_engine(self._build_url(config))
@@ -44,6 +52,8 @@ class RelationalConnector:
             raise ConnectorOperationError(str(error)) from error
 
     def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
+        """Inspect schemas, tables, views, and columns into the shared snapshot shape."""
+
         self._require_dependency()
         try:
             engine = create_engine(self._build_url(config))
@@ -52,6 +62,7 @@ class RelationalConnector:
                 database_name = str(config.get("database", "default"))
                 schemas: list[dict[str, object]] = []
                 for schema_name in inspector.get_schema_names():
+                    # SQLAlchemy inspectors expose tables and views separately; ADG preserves both.
                     tables = [
                         self._build_relation_payload(
                             relation_name=table_name,
@@ -85,6 +96,8 @@ class RelationalConnector:
         return {"databases": [{"name": database_name, "schemas": schemas}]}
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        """Execute already-approved read-only SQL and return normalized rows."""
+
         self._require_dependency()
         try:
             engine = create_engine(self._build_url(config))
@@ -107,6 +120,8 @@ class RelationalConnector:
         schema_name: str,
         columns: Sequence[MetadataColumn],
     ) -> dict[str, object]:
+        """Normalize one table or view and its columns for snapshot persistence."""
+
         return {
             "name": relation_name,
             "kind": relation_kind,

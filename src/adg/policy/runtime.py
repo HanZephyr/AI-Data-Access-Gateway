@@ -9,6 +9,8 @@ from adg.control_plane.models.resource import Resource
 
 @dataclass(frozen=True)
 class IdentityContext:
+    """Caller identity attributes supplied by a trusted runtime client."""
+
     user_id: str | None
     roles: list[str] = field(default_factory=list)
     groups: list[str] = field(default_factory=list)
@@ -16,11 +18,15 @@ class IdentityContext:
 
 @dataclass(frozen=True)
 class PolicyDecision:
+    """Policy evaluation result with a stable machine-readable reason."""
+
     allowed: bool
     reason: str
 
 
 class RuntimePolicyService:
+    """Evaluates resource and field access against active governance policies."""
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
@@ -31,11 +37,14 @@ class RuntimePolicyService:
         resource: Resource,
         action: str,
     ) -> PolicyDecision:
+        """Decide whether an identity may perform an action on a resource."""
+
         self._session.flush()
         policies = self._resource_policies(identity=identity, action=action)
         if not policies:
             return PolicyDecision(allowed=True, reason="no_policy")
 
+        # Once policies exist for an action, at least one subject/resource match must allow it.
         matching = [
             policy
             for policy in policies
@@ -56,6 +65,8 @@ class RuntimePolicyService:
         field_name: str,
         action: str,
     ) -> PolicyDecision:
+        """Decide field-level access after the parent resource has already been allowed."""
+
         self._session.flush()
         policies = list(
             self._session.execute(
@@ -74,6 +85,7 @@ class RuntimePolicyService:
             return PolicyDecision(allowed=False, reason="denied_by_policy")
         if any(policy.effect == "allow" for policy in subject_policies):
             return PolicyDecision(allowed=True, reason="allowed_by_policy")
+        # Field policy presence switches the field from default-allow to require matching allow.
         if policies:
             return PolicyDecision(allowed=False, reason="no_matching_allow")
         return PolicyDecision(allowed=True, reason="no_policy")
@@ -84,6 +96,8 @@ class RuntimePolicyService:
         identity: IdentityContext,
         action: str,
     ) -> list[ResourcePolicy]:
+        """Load active policies for one action before subject/resource filtering."""
+
         return list(
             self._session.execute(
                 select(ResourcePolicy).where(
@@ -94,6 +108,8 @@ class RuntimePolicyService:
         )
 
     def _resource_policy_matches(self, policy: ResourcePolicy, resource: Resource) -> bool:
+        """Match a policy to a resource directly, through a tag, or globally."""
+
         if policy.resource_id is not None:
             return policy.resource_id == resource.id
         if policy.tag_id is not None:
@@ -113,6 +129,8 @@ class RuntimePolicyService:
         policy: ResourcePolicy | FieldPolicy,
         identity: IdentityContext,
     ) -> bool:
+        """Match a policy subject selector against the runtime identity."""
+
         if policy.subject_type == "all":
             return True
         if policy.subject_type == "user":

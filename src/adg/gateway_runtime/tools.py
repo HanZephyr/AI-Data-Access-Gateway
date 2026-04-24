@@ -17,12 +17,16 @@ from adg.sql_guard.guard import SqlGuard
 
 
 class GatewayRuntimeService:
+    """Coordinates runtime discovery, SQL validation, policy checks, masking, and audit."""
+
     def __init__(
         self,
         session: Session,
         *,
         connector_registry: ConnectorRegistry | None = None,
     ) -> None:
+        """Build the runtime service around one unit-of-work database session."""
+
         self._session = session
         self._connector_registry = connector_registry or get_connector_registry()
         self._policy = RuntimePolicyService(session)
@@ -35,6 +39,8 @@ class GatewayRuntimeService:
         identity: IdentityContext,
         api_key_id: str,
     ) -> dict[str, Any]:
+        """Return active datasources visible to runtime callers."""
+
         self._session.flush()
         datasources = self._session.execute(
             select(Datasource).where(
@@ -56,6 +62,8 @@ class GatewayRuntimeService:
         return response
 
     def list_tags(self, *, identity: IdentityContext, api_key_id: str) -> dict[str, Any]:
+        """Return tags attached to resources the identity may discover."""
+
         self._session.flush()
         visible_resource_ids = {
             resource.id for resource in self._visible_resources(identity=identity)
@@ -84,6 +92,8 @@ class GatewayRuntimeService:
         api_key_id: str,
         datasource_id: str,
     ) -> dict[str, Any]:
+        """Return policy-visible relational resources for a datasource."""
+
         self._session.flush()
         resources = [
             resource
@@ -99,6 +109,8 @@ class GatewayRuntimeService:
         api_key_id: str,
         tag_names: list[str],
     ) -> dict[str, Any]:
+        """Return policy-visible resources that have at least one requested tag."""
+
         self._session.flush()
         tag_rows = self._session.execute(
             select(Tag).where(Tag.name.in_(tag_names))
@@ -119,6 +131,8 @@ class GatewayRuntimeService:
         api_key_id: str,
         resource_id: str,
     ) -> dict[str, Any]:
+        """Describe a resource and annotate each field with field-policy access."""
+
         self._session.flush()
         resource = self._get_resource(resource_id)
         access = self._policy.check_resource_access(
@@ -179,6 +193,8 @@ class GatewayRuntimeService:
         resource_id: str,
         limit: int,
     ) -> dict[str, Any]:
+        """Run a bounded SELECT * preview through the same guarded query pipeline."""
+
         self._session.flush()
         resource = self._get_resource(resource_id)
         return self.execute_query(
@@ -202,9 +218,12 @@ class GatewayRuntimeService:
         limit: int,
         event_type: str = "query_execution",
     ) -> dict[str, Any]:
+        """Validate, authorize, execute, mask, and audit a read-only runtime query."""
+
         self._session.flush()
         datasource = self._get_datasource(datasource_id)
         declared_resources = [self._get_resource(resource_id) for resource_id in resource_ids]
+        # Declared resources are the caller's intended scope; every declared resource is checked.
         for resource in declared_resources:
             decision = self._policy.check_resource_access(
                 identity=identity,
@@ -257,6 +276,7 @@ class GatewayRuntimeService:
 
         declared_ids = set(resource_ids)
         actual_ids = {resource.id for resource in actual_resources}
+        # SQL-derived resources are authoritative and must stay inside the declared scope.
         if not actual_ids.issubset(declared_ids):
             reason = "actual_resource_outside_declared_scope"
             self._record_rejection(
@@ -312,6 +332,8 @@ class GatewayRuntimeService:
         identity: IdentityContext,
         datasource_id: str | None = None,
     ) -> list[Resource]:
+        """Load relational table/view resources and filter them through resource policies."""
+
         conditions: list[ColumnElement[bool]] = [
             Resource.kind.in_(["relational_table", "relational_view"]),
         ]
@@ -335,6 +357,8 @@ class GatewayRuntimeService:
         datasource_id: str,
         resource_paths: list[str],
     ) -> list[Resource]:
+        """Map SQL Guard table references back to exactly one known resource each."""
+
         resources = list(
             self._session.execute(
                 select(Resource).where(
@@ -345,6 +369,7 @@ class GatewayRuntimeService:
         )
         matched: list[Resource] = []
         for resource_path in resource_paths:
+            # SQL may reference a full path or a suffix such as schema.table.
             matches = [
                 resource
                 for resource in resources
@@ -355,18 +380,24 @@ class GatewayRuntimeService:
         return matched
 
     def _get_datasource(self, datasource_id: str) -> Datasource:
+        """Load a datasource for runtime execution."""
+
         datasource = self._session.get(Datasource, datasource_id)
         if datasource is None:
             raise NotFoundError("Datasource not found")
         return datasource
 
     def _get_resource(self, resource_id: str) -> Resource:
+        """Load a resource or raise a domain not-found error."""
+
         resource = self._session.get(Resource, resource_id)
         if resource is None:
             raise NotFoundError("Resource not found")
         return resource
 
     def _resource_has_any_tag(self, resource: Resource, tag_ids: list[str]) -> bool:
+        """Check whether a resource has any of the requested tag ids."""
+
         if not tag_ids:
             return False
         return (
@@ -380,6 +411,8 @@ class GatewayRuntimeService:
         )
 
     def _unique_tags(self, tags: Any) -> list[Tag]:
+        """Preserve tag order while removing duplicates introduced by joins."""
+
         seen: set[str] = set()
         unique: list[Tag] = []
         for tag in tags:
@@ -389,6 +422,8 @@ class GatewayRuntimeService:
         return unique
 
     def _serialize_resource(self, resource: Resource) -> dict[str, Any]:
+        """Shape a resource for MCP-style runtime responses."""
+
         return {
             "id": resource.id,
             "datasource_id": resource.datasource_id,
@@ -407,6 +442,8 @@ class GatewayRuntimeService:
         datasource_id: str | None,
         resource_ids: list[str],
     ) -> None:
+        """Audit successful metadata-discovery style tool calls."""
+
         self._audit.record_event(
             user_id=identity.user_id,
             api_key_id=api_key_id,
@@ -431,6 +468,8 @@ class GatewayRuntimeService:
         sql_text: str | None,
         reason: str,
     ) -> None:
+        """Audit SQL and permission rejections with their stable reason codes."""
+
         self._audit.record_event(
             user_id=identity.user_id,
             api_key_id=api_key_id,
