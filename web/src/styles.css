@@ -188,6 +188,19 @@ body {
   box-shadow: var(--shadow-1);
 }
 
+.topbar-actions {
+  flex: 0 1 auto;
+}
+
+.language-select {
+  width: 132px;
+}
+
+.language-select .ant-select-selector {
+  background: var(--mist-50) !important;
+  font-weight: 700;
+}
+
 .key-input .ant-btn {
   border-color: var(--mist-300);
   background: var(--mist-50);
@@ -441,6 +454,16 @@ body {
   }
 
   .key-input {
+    width: 100%;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .language-select {
     width: 100%;
   }
 
