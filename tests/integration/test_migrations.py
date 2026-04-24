@@ -22,8 +22,12 @@ def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
         "api_keys",
         "audit_events",
         "datasources",
+        "field_policies",
         "resources",
         "resource_fields",
+        "resource_policies",
+        "resource_tags",
+        "tags",
         "alembic_version",
     }.issubset(tables)
 
@@ -57,8 +61,12 @@ def test_migration_uses_database_url_from_environment(
         "api_keys",
         "audit_events",
         "datasources",
+        "field_policies",
         "resources",
         "resource_fields",
+        "resource_policies",
+        "resource_tags",
+        "tags",
         "alembic_version",
     }.issubset(configured_tables)
     assert not default_db_path.exists()

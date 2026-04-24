@@ -112,8 +112,99 @@ def upgrade() -> None:
     op.create_index("ix_resource_fields_datasource_id", "resource_fields", ["datasource_id"])
     op.create_index("ix_resource_fields_resource_id", "resource_fields", ["resource_id"])
 
+    op.create_table(
+        "tags",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("name", sa.String(length=100), nullable=False),
+        sa.Column("category", sa.String(length=100), nullable=True),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_tags_tenant_id", "tags", ["tenant_id"])
+    op.create_index("ix_tags_name", "tags", ["name"])
+
+    op.create_table(
+        "resource_tags",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("tag_id", sa.String(length=36), nullable=False),
+        sa.Column("resource_id", sa.String(length=36), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_resource_tags_tenant_id", "resource_tags", ["tenant_id"])
+    op.create_index("ix_resource_tags_tag_id", "resource_tags", ["tag_id"])
+    op.create_index("ix_resource_tags_resource_id", "resource_tags", ["resource_id"])
+
+    op.create_table(
+        "resource_policies",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("subject_type", sa.String(length=32), nullable=False),
+        sa.Column("subject_id", sa.String(length=200), nullable=False),
+        sa.Column("effect", sa.String(length=16), nullable=False),
+        sa.Column("action", sa.String(length=64), nullable=False),
+        sa.Column("resource_id", sa.String(length=36), nullable=True),
+        sa.Column("tag_id", sa.String(length=36), nullable=True),
+        sa.Column("priority", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_resource_policies_tenant_id", "resource_policies", ["tenant_id"])
+    op.create_index("ix_resource_policies_subject_type", "resource_policies", ["subject_type"])
+    op.create_index("ix_resource_policies_subject_id", "resource_policies", ["subject_id"])
+    op.create_index("ix_resource_policies_action", "resource_policies", ["action"])
+    op.create_index("ix_resource_policies_resource_id", "resource_policies", ["resource_id"])
+    op.create_index("ix_resource_policies_tag_id", "resource_policies", ["tag_id"])
+    op.create_index("ix_resource_policies_status", "resource_policies", ["status"])
+
+    op.create_table(
+        "field_policies",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("tenant_id", sa.String(length=100), nullable=False),
+        sa.Column("subject_type", sa.String(length=32), nullable=False),
+        sa.Column("subject_id", sa.String(length=200), nullable=False),
+        sa.Column("effect", sa.String(length=16), nullable=False),
+        sa.Column("resource_id", sa.String(length=36), nullable=False),
+        sa.Column("field_name", sa.String(length=200), nullable=False),
+        sa.Column("action", sa.String(length=64), nullable=False),
+        sa.Column("priority", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_field_policies_tenant_id", "field_policies", ["tenant_id"])
+    op.create_index("ix_field_policies_subject_type", "field_policies", ["subject_type"])
+    op.create_index("ix_field_policies_subject_id", "field_policies", ["subject_id"])
+    op.create_index("ix_field_policies_resource_id", "field_policies", ["resource_id"])
+    op.create_index("ix_field_policies_field_name", "field_policies", ["field_name"])
+    op.create_index("ix_field_policies_action", "field_policies", ["action"])
+    op.create_index("ix_field_policies_status", "field_policies", ["status"])
+
 
 def downgrade() -> None:
+    op.drop_index("ix_field_policies_status", table_name="field_policies")
+    op.drop_index("ix_field_policies_action", table_name="field_policies")
+    op.drop_index("ix_field_policies_field_name", table_name="field_policies")
+    op.drop_index("ix_field_policies_resource_id", table_name="field_policies")
+    op.drop_index("ix_field_policies_subject_id", table_name="field_policies")
+    op.drop_index("ix_field_policies_subject_type", table_name="field_policies")
+    op.drop_index("ix_field_policies_tenant_id", table_name="field_policies")
+    op.drop_table("field_policies")
+    op.drop_index("ix_resource_policies_status", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_tag_id", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_resource_id", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_action", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_subject_id", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_subject_type", table_name="resource_policies")
+    op.drop_index("ix_resource_policies_tenant_id", table_name="resource_policies")
+    op.drop_table("resource_policies")
+    op.drop_index("ix_resource_tags_resource_id", table_name="resource_tags")
+    op.drop_index("ix_resource_tags_tag_id", table_name="resource_tags")
+    op.drop_index("ix_resource_tags_tenant_id", table_name="resource_tags")
+    op.drop_table("resource_tags")
+    op.drop_index("ix_tags_name", table_name="tags")
+    op.drop_index("ix_tags_tenant_id", table_name="tags")
+    op.drop_table("tags")
     op.drop_index("ix_resource_fields_resource_id", table_name="resource_fields")
     op.drop_index("ix_resource_fields_datasource_id", table_name="resource_fields")
     op.drop_index("ix_resource_fields_tenant_id", table_name="resource_fields")

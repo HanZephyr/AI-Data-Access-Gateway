@@ -1,9 +1,9 @@
 import importlib
 from collections.abc import Sequence
 
-from sqlalchemy import URL, create_engine, inspect
+from sqlalchemy import URL, create_engine, inspect, text
 
-from adg.connectors.base import MetadataColumn, MetadataSnapshot
+from adg.connectors.base import MetadataColumn, MetadataSnapshot, QueryResult
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
 
 
@@ -83,6 +83,21 @@ class RelationalConnector:
             raise ConnectorOperationError(str(error)) from error
 
         return {"databases": [{"name": database_name, "schemas": schemas}]}
+
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        self._require_dependency()
+        try:
+            engine = create_engine(self._build_url(config))
+            with engine.connect() as connection:
+                result = connection.execute(text(sql))
+                rows = [dict(row) for row in result.mappings().fetchmany(limit)]
+                columns = [{"name": str(name), "data_type": "unknown"} for name in result.keys()]
+        except ConnectorDependencyError:
+            raise
+        except Exception as error:
+            raise ConnectorOperationError(str(error)) from error
+
+        return QueryResult(columns=columns, rows=rows)
 
     def _build_relation_payload(
         self,
