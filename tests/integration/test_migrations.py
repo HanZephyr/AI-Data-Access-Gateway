@@ -3,7 +3,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from pytest import MonkeyPatch
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
 from adg.app.settings import get_settings
 
@@ -78,3 +78,42 @@ def test_migration_uses_database_url_from_environment(
         "alembic_version",
     }.issubset(configured_tables)
     assert not default_db_path.exists()
+
+
+def test_remove_tenant_migration_upgrades_existing_database(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-control-plane.db"
+    db_url = f"sqlite:///{db_path}"
+    engine = create_engine(db_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE datasources (
+                    id VARCHAR(36) NOT NULL PRIMARY KEY,
+                    tenant_id VARCHAR(100) NOT NULL,
+                    name VARCHAR(200) NOT NULL
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX ix_datasources_tenant_id "
+                "ON datasources (tenant_id)"
+            )
+        )
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES ('202604240001')")
+        )
+
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(config, "head")
+
+    inspector = inspect(create_engine(db_url))
+    columns = {column["name"] for column in inspector.get_columns("datasources")}
+    indexes = {index["name"] for index in inspector.get_indexes("datasources")}
+    assert "tenant_id" not in columns
+    assert "ix_datasources_tenant_id" not in indexes
