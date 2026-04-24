@@ -1,0 +1,53 @@
+from adg.sql_guard.guard import SqlGuard
+
+
+def test_guard_allows_select_and_injects_default_limit() -> None:
+    result = SqlGuard(default_limit=100, max_limit=500).check(
+        "select id, name from public.customers"
+    )
+
+    assert result.allowed is True
+    assert result.statement_type == "SELECT"
+    assert result.normalized_sql is not None
+    assert "LIMIT 100" in result.normalized_sql
+    assert result.accessed_resources == ["public.customers"]
+    assert result.accessed_fields == ["id", "name"]
+    assert result.risk_level == "low"
+
+
+def test_guard_reduces_limit_to_maximum() -> None:
+    result = SqlGuard(default_limit=100, max_limit=500).check(
+        "select id from public.customers limit 900"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert "LIMIT 500" in result.normalized_sql
+
+
+def test_guard_rejects_mutation_statement() -> None:
+    result = SqlGuard().check("delete from public.customers where id = 1")
+
+    assert result.allowed is False
+    assert "statement_not_allowed" in result.rejection_reasons
+
+
+def test_guard_rejects_multiple_statements() -> None:
+    result = SqlGuard().check("select id from public.customers; select id from public.orders")
+
+    assert result.allowed is False
+    assert "multiple_statements" in result.rejection_reasons
+
+
+def test_guard_rejects_non_whitelisted_functions() -> None:
+    result = SqlGuard().check("select md5(email) from public.customers")
+
+    assert result.allowed is False
+    assert "function_not_allowed:md5" in result.rejection_reasons
+
+
+def test_guard_allows_common_aggregate_functions() -> None:
+    result = SqlGuard().check("select count(*), sum(total) from public.orders")
+
+    assert result.allowed is True
+    assert result.used_functions == ["count", "sum"]
