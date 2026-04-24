@@ -4,6 +4,7 @@
 .venv
 web/dist/
 web/node_modules/
+web/tsconfig.tsbuildinfo
 *.pyc
 
 dev-docs/
