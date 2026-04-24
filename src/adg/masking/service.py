@@ -6,9 +6,13 @@ from typing import Any
 from uuid import uuid4
 
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from adg.control_plane.models.masking import DecryptContext
+from adg.connectors.base import QueryResult
+from adg.control_plane.models.masking import DecryptContext, MaskingPolicy
+from adg.control_plane.models.resource import Resource
+from adg.policy.runtime import IdentityContext
 from adg.shared.errors import ValidationError
 
 
@@ -17,6 +21,48 @@ class MaskingService:
         self._session = session
         self._secret_key = secret_key
         self._service_fernet = Fernet(self._derive_fernet_key(secret_key))
+
+    def apply_to_result(
+        self,
+        *,
+        identity: IdentityContext,
+        datasource_id: str,
+        query_id: str,
+        resources: list[Resource],
+        result: QueryResult,
+    ) -> tuple[QueryResult, list[dict[str, str]]]:
+        policies = self._matching_policies(identity=identity, resources=resources)
+        masked_columns: list[dict[str, str]] = []
+        rows: list[dict[str, object]] = []
+        resource_by_id = {resource.id: resource for resource in resources}
+
+        for row in result.rows:
+            masked_row = dict(row)
+            for policy in policies:
+                if policy.field_name not in masked_row or masked_row[policy.field_name] is None:
+                    continue
+                if policy.strategy == "reversible":
+                    resource = resource_by_id[policy.resource_id]
+                    masked_row[policy.field_name] = self.mask_reversible_value(
+                        tenant_id=identity.tenant_id,
+                        user_id=identity.user_id,
+                        datasource_id=datasource_id,
+                        query_id=query_id,
+                        field_name=policy.field_name,
+                        value=masked_row[policy.field_name],
+                    )
+                else:
+                    masked_row[policy.field_name] = self.mask_plain_value(
+                        masked_row[policy.field_name],
+                        strategy=policy.strategy,
+                        config=self._policy_config(policy),
+                    )
+                marker = {"name": policy.field_name, "strategy": policy.strategy}
+                if marker not in masked_columns:
+                    masked_columns.append(marker)
+            rows.append(masked_row)
+
+        return QueryResult(columns=result.columns, rows=rows), masked_columns
 
     def mask_plain_value(
         self,
@@ -112,3 +158,40 @@ class MaskingService:
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value
+
+    def _matching_policies(
+        self,
+        *,
+        identity: IdentityContext,
+        resources: list[Resource],
+    ) -> list[MaskingPolicy]:
+        resource_ids = [resource.id for resource in resources]
+        if not resource_ids:
+            return []
+        policies = self._session.execute(
+            select(MaskingPolicy).where(
+                MaskingPolicy.tenant_id == identity.tenant_id,
+                MaskingPolicy.resource_id.in_(resource_ids),
+                MaskingPolicy.status == "active",
+            )
+        ).scalars()
+        return [policy for policy in policies if self._subject_matches(policy, identity)]
+
+    def _subject_matches(self, policy: MaskingPolicy, identity: IdentityContext) -> bool:
+        if policy.subject_type is None:
+            return True
+        if policy.subject_type == "all":
+            return True
+        if policy.subject_type == "user":
+            return policy.subject_id == identity.user_id
+        if policy.subject_type == "role":
+            return policy.subject_id in identity.roles
+        if policy.subject_type == "group":
+            return policy.subject_id in identity.groups
+        return False
+
+    def _policy_config(self, policy: MaskingPolicy) -> dict[str, object]:
+        loaded: Any = json.loads(policy.config_json)
+        if not isinstance(loaded, dict):
+            return {}
+        return {str(key): value for key, value in loaded.items()}

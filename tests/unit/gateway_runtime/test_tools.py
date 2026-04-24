@@ -8,6 +8,7 @@ from adg.connectors.base import MetadataConnector, MetadataSnapshot, QueryResult
 from adg.connectors.registry import ConnectorRegistry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
+from adg.control_plane.models.masking import DecryptContext, MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.gateway_runtime.tools import GatewayRuntimeService
 from adg.policy.runtime import IdentityContext
@@ -25,6 +26,14 @@ class FakeConnector:
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
         type(self).last_sql = sql
+        if "email" in sql.lower():
+            return QueryResult(
+                columns=[
+                    {"name": "id", "data_type": "integer"},
+                    {"name": "email", "data_type": "varchar"},
+                ],
+                rows=[{"id": 1, "email": "alice@example.com"}],
+            )
         return QueryResult(
             columns=[{"name": "id", "data_type": "integer"}],
             rows=[{"id": 1}, {"id": 2}][:limit],
@@ -246,6 +255,65 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "allowed"
+
+
+def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    db_session.add(
+        MaskingPolicy(
+            tenant_id="tenant-a",
+            resource_id=resource.id,
+            field_name="email",
+            strategy="fixed",
+            config_json='{"replacement":"REDACTED"}',
+            status="active",
+        )
+    )
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id, email from public.customers",
+        limit=1,
+    )
+
+    assert response["rows"] == [{"id": 1, "email": "REDACTED"}]
+    assert response["masking"]["masked_columns"] == [
+        {"name": "email", "strategy": "fixed"}
+    ]
+
+
+def test_execute_query_applies_reversible_masking_policy(db_session: Session) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    db_session.add(
+        MaskingPolicy(
+            tenant_id="tenant-a",
+            resource_id=resource.id,
+            field_name="email",
+            strategy="reversible",
+            config_json="{}",
+            status="active",
+        )
+    )
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id, email from public.customers",
+        limit=1,
+    )
+
+    assert response["rows"][0]["email"].startswith("$adg_rev$")
+    assert response["masking"]["masked_columns"] == [
+        {"name": "email", "strategy": "reversible"}
+    ]
+    assert db_session.query(DecryptContext).count() == 1
 
 
 def test_preview_resource_runs_bounded_preview(db_session: Session) -> None:
