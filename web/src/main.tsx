@@ -58,6 +58,7 @@ import {
 } from "./configForms";
 import { AdminOnboarding } from "./AdminOnboarding";
 import { validateAdminApiKey } from "./adminAuth";
+import { ApiKeyField } from "./ApiKeyField";
 import { findTreePathByKey } from "./catalogNavigation";
 import { CompactActionButton } from "./CompactActionButton";
 import "./styles.css";
@@ -90,6 +91,8 @@ const translations = {
     "brand.controlPlane": "Control Plane",
     "topbar.kicker": "Secure data operations",
     "topbar.apiKey": "API key",
+    "topbar.showApiKey": "Show API key",
+    "topbar.hideApiKey": "Hide API key",
     "topbar.language": "Language",
     "nav.overview": "Overview",
     "nav.datasources": "Data Sources",
@@ -257,6 +260,8 @@ const translations = {
     "brand.controlPlane": "控制平面",
     "topbar.kicker": "安全数据操作",
     "topbar.apiKey": "API 密钥",
+    "topbar.showApiKey": "显示 API 密钥",
+    "topbar.hideApiKey": "隐藏 API 密钥",
     "topbar.language": "语言",
     "nav.overview": "概览",
     "nav.datasources": "数据源",
@@ -422,6 +427,8 @@ const translations = {
     "brand.controlPlane": "控制平面",
     "topbar.kicker": "安全資料操作",
     "topbar.apiKey": "API 金鑰",
+    "topbar.showApiKey": "顯示 API 金鑰",
+    "topbar.hideApiKey": "隱藏 API 金鑰",
     "topbar.language": "語言",
     "nav.overview": "總覽",
     "nav.datasources": "資料來源",
@@ -896,23 +903,19 @@ function ConsoleApp() {
               options={languages}
               onChange={setLanguage}
             />
-            <Space.Compact className="key-input">
-              <Button>{t("topbar.apiKey")}</Button>
-              <Input
-                id="adg-api-key"
-                name="adg-api-key"
-                autoComplete="off"
-                value={showOnboarding ? draftApiKey : api.apiKey}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (showOnboarding) {
-                    setDraftApiKey(value);
-                  } else {
-                    api.saveApiKey(value);
-                  }
-                }}
-              />
-            </Space.Compact>
+            <ApiKeyField
+              label={t("topbar.apiKey")}
+              value={showOnboarding ? draftApiKey : api.apiKey}
+              showLabel={t("topbar.showApiKey")}
+              hideLabel={t("topbar.hideApiKey")}
+              onChange={(value) => {
+                if (showOnboarding) {
+                  setDraftApiKey(value);
+                } else {
+                  api.saveApiKey(value);
+                }
+              }}
+            />
           </div>
         </Layout.Header>
         <Layout.Content className="content">
