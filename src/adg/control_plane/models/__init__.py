@@ -1,6 +1,7 @@
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.base import Base
 from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.directory import OrgNode, Role, User, UserRole
 from adg.control_plane.models.governance import (
     DatasourceTag,
     FieldPolicy,
@@ -19,9 +20,13 @@ __all__ = [
     "DecryptContext",
     "FieldPolicy",
     "MaskingPolicy",
+    "OrgNode",
     "Resource",
     "ResourceField",
     "ResourcePolicy",
     "ResourceTag",
+    "Role",
     "Tag",
+    "User",
+    "UserRole",
 ]

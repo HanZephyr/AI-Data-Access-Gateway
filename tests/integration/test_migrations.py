@@ -3,9 +3,20 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from pytest import MonkeyPatch
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 
 from adg.app.settings import get_settings
+
+
+def migrated_table_names(db_url: str) -> set[str]:
+    engine = create_engine(db_url)
+    return set(inspect(engine).get_table_names())
+
+
+def migrated_columns(db_url: str, table_name: str) -> set[str]:
+    engine = create_engine(db_url)
+    inspector = inspect(engine)
+    return {column["name"] for column in inspector.get_columns(table_name)}
 
 
 def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
@@ -16,8 +27,7 @@ def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
 
     command.upgrade(config, "head")
 
-    engine = create_engine(db_url)
-    tables = set(inspect(engine).get_table_names())
+    tables = migrated_table_names(db_url)
     assert {
         "api_keys",
         "audit_events",
@@ -31,12 +41,42 @@ def test_initial_migration_creates_foundation_tables(tmp_path: Path) -> None:
         "resource_policies",
         "resource_tags",
         "tags",
+        "users",
+        "roles",
+        "user_roles",
+        "org_nodes",
         "alembic_version",
     }.issubset(tables)
-    inspector = inspect(engine)
     for table_name in tables - {"alembic_version"}:
-        column_names = {column["name"] for column in inspector.get_columns(table_name)}
+        column_names = migrated_columns(db_url, table_name)
         assert "tenant_id" not in column_names
+
+
+def test_directory_tables_exist_after_migration(tmp_path: Path) -> None:
+    db_path = tmp_path / "control-plane.db"
+    db_url = f"sqlite:///{db_path}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(config, "head")
+
+    tables = migrated_table_names(db_url)
+    assert "users" in tables
+    assert "roles" in tables
+    assert "user_roles" in tables
+    assert "org_nodes" in tables
+
+
+def test_api_keys_table_has_user_id_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "control-plane.db"
+    db_url = f"sqlite:///{db_path}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(config, "head")
+
+    columns = migrated_columns(db_url, "api_keys")
+    assert "user_id" in columns
 
 
 def test_migration_uses_database_url_from_environment(
@@ -77,45 +117,27 @@ def test_migration_uses_database_url_from_environment(
         "resource_policies",
         "resource_tags",
         "tags",
+        "users",
+        "roles",
+        "user_roles",
+        "org_nodes",
         "alembic_version",
     }.issubset(configured_tables)
     assert not default_db_path.exists()
 
 
-def test_remove_tenant_migration_upgrades_existing_database(tmp_path: Path) -> None:
-    db_path = tmp_path / "legacy-control-plane.db"
-    db_url = f"sqlite:///{db_path}"
-    engine = create_engine(db_url)
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                CREATE TABLE datasources (
-                    id VARCHAR(36) NOT NULL PRIMARY KEY,
-                    tenant_id VARCHAR(100) NOT NULL,
-                    name VARCHAR(200) NOT NULL
-                )
-                """
-            )
-        )
-        connection.execute(
-            text(
-                "CREATE INDEX ix_datasources_tenant_id "
-                "ON datasources (tenant_id)"
-            )
-        )
-        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
-        connection.execute(
-            text("INSERT INTO alembic_version (version_num) VALUES ('202604240001')")
-        )
-
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", db_url)
-
-    command.upgrade(config, "head")
-
-    inspector = inspect(create_engine(db_url))
-    columns = {column["name"] for column in inspector.get_columns("datasources")}
-    indexes = {index["name"] for index in inspector.get_indexes("datasources")}
-    assert "tenant_id" not in columns
-    assert "ix_datasources_tenant_id" not in indexes
+def test_migrations_use_a_single_directory_runtime_baseline() -> None:
+    versions_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "adg"
+        / "control_plane"
+        / "migrations"
+        / "versions"
+    )
+    revision_files = sorted(
+        path.name
+        for path in versions_path.glob("*.py")
+        if path.name != "__init__.py"
+    )
+    assert revision_files == ["202604260001_directory_runtime_baseline.py"]
