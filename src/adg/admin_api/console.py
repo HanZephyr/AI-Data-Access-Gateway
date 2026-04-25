@@ -12,6 +12,7 @@ from adg.app.dependencies import AuthenticatedApiKey, require_admin_api_key
 from adg.app.settings import get_settings
 from adg.audit.models import AuditEvent
 from adg.control_plane.db import get_session
+from adg.control_plane.imports.pipeline import execute_excel_import, preview_excel_import
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.directory import OrgNode, Role
@@ -178,6 +179,13 @@ class UserCreateRequest(BaseModel):
     external_ref: str
     org_node_id: str | None = None
     role_ids: list[str] = []
+
+
+class UserExcelImportRequest(BaseModel):
+    """Structured row payload used by preview/execute import endpoints."""
+
+    rows: list[dict[str, Any]]
+    delimiter: str = "/"
 
 
 @router.get("/resources")
@@ -806,6 +814,37 @@ def reset_user_key(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from exc
     session.commit()
     return {"api_key": plaintext}
+
+
+@router.post("/users/imports/excel/preview")
+def preview_users_excel_import(
+    payload: UserExcelImportRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Preview normalized user-directory changes from structured Excel rows."""
+
+    try:
+        result = preview_excel_import(session, rows=payload.rows, delimiter=payload.delimiter)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return result.to_dict()
+
+
+@router.post("/users/imports/excel/execute")
+def execute_users_excel_import(
+    payload: UserExcelImportRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Execute normalized user-directory changes from structured Excel rows."""
+
+    try:
+        result = execute_excel_import(session, rows=payload.rows, delimiter=payload.delimiter)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    session.commit()
+    return result.to_dict()
 
 
 @router.get("/roles")
