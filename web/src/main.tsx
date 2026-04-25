@@ -89,6 +89,7 @@ type TranslationParams = Record<string, string | number>;
 
 const translations = {
   "en-US": {
+    "brand.productName": "AI Data Access Gateway",
     "brand.controlPlane": "Control Plane",
     "topbar.kicker": "Secure data operations",
     "topbar.apiKey": "API key",
@@ -107,9 +108,6 @@ const translations = {
     "stats.datasources": "Data sources",
     "stats.resources": "Resources",
     "stats.audit": "Audit events",
-    "runtime.title": "Runtime pipeline",
-    "runtime.description":
-      "API key auth, SQL Guard, policy checks, masking, decrypt contexts, and audit events are active in this V1 backend.",
     "common.create": "Create",
     "common.createKey": "Create key",
     "common.save": "Save",
@@ -259,6 +257,7 @@ const translations = {
     "column.metadata": "Metadata"
   },
   "zh-CN": {
+    "brand.productName": "AI 数据库连接网关",
     "brand.controlPlane": "控制平面",
     "topbar.kicker": "安全数据操作",
     "topbar.apiKey": "API 密钥",
@@ -277,8 +276,6 @@ const translations = {
     "stats.datasources": "数据源",
     "stats.resources": "资源",
     "stats.audit": "审计事件",
-    "runtime.title": "运行时管线",
-    "runtime.description": "API 密钥认证、SQL Guard、策略检查、脱敏、解密上下文和审计事件已在 V1 后端启用。",
     "common.create": "新建",
     "common.createKey": "新建密钥",
     "common.save": "保存",
@@ -427,6 +424,7 @@ const translations = {
     "column.metadata": "元数据"
   },
   "zh-TW": {
+    "brand.productName": "AI 資料庫連接閘道",
     "brand.controlPlane": "控制平面",
     "topbar.kicker": "安全資料操作",
     "topbar.apiKey": "API 金鑰",
@@ -445,8 +443,6 @@ const translations = {
     "stats.datasources": "資料來源",
     "stats.resources": "資源",
     "stats.audit": "稽核事件",
-    "runtime.title": "執行時管線",
-    "runtime.description": "API 金鑰驗證、SQL Guard、策略檢查、遮罩、解密上下文與稽核事件已在 V1 後端啟用。",
     "common.create": "新增",
     "common.createKey": "新增金鑰",
     "common.save": "儲存",
@@ -833,9 +829,10 @@ function ConsoleApp() {
         validating={api.validating}
         onApiKeyChange={setDraftApiKey}
         onContinue={() => void api.validateAndSaveApiKey(draftApiKey)}
+        brandLabel={t("brand.productName")}
         languageControl={
           <LanguageSwitcher
-            className="admin-login-language"
+            className="language-select language-select-login"
             label={t("topbar.switchLanguage")}
             value={language}
             options={languageOptions}
@@ -908,7 +905,7 @@ function ConsoleApp() {
           />
           <div className="topbar-actions">
             <LanguageSwitcher
-              className="language-select"
+              className="language-select language-select-header"
               label={t("topbar.switchLanguage")}
               value={language}
               options={languageOptions}
@@ -990,13 +987,6 @@ function Overview({ api }: { api: ReturnType<typeof useApi> }) {
         <Statistic title={t("stats.resources")} value={resources.data?.length || 0} />
         <Statistic title={t("stats.audit")} value={audit.data?.length || 0} />
       </div>
-      <Alert
-        type="info"
-        showIcon
-        message={t("runtime.title")}
-        description={t("runtime.description")}
-        className="runtime-alert"
-      />
     </div>
   );
 }
@@ -1590,7 +1580,7 @@ function DatasourceCreateDrawer({
         initialValues={{
           type: "postgres",
           status: "active",
-          ...datasourceFormValuesFromConfig({ host: "localhost", port: 5432, database: "warehouse" })
+          ...datasourceFormValuesFromConfig({})
         }}
       >
         <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>

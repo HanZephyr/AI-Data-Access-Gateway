@@ -2,6 +2,7 @@ import argparse
 import json
 from typing import Any
 
+from adg.app.settings import get_settings
 from adg.control_plane.db import create_engine_from_url, create_session_factory
 from adg.control_plane.models.base import Base
 from adg.control_plane.services.api_key_service import create_api_key
@@ -27,13 +28,19 @@ def bootstrap_admin_api_key(database_url: str, *, name: str = "Bootstrap Admin")
     }
 
 
+def resolve_bootstrap_database_url(database_url: str | None) -> str:
+    """Use the explicit CLI database URL first, then fall back to application settings."""
+
+    return database_url or get_settings().control_plane_database_url
+
+
 def main() -> None:
     """Create one bootstrap admin key and print it as JSON for operators."""
 
     parser = argparse.ArgumentParser(description="Bootstrap an admin API key for ADG.")
     parser.add_argument(
         "--database-url",
-        default="sqlite:///./data/adg-control-plane.db",
+        default=None,
         help="Control-plane database URL to initialize.",
     )
     parser.add_argument(
@@ -42,7 +49,8 @@ def main() -> None:
         help="Display name stored alongside the bootstrap API key.",
     )
     args = parser.parse_args()
-    print(json.dumps(bootstrap_admin_api_key(args.database_url, name=args.name), indent=2))
+    database_url = resolve_bootstrap_database_url(args.database_url)
+    print(json.dumps(bootstrap_admin_api_key(database_url, name=args.name), indent=2))
 
 
 if __name__ == "__main__":

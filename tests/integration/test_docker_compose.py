@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 
 def test_backend_healthcheck_targets_live_health_endpoint() -> None:

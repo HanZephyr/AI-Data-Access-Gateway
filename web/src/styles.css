@@ -228,16 +228,16 @@ body {
 
 .language-switcher {
   min-width: 0;
-  min-height: 42px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 0 10px;
   border-color: var(--mist-300);
-  background: var(--mist-50);
+  background: rgba(255, 255, 255, 0.82);
   color: var(--ink-700);
-  box-shadow: var(--shadow-1);
+  box-shadow: none;
 }
 
 .language-select {
-  min-width: 220px;
+  min-width: 0;
 }
 
 .mobile-page-select {
@@ -257,7 +257,7 @@ body {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .language-switcher-leading {
@@ -272,6 +272,7 @@ body {
 .language-switcher-value {
   color: var(--ink-500);
   font-weight: 700;
+  font-size: 12px;
 }
 
 .language-switcher-caret {
@@ -282,6 +283,14 @@ body {
 .language-switcher-menu-spacer {
   display: inline-block;
   width: 14px;
+}
+
+.language-select-header {
+  min-width: 132px;
+}
+
+.language-select-login {
+  min-width: 124px;
 }
 
 .key-input .ant-btn {
@@ -327,7 +336,7 @@ body {
 .admin-login-card {
   width: min(560px, 100%);
   display: grid;
-  gap: 18px;
+  gap: 20px;
   padding: 28px;
   border: 1px solid rgba(18, 118, 111, 0.14);
   background: rgba(255, 255, 255, 0.96);
@@ -336,14 +345,20 @@ body {
 
 .admin-login-toolbar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.admin-login-language .ant-select {
-  width: 100%;
+.admin-login-brand {
+  max-width: min(280px, calc(100% - 140px));
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
-.admin-login-mark,
 .admin-login-label {
   display: block;
   color: var(--ink-500);
@@ -351,6 +366,11 @@ body {
   font-weight: 760;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.admin-login-header {
+  display: grid;
+  gap: 6px;
 }
 
 .admin-login-header .ant-typography {
@@ -462,12 +482,6 @@ body {
   font-size: 38px;
   font-weight: 780;
   line-height: 1;
-}
-
-.runtime-alert {
-  border: 1px solid rgba(18, 118, 111, 0.18);
-  background: linear-gradient(90deg, rgba(223, 243, 240, 0.95), rgba(255, 255, 255, 0.92));
-  box-shadow: var(--shadow-1);
 }
 
 .panel {
@@ -814,7 +828,8 @@ body {
   }
 
   .language-select,
-  .admin-login-language {
+  .language-select-header,
+  .language-select-login {
     width: 100%;
   }
 
@@ -842,6 +857,10 @@ body {
 
   .admin-login-card {
     padding: 18px;
+  }
+
+  .admin-login-brand {
+    max-width: none;
   }
 
   .resource-catalog {

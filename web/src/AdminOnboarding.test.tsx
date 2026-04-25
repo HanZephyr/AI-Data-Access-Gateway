@@ -20,6 +20,7 @@ describe("AdminOnboarding", () => {
         validating={false}
         onApiKeyChange={() => undefined}
         onContinue={() => undefined}
+        brandLabel="AI 数据库连接网关"
         copy={{
           title: "管理员登录",
           description: "请输入管理员 API Key 进入控制台。",
@@ -53,6 +54,7 @@ describe("AdminOnboarding", () => {
     );
 
     expect(screen.getByText("管理员登录")).toBeInTheDocument();
+    expect(screen.getByText("AI 数据库连接网关")).toBeInTheDocument();
     expect(screen.getByText("初始化管理员 API Key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "登录控制台" })).toBeDisabled();
   });
@@ -65,6 +67,7 @@ describe("AdminOnboarding", () => {
         validating={false}
         onApiKeyChange={() => undefined}
         onContinue={() => undefined}
+        brandLabel="AI 数据库连接网关"
         languageControl={<Button aria-label="切换界面语言">简体中文</Button>}
         copy={{
           title: "管理员登录",
@@ -90,6 +93,7 @@ describe("AdminOnboarding", () => {
         validating={false}
         onApiKeyChange={() => undefined}
         onContinue={() => undefined}
+        brandLabel="AI 数据库连接网关"
         copy={{
           title: "管理员登录",
           description: "请输入管理员 API Key 进入控制台。",

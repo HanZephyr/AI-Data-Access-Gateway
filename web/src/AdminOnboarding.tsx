@@ -30,6 +30,7 @@ export function AdminOnboarding({
   validating,
   onApiKeyChange,
   onContinue,
+  brandLabel,
   languageControl,
   copy,
 }: {
@@ -38,6 +39,7 @@ export function AdminOnboarding({
   validating: boolean;
   onApiKeyChange: (value: string) => void;
   onContinue: () => void;
+  brandLabel: string;
   languageControl?: React.ReactNode;
   copy: AdminOnboardingCopy;
 }) {
@@ -48,9 +50,11 @@ export function AdminOnboarding({
   return (
     <section className="admin-login-page">
       <div className="admin-login-card">
-        {languageControl ? <div className="admin-login-toolbar">{languageControl}</div> : null}
+        <div className="admin-login-toolbar">
+          <Typography.Text className="admin-login-brand">{brandLabel}</Typography.Text>
+          {languageControl}
+        </div>
         <div className="admin-login-header">
-          <Typography.Text className="admin-login-mark">ADG</Typography.Text>
           <Typography.Title level={1}>{copy.title}</Typography.Title>
           <Typography.Paragraph>{copy.description}</Typography.Paragraph>
         </div>
