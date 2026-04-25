@@ -2,7 +2,9 @@ from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from collections.abc import Awaitable, Callable
+
+from fastapi import FastAPI, Request, Response
 from sqlalchemy.orm import Session, sessionmaker
 
 from adg.admin_api.console import router as admin_console_router
@@ -30,6 +32,19 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
 
     app = FastAPI(title=settings.service_name, lifespan=lifespan)
     app.state.session_factory = factory
+
+    @app.middleware("http")
+    async def normalize_mcp_mount_path(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Serve the mounted MCP endpoint at /mcp without a redirect hop."""
+
+        if request.scope["path"] == "/mcp":
+            request.scope["path"] = "/mcp/"
+            request.scope["raw_path"] = b"/mcp/"
+        return await call_next(request)
+
     if session_factory is not None:
         def override_session() -> Generator[Session, None, None]:
             with factory() as session:
@@ -41,7 +56,7 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     app.include_router(admin_system_router)
     app.include_router(internal_decrypt_router)
     app.include_router(mcp_tools_router)
-    app.mount("/mcp/server", mcp_server_app)
+    app.mount("/mcp", mcp_server_app)
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:

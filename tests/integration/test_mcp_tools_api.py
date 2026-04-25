@@ -63,7 +63,7 @@ def test_mcp_tool_route_accepts_non_admin_api_key() -> None:
     client, _ = build_mcp_app()
 
     response = client.post(
-        "/mcp/tools/list_datasources",
+        "/api/tools/list_datasources",
         json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
@@ -76,7 +76,7 @@ def test_mcp_tool_route_rejects_unknown_tool_name() -> None:
     client, _ = build_mcp_app()
 
     response = client.post(
-        "/mcp/tools/not_a_tool",
+        "/api/tools/not_a_tool",
         json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
@@ -89,7 +89,7 @@ def test_mcp_tool_route_commits_runtime_audit_events() -> None:
     client, session_factory = build_mcp_app()
 
     response = client.post(
-        "/mcp/tools/list_datasources",
+        "/api/tools/list_datasources",
         json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
@@ -104,7 +104,7 @@ def test_mcp_tool_route_rejects_api_key_without_runtime_scope() -> None:
     client, _ = build_mcp_app()
 
     response = client.post(
-        "/mcp/tools/list_datasources",
+        "/api/tools/list_datasources",
         json={"user_id": "user-1"},
         headers={"X-ADG-API-Key": "adg_admin_only"},
     )

@@ -55,7 +55,7 @@ async def test_streamable_mcp_server_lists_tools_and_calls_runtime_tool() -> Non
             headers={"X-ADG-API-Key": "adg_runtime"},
         ) as http_client:
             async with streamable_http_client(
-                "http://127.0.0.1:8000/mcp/server/mcp",
+                "http://127.0.0.1:8000/mcp",
                 http_client=http_client,
             ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:

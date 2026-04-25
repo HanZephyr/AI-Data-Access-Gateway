@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { buildMcpPlatformGuides } from "./mcpGuides";
 
 const setup = {
-  server_url: "https://gateway.example.com/mcp/server",
-  http_tool_url_template: "https://gateway.example.com/mcp/tools/{tool_name}",
+  server_url: "https://gateway.example.com/mcp",
+  http_tool_url_template: "https://gateway.example.com/api/tools/{tool_name}",
   api_key_header: "X-ADG-API-Key",
   tools: [
     { name: "list_datasources", description: "List readable datasources." },
@@ -18,7 +18,7 @@ describe("buildMcpPlatformGuides", () => {
     const codex = guides.find((guide) => guide.key === "codex");
 
     expect(codex?.snippets[0]?.code).toContain("[mcp_servers.adg]");
-    expect(codex?.snippets[0]?.code).toContain('url = "https://gateway.example.com/mcp/server"');
+    expect(codex?.snippets[0]?.code).toContain('url = "https://gateway.example.com/mcp"');
     expect(codex?.snippets[0]?.code).toContain("[mcp_servers.adg.http_headers]");
     expect(codex?.snippets[0]?.code).toContain('X-ADG-API-Key = "${ADG_RUNTIME_API_KEY}"');
   });
@@ -29,7 +29,7 @@ describe("buildMcpPlatformGuides", () => {
     const jsonSnippet = claudeCode?.snippets.find((snippet) => snippet.label === "JSON");
 
     expect(jsonSnippet?.code).toContain('"type": "http"');
-    expect(jsonSnippet?.code).toContain('"url": "https://gateway.example.com/mcp/server"');
+    expect(jsonSnippet?.code).toContain('"url": "https://gateway.example.com/mcp"');
     expect(jsonSnippet?.code).toContain('"X-ADG-API-Key": "${ADG_RUNTIME_API_KEY}"');
   });
 });

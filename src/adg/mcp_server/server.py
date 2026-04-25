@@ -69,10 +69,11 @@ class MountedMcpServerApp:
             return
 
         path = scope.get("path", "")
-        if path in {"", "/"}:
+        if path in {"", "/", "/mcp/"}:
             rewritten_scope = dict(scope)
             rewritten_scope["path"] = "/mcp"
             rewritten_scope["raw_path"] = b"/mcp"
+            rewritten_scope["root_path"] = ""
             await self.app(rewritten_scope, receive, send)
             return
 

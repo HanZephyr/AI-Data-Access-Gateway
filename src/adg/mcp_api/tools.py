@@ -8,7 +8,7 @@ from adg.control_plane.db import get_session
 from adg.gateway_runtime.tools import GatewayRuntimeService
 from adg.mcp_api.runtime_tools import dispatch_runtime_tool_call
 
-router = APIRouter(prefix="/mcp/tools", tags=["mcp"])
+router = APIRouter(prefix="/api/tools", tags=["mcp"])
 
 
 @router.post("/{tool_name}")

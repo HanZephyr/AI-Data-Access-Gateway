@@ -850,8 +850,8 @@ def get_mcp_setup(
 
     base_url = str(request.base_url).rstrip("/")
     return {
-        "server_url": f"{base_url}/mcp/server/mcp",
-        "http_tool_url_template": f"{base_url}/mcp/tools/{{tool_name}}",
+        "server_url": f"{base_url}/mcp",
+        "http_tool_url_template": f"{base_url}/api/tools/{{tool_name}}",
         "api_key_header": get_settings().api_key_header,
         "tools": serialize_runtime_tool_definitions(),
     }
