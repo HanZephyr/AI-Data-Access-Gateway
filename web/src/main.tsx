@@ -9,6 +9,8 @@ import {
   EditOutlined,
   ExperimentOutlined,
   EyeOutlined,
+  InboxOutlined,
+  IdcardOutlined,
   LinkOutlined,
   KeyOutlined,
   LockOutlined,
@@ -17,6 +19,7 @@ import {
   SafetyOutlined,
   StopOutlined,
   SyncOutlined,
+  TeamOutlined,
   TagsOutlined
 } from "@ant-design/icons";
 import {
@@ -42,6 +45,7 @@ import {
   Tag,
   Tooltip,
   Tree,
+  Upload,
   Typography,
   theme
 } from "antd";
@@ -56,6 +60,13 @@ import {
   maskingConfigFromFormValues,
   maskingFormValuesFromConfig,
 } from "./configForms";
+import {
+  buildDirectoryImportPayload,
+  buildUserCreatePayload,
+  normalizeOrgPathDelimiter,
+  parseDirectoryRowsFromText,
+  type DirectoryImportRow,
+} from "./directoryForms";
 import { AdminOnboarding } from "./AdminOnboarding";
 import { validateAdminApiKey } from "./adminAuth";
 import { ApiKeyField } from "./ApiKeyField";
@@ -68,6 +79,8 @@ import "./styles.css";
 
 type PageKey =
   | "overview"
+  | "users"
+  | "roles"
   | "datasources"
   | "tags"
   | "policies"
@@ -77,6 +90,22 @@ type PageKey =
   | "mcp";
 
 type AnyRecord = Record<string, any>;
+type DirectoryUserRecord = {
+  id?: string;
+  user_id?: string;
+  name: string;
+  external_ref: string;
+  org_node_id?: string | null;
+  org_path?: string | null;
+  role_ids: string[];
+  role_names: string[];
+  status: string;
+};
+type OrgTreeNode = {
+  key: string;
+  title: string;
+  children?: OrgTreeNode[];
+};
 type CatalogTreeNode = AnyRecord & {
   key: string;
   type: "datasource" | "resource" | "field";
@@ -100,6 +129,8 @@ const translations = {
     "topbar.language": "Language",
     "topbar.switchLanguage": "Switch page language",
     "nav.overview": "Overview",
+    "nav.users": "Users",
+    "nav.roles": "Roles",
     "nav.datasources": "Data Sources",
     "nav.tags": "Tags",
     "nav.policies": "Policies",
@@ -130,7 +161,12 @@ const translations = {
     "common.validJson": "{label} must be valid JSON",
     "placeholder.resourceSearch": "Search and select a resource",
     "placeholder.tagSearch": "Search and select a tag",
+    "placeholder.roleSearch": "Select one or more roles",
+    "placeholder.orgNodeSearch": "Select an organization node",
     "apiKey.newTitle": "New API key",
+    "apiKey.serviceTitle": "Service and operator keys",
+    "apiKey.serviceDescription": "Runtime user keys are managed from the Users workspace. Create admin or integration keys here only when you need a non-user credential.",
+    "apiKey.serviceCreate": "Create service key",
     "field.name": "Name",
     "field.type": "Type",
     "field.status": "Status",
@@ -153,6 +189,10 @@ const translations = {
     "field.tagId": "Tag ID",
     "field.priority": "Priority",
     "field.strategy": "Strategy",
+    "field.externalRef": "External reference",
+    "field.orgNode": "Organization node",
+    "field.roles": "Roles",
+    "field.orgDelimiter": "Organization path delimiter",
     "field.replacement": "Replacement",
     "field.prefix": "Visible prefix",
     "field.suffix": "Visible suffix",
@@ -181,6 +221,36 @@ const translations = {
     "catalog.noTags": "No tags assigned",
     "catalog.addTag": "Add tag",
     "catalog.jump": "Open in Data Sources",
+    "users.new": "New user",
+    "users.importExcel": "Import Excel",
+    "users.organizationTree": "Organization tree",
+    "users.directory": "User directory",
+    "users.details": "User details",
+    "users.emptySelection": "Select a user to inspect roles, organization placement, and runtime key actions.",
+    "users.emptyUsers": "No users loaded yet",
+    "users.emptyUsersHint": "Create a user or run an import to populate the directory workspace.",
+    "users.runtimeKey": "Runtime key",
+    "users.generateKey": "Generated from user operations",
+    "users.resetKey": "Reset runtime key",
+    "users.latestKey": "Latest plaintext key",
+    "users.importTitle": "Excel import",
+    "users.uploadFile": "Upload file",
+    "users.dragFileHere": "Drag file here",
+    "users.importHint": "Use the approved template columns: user_name, org_path, external_ref, roles.",
+    "users.previewImport": "Preview import",
+    "users.executeImport": "Execute import",
+    "users.previewSummary": "Import preview",
+    "users.orgNodesToCreate": "Org nodes to create",
+    "users.rolesToCreate": "Roles to create",
+    "users.usersCreated": "Users created",
+    "users.usersUpdated": "Users updated",
+    "users.keysCreated": "Runtime keys created",
+    "users.rootMapped": "Empty org paths map to the root organization node.",
+    "users.importReady": "Upload a file to preview org changes, new roles, and affected users.",
+    "roles.directory": "Role directory",
+    "roles.summary": "Independent directory roles used by runtime authorization.",
+    "roles.activeCount": "Active roles",
+    "roles.emptyDescription": "No description provided.",
     "masking.fixedHint": "Fixed masking always returns the same replacement text.",
     "masking.partialHint": "Partial masking keeps the start and end of the value visible.",
     "masking.noConfig": "This masking strategy does not require extra configuration.",
@@ -296,7 +366,10 @@ const translations = {
     "column.data_type": "Data type",
     "column.nullable": "Nullable",
     "column.ordinal_position": "Position",
-    "column.metadata": "Metadata"
+    "column.metadata": "Metadata",
+    "column.external_ref": "External reference",
+    "column.org_path": "Organization path",
+    "column.role_names": "Roles"
   },
   "zh-CN": {
     "brand.productName": "AI 数据库连接网关",
@@ -308,6 +381,8 @@ const translations = {
     "topbar.language": "语言",
     "topbar.switchLanguage": "切换页面语言",
     "nav.overview": "概览",
+    "nav.users": "用户",
+    "nav.roles": "角色",
     "nav.datasources": "数据源",
     "nav.tags": "标签",
     "nav.policies": "权限策略",
@@ -338,7 +413,12 @@ const translations = {
     "common.validJson": "{label}必须是有效 JSON",
     "placeholder.resourceSearch": "搜索并选择资源",
     "placeholder.tagSearch": "搜索并选择标签",
+    "placeholder.roleSearch": "选择一个或多个角色",
+    "placeholder.orgNodeSearch": "选择组织节点",
     "apiKey.newTitle": "新 API 密钥",
+    "apiKey.serviceTitle": "服务与操作员密钥",
+    "apiKey.serviceDescription": "运行时用户密钥统一在用户工作区里生成和重置。这里只保留管理员或集成场景的非用户密钥。",
+    "apiKey.serviceCreate": "新建服务密钥",
     "field.name": "名称",
     "field.type": "类型",
     "field.status": "状态",
@@ -361,6 +441,10 @@ const translations = {
     "field.tagId": "标签 ID",
     "field.priority": "优先级",
     "field.strategy": "策略",
+    "field.externalRef": "外部标识",
+    "field.orgNode": "组织节点",
+    "field.roles": "角色",
+    "field.orgDelimiter": "组织架构分隔符",
     "field.replacement": "替换文本",
     "field.prefix": "保留前缀",
     "field.suffix": "保留后缀",
@@ -389,6 +473,36 @@ const translations = {
     "catalog.noTags": "暂未绑定标签",
     "catalog.addTag": "添加标签",
     "catalog.jump": "打开数据源页",
+    "users.new": "新建用户",
+    "users.importExcel": "导入 Excel",
+    "users.organizationTree": "组织树",
+    "users.directory": "用户目录",
+    "users.details": "用户详情",
+    "users.emptySelection": "选择一个用户，查看其角色、组织归属和运行时密钥操作。",
+    "users.emptyUsers": "暂无用户数据",
+    "users.emptyUsersHint": "新建用户或执行导入后，这里会出现目录用户列表。",
+    "users.runtimeKey": "运行时密钥",
+    "users.generateKey": "仅通过用户操作生成",
+    "users.resetKey": "重置运行时密钥",
+    "users.latestKey": "最近一次明文密钥",
+    "users.importTitle": "Excel 导入",
+    "users.uploadFile": "上传文件",
+    "users.dragFileHere": "拖拽文件到这里",
+    "users.importHint": "使用统一模板列：user_name、org_path、external_ref、roles。",
+    "users.previewImport": "预览导入",
+    "users.executeImport": "执行导入",
+    "users.previewSummary": "导入预览",
+    "users.orgNodesToCreate": "待创建组织节点",
+    "users.rolesToCreate": "待创建角色",
+    "users.usersCreated": "新建用户数",
+    "users.usersUpdated": "更新用户数",
+    "users.keysCreated": "新建运行时密钥数",
+    "users.rootMapped": "空组织路径会映射到根组织节点。",
+    "users.importReady": "上传文件后先预览，再确认组织变更、角色新增和影响用户。",
+    "roles.directory": "角色目录",
+    "roles.summary": "运行时授权使用的独立目录角色。",
+    "roles.activeCount": "启用角色数",
+    "roles.emptyDescription": "暂无描述。",
     "masking.fixedHint": "固定脱敏会始终返回同一段替换文本。",
     "masking.partialHint": "局部脱敏会保留值的开头和结尾可见部分。",
     "masking.noConfig": "当前脱敏策略不需要额外配置。",
@@ -503,7 +617,10 @@ const translations = {
     "column.data_type": "数据类型",
     "column.nullable": "可为空",
     "column.ordinal_position": "位置",
-    "column.metadata": "元数据"
+    "column.metadata": "元数据",
+    "column.external_ref": "外部标识",
+    "column.org_path": "组织路径",
+    "column.role_names": "角色"
   },
   "zh-TW": {
     "brand.productName": "AI 資料庫連接閘道",
@@ -515,6 +632,8 @@ const translations = {
     "topbar.language": "語言",
     "topbar.switchLanguage": "切換頁面語言",
     "nav.overview": "總覽",
+    "nav.users": "使用者",
+    "nav.roles": "角色",
     "nav.datasources": "資料來源",
     "nav.tags": "標籤",
     "nav.policies": "權限策略",
@@ -545,7 +664,12 @@ const translations = {
     "common.validJson": "{label}必須是有效 JSON",
     "placeholder.resourceSearch": "搜尋並選擇資源",
     "placeholder.tagSearch": "搜尋並選擇標籤",
+    "placeholder.roleSearch": "選擇一個或多個角色",
+    "placeholder.orgNodeSearch": "選擇組織節點",
     "apiKey.newTitle": "新 API 金鑰",
+    "apiKey.serviceTitle": "服務與操作員金鑰",
+    "apiKey.serviceDescription": "執行時使用者金鑰統一在 Users 工作區裡產生與重置。這裡只保留管理員或整合用途的非使用者金鑰。",
+    "apiKey.serviceCreate": "建立服務金鑰",
     "field.name": "名稱",
     "field.type": "類型",
     "field.status": "狀態",
@@ -568,6 +692,10 @@ const translations = {
     "field.tagId": "標籤 ID",
     "field.priority": "優先順序",
     "field.strategy": "策略",
+    "field.externalRef": "外部識別",
+    "field.orgNode": "組織節點",
+    "field.roles": "角色",
+    "field.orgDelimiter": "組織架構分隔符",
     "field.replacement": "替換文字",
     "field.prefix": "保留前綴",
     "field.suffix": "保留後綴",
@@ -596,6 +724,36 @@ const translations = {
     "catalog.noTags": "尚未綁定標籤",
     "catalog.addTag": "新增標籤",
     "catalog.jump": "打開資料源頁",
+    "users.new": "新增使用者",
+    "users.importExcel": "匯入 Excel",
+    "users.organizationTree": "組織樹",
+    "users.directory": "使用者目錄",
+    "users.details": "使用者詳情",
+    "users.emptySelection": "選擇一位使用者，查看其角色、組織歸屬與執行時金鑰操作。",
+    "users.emptyUsers": "目前沒有使用者資料",
+    "users.emptyUsersHint": "建立使用者或執行匯入後，這裡會出現目錄使用者清單。",
+    "users.runtimeKey": "執行時金鑰",
+    "users.generateKey": "僅透過使用者操作產生",
+    "users.resetKey": "重置執行時金鑰",
+    "users.latestKey": "最近一次明文金鑰",
+    "users.importTitle": "Excel 匯入",
+    "users.uploadFile": "上傳檔案",
+    "users.dragFileHere": "將檔案拖曳到這裡",
+    "users.importHint": "使用統一模板欄位：user_name、org_path、external_ref、roles。",
+    "users.previewImport": "預覽匯入",
+    "users.executeImport": "執行匯入",
+    "users.previewSummary": "匯入預覽",
+    "users.orgNodesToCreate": "待建立組織節點",
+    "users.rolesToCreate": "待建立角色",
+    "users.usersCreated": "建立使用者數",
+    "users.usersUpdated": "更新使用者數",
+    "users.keysCreated": "建立執行時金鑰數",
+    "users.rootMapped": "空的組織路徑會映射到根組織節點。",
+    "users.importReady": "上傳檔案後先預覽，再確認組織變更、角色新增與受影響使用者。",
+    "roles.directory": "角色目錄",
+    "roles.summary": "供執行時授權使用的獨立目錄角色。",
+    "roles.activeCount": "啟用角色數",
+    "roles.emptyDescription": "尚未提供描述。",
     "masking.fixedHint": "固定脫敏會固定回傳同一段替換文字。",
     "masking.partialHint": "局部脫敏會保留值的開頭和結尾可見部分。",
     "masking.noConfig": "目前的脫敏策略不需要額外設定。",
@@ -710,7 +868,10 @@ const translations = {
     "column.data_type": "資料類型",
     "column.nullable": "可為空",
     "column.ordinal_position": "位置",
-    "column.metadata": "中繼資料"
+    "column.metadata": "中繼資料",
+    "column.external_ref": "外部識別",
+    "column.org_path": "組織路徑",
+    "column.role_names": "角色"
   }
 } as const;
 
@@ -745,6 +906,8 @@ const antdLocales: Record<Language, typeof zhCN> = {
 
 const pages: Array<{ key: PageKey; labelKey: TranslationKey; icon: React.ReactNode }> = [
   { key: "overview", labelKey: "nav.overview", icon: <ClusterOutlined /> },
+  { key: "users", labelKey: "nav.users", icon: <TeamOutlined /> },
+  { key: "roles", labelKey: "nav.roles", icon: <IdcardOutlined /> },
   { key: "datasources", labelKey: "nav.datasources", icon: <DatabaseOutlined /> },
   { key: "tags", labelKey: "nav.tags", icon: <TagsOutlined /> },
   { key: "policies", labelKey: "nav.policies", icon: <SafetyOutlined /> },
@@ -763,6 +926,13 @@ function getStoredLanguage(): Language {
       ? []
       : [...(navigator.languages || []), navigator.language].filter(Boolean);
   return resolveInitialLanguage(stored, browserLanguages);
+}
+
+function getStoredPage(): PageKey {
+  /** Restore the last visited page when it still exists in the current navigation model. */
+
+  const stored = localStorage.getItem("adg.page");
+  return pages.some((item) => item.key === stored) ? (stored as PageKey) : "overview";
 }
 
 function translate(language: Language, key: TranslationKey, params: TranslationParams = {}) {
@@ -921,7 +1091,7 @@ function ConsoleApp() {
   /** Render the fixed shell, navigation, language switcher, and active page. */
 
   const { language, setLanguage, t } = useI18n();
-  const [page, setPage] = useState<PageKey>("overview");
+  const [page, setPage] = useState<PageKey>(getStoredPage);
   const [catalogJumpTarget, setCatalogJumpTarget] = useState<CatalogJumpTarget | null>(null);
   const [draftApiKey, setDraftApiKey] = useState("");
   const api = useApi();
@@ -938,6 +1108,10 @@ function ConsoleApp() {
   useEffect(() => {
     setDraftApiKey(api.apiKey);
   }, [api.apiKey, api.authError]);
+
+  useEffect(() => {
+    localStorage.setItem("adg.page", page);
+  }, [page]);
 
   const openCatalogNode = (target: CatalogJumpTarget) => {
     setPage("datasources");
@@ -1078,6 +1252,8 @@ function Page({
   /** Route the selected navigation key to its console page component. */
 
   if (page === "overview") return <Overview api={api} />;
+  if (page === "users") return <UsersPage api={api} />;
+  if (page === "roles") return <RolesPage api={api} />;
   if (page === "datasources") {
     return (
       <Datasources
@@ -1110,6 +1286,424 @@ function Overview({ api }: { api: ReturnType<typeof useApi> }) {
         <Statistic title={t("stats.audit")} value={audit.data?.length || 0} />
       </div>
     </div>
+  );
+}
+
+function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Split-pane directory workspace with org tree, user list, details, and import actions. */
+
+  const { message: messageApi, modal } = AntApp.useApp();
+  const { t } = useI18n();
+  const orgNodesState = useData<AnyRecord[]>(() => api.request("/admin/org-nodes"), [api.apiKey]);
+  const rolesState = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
+  const usersState = useData<DirectoryUserRecord[]>(
+    async () => {
+      try {
+        return await api.request("/admin/users");
+      } catch {
+        return [];
+      }
+    },
+    [api.apiKey],
+  );
+  const [sessionUsers, setSessionUsers] = useState<DirectoryUserRecord[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [importPreview, setImportPreview] = useState<AnyRecord | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [createForm] = Form.useForm();
+  const [importForm] = Form.useForm();
+  const orgNodes = orgNodesState.data || [];
+  const roles = rolesState.data || [];
+  const users = mergeDirectoryUsers(usersState.data || [], sessionUsers, orgNodes, roles);
+  const orgTree = buildOrgTree(orgNodes);
+  const orgDescendantIds = selectedOrgId ? collectOrgDescendantIds(orgNodes, selectedOrgId) : null;
+  const filteredUsers = orgDescendantIds
+    ? users.filter((user) => user.org_node_id && orgDescendantIds.has(String(user.org_node_id)))
+    : users;
+  const selectedUser =
+    filteredUsers.find((user) => (user.id || user.user_id) === selectedUserId)
+    || users.find((user) => (user.id || user.user_id) === selectedUserId)
+    || filteredUsers[0]
+    || null;
+
+  useEffect(() => {
+    if (selectedUser && selectedUserId !== (selectedUser.id || selectedUser.user_id || null)) {
+      setSelectedUserId(String(selectedUser.id || selectedUser.user_id || ""));
+    }
+  }, [selectedUser, selectedUserId]);
+
+  const reloadDirectory = () => {
+    orgNodesState.reload();
+    rolesState.reload();
+    usersState.reload();
+  };
+
+  const saveUser = async () => {
+    const values = await createForm.validateFields();
+    const payload = buildUserCreatePayload(values);
+    const created = await api.request<AnyRecord>("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const roleNames = roles
+      .filter((role) => payload.role_ids.includes(String(role.id)))
+      .map((role) => String(role.name));
+    setSessionUsers((current) => mergeDirectoryUsers(current, [{
+      id: String(created.id),
+      name: String(created.name),
+      external_ref: String(created.external_ref),
+      org_node_id: created.org_node_id ? String(created.org_node_id) : null,
+      org_path: pathForOrgNode(orgNodes, created.org_node_id),
+      role_ids: payload.role_ids,
+      role_names: roleNames,
+      status: String(created.status || "active"),
+    }], orgNodes, roles));
+    setCreateOpen(false);
+    createForm.resetFields();
+    modal.info({
+      title: t("users.runtimeKey"),
+      content: <Typography.Text copyable>{String(created.api_key)}</Typography.Text>,
+    });
+  };
+
+  const resetRuntimeKey = async () => {
+    if (!selectedUser?.id && !selectedUser?.user_id) return;
+    const response = await api.request<AnyRecord>(
+      `/admin/users/${selectedUser.id || selectedUser.user_id}/reset-key`,
+      { method: "POST" },
+    );
+    modal.info({
+      title: t("users.latestKey"),
+      content: <Typography.Text copyable>{String(response.api_key)}</Typography.Text>,
+    });
+  };
+
+  const previewImport = async (mode: "preview" | "execute") => {
+    const values = await importForm.validateFields();
+    if (!importFile) {
+      messageApi.error(t("users.importReady"));
+      return;
+    }
+    const fileText = await importFile.text();
+    const rows = parseDirectoryRowsFromText(fileText);
+    const payload = buildDirectoryImportPayload(rows, values.delimiter);
+    setPreviewLoading(true);
+    try {
+      const endpoint = mode === "execute" ? "/admin/users/imports/excel/execute" : "/admin/users/imports/excel/preview";
+      const result = await api.request<AnyRecord>(endpoint, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setImportPreview(result);
+      if (mode === "execute") {
+        const executedUsers = Array.isArray(result.users)
+          ? result.users.map((user) => ({
+              id: user.user_id ? String(user.user_id) : undefined,
+              user_id: user.user_id ? String(user.user_id) : undefined,
+              name: String(user.user_name || ""),
+              external_ref: String(user.external_ref || ""),
+              org_node_id: orgNodeIdForPath(orgNodes, user.org_path),
+              org_path: user.org_path ? String(user.org_path) : null,
+              role_ids: roleIdsForNames(roles, Array.isArray(user.roles) ? user.roles.map(String) : []),
+              role_names: Array.isArray(user.roles) ? user.roles.map(String) : [],
+              status: "active",
+            }))
+          : [];
+        setSessionUsers((current) => mergeDirectoryUsers(current, executedUsers, orgNodes, roles));
+        reloadDirectory();
+        messageApi.success(t("common.saved"));
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  return (
+    <section className="directory-workspace">
+      <div className="directory-tree-pane panel">
+        <div className="panel-head">
+          <Typography.Title level={4}>{t("users.organizationTree")}</Typography.Title>
+          <Button onClick={() => setSelectedOrgId(null)}>{t("common.refresh")}</Button>
+        </div>
+        <div className="directory-tree-body">
+          <Tree
+            blockNode
+            treeData={orgTree}
+            selectedKeys={selectedOrgId ? [selectedOrgId] : []}
+            onSelect={(keys) => setSelectedOrgId(String(keys[0] || ""))}
+          />
+        </div>
+      </div>
+      <div className="directory-users-pane">
+        <div className="directory-toolbar">
+          <div className="directory-toolbar-copy">
+            <Typography.Title level={4}>{t("users.directory")}</Typography.Title>
+            <Typography.Paragraph>{t("users.rootMapped")}</Typography.Paragraph>
+          </div>
+          <Space wrap>
+            <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
+              {t("users.new")}
+            </Button>
+            <Button icon={<InboxOutlined />} onClick={() => setImportOpen(true)}>
+              {t("users.importExcel")}
+            </Button>
+          </Space>
+        </div>
+        <div className="directory-main">
+          <section className="panel directory-list-panel">
+            <div className="panel-head">
+              <Typography.Title level={4}>{t("users.directory")}</Typography.Title>
+              <Tag>{t("common.rows", { count: filteredUsers.length })}</Tag>
+            </div>
+            {usersState.error ? <Alert type="warning" message={String(usersState.error)} /> : null}
+            <Table
+              size="small"
+              rowKey={(row) => row.id || row.user_id || row.external_ref}
+              dataSource={filteredUsers}
+              pagination={{ pageSize: 7 }}
+              onRow={(row) => ({
+                onClick: () => setSelectedUserId(String(row.id || row.user_id || row.external_ref)),
+              })}
+              columns={[
+                { title: columnLabel("name", t), dataIndex: "name", key: "name" },
+                { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
+                { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+                {
+                  title: columnLabel("role_names", t),
+                  dataIndex: "role_names",
+                  key: "role_names",
+                  render: (value: string[]) => (
+                    <Space size={[6, 6]} wrap>
+                      {(value || []).map((role) => <Tag key={role}>{role}</Tag>)}
+                    </Space>
+                  ),
+                },
+              ]}
+            />
+          </section>
+          <section className="panel directory-detail-panel">
+            <div className="panel-head">
+              <Typography.Title level={4}>{t("users.details")}</Typography.Title>
+              <Space>
+                <Tag color="cyan">{selectedUser?.status || "active"}</Tag>
+                <Button
+                  icon={<SyncOutlined />}
+                  disabled={!selectedUser}
+                  onClick={() => void resetRuntimeKey()}
+                >
+                  {t("users.resetKey")}
+                </Button>
+              </Space>
+            </div>
+            <div className="directory-detail-body">
+              {selectedUser ? (
+                <>
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label={t("field.name")}>{selectedUser.name}</Descriptions.Item>
+                    <Descriptions.Item label={t("field.externalRef")}>{selectedUser.external_ref}</Descriptions.Item>
+                    <Descriptions.Item label={t("field.orgNode")}>{selectedUser.org_path || "-"}</Descriptions.Item>
+                    <Descriptions.Item label={t("field.roles")}>
+                      <Space size={[6, 6]} wrap>
+                        {selectedUser.role_names.length
+                          ? selectedUser.role_names.map((role) => <Tag key={role}>{role}</Tag>)
+                          : <Typography.Text type="secondary">-</Typography.Text>}
+                      </Space>
+                    </Descriptions.Item>
+                  </Descriptions>
+                  <div className="directory-runtime-panel">
+                    <Typography.Text className="directory-runtime-label">{t("users.runtimeKey")}</Typography.Text>
+                    <Typography.Paragraph>{t("users.generateKey")}</Typography.Paragraph>
+                  </div>
+                </>
+              ) : (
+                <Empty description={t("users.emptySelection")} />
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <Drawer
+        title={t("common.createTitle", { title: t("nav.users") })}
+        open={createOpen}
+        width={460}
+        onClose={() => setCreateOpen(false)}
+        extra={<Button type="primary" onClick={() => void saveUser()}>{t("common.save")}</Button>}
+      >
+        <Form form={createForm} layout="vertical" initialValues={{ roleIds: [] }}>
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="externalRef" label={t("field.externalRef")} rules={[{ required: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="orgNodeId" label={t("field.orgNode")}>
+            <Select
+              allowClear
+              showSearch
+              placeholder={t("placeholder.orgNodeSearch")}
+              options={orgNodes.map((node) => ({
+                value: node.id,
+                label: `${String(node.path || "") || "Root"}${node.path ? "" : " (Root)"}`,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item name="roleIds" label={t("field.roles")}>
+            <Select
+              mode="multiple"
+              placeholder={t("placeholder.roleSearch")}
+              options={roles.map((role) => ({ value: role.id, label: role.name }))}
+            />
+          </Form.Item>
+        </Form>
+      </Drawer>
+
+      <Modal
+        title={t("users.importTitle")}
+        open={importOpen}
+        onCancel={() => setImportOpen(false)}
+        footer={[
+          <Button key="preview" loading={previewLoading} onClick={() => void previewImport("preview")}>
+            {t("users.previewImport")}
+          </Button>,
+          <Button key="execute" type="primary" loading={previewLoading} onClick={() => void previewImport("execute")}>
+            {t("users.executeImport")}
+          </Button>,
+        ]}
+        width={880}
+      >
+        <div className="directory-import-layout">
+          <div className="directory-import-uploader">
+            <Typography.Text strong>{t("users.uploadFile")}</Typography.Text>
+            <Typography.Paragraph>{t("users.importHint")}</Typography.Paragraph>
+            <Form form={importForm} layout="vertical" initialValues={{ delimiter: "/" }}>
+              <Form.Item name="delimiter" label={t("field.orgDelimiter")}>
+                <Input aria-label={t("field.orgDelimiter")} />
+              </Form.Item>
+            </Form>
+            <Upload.Dragger
+              multiple={false}
+              beforeUpload={(file) => {
+                setImportFile(file);
+                setImportFileName(file.name);
+                return false;
+              }}
+              showUploadList={Boolean(importFile)}
+              onRemove={() => {
+                setImportFile(null);
+                setImportFileName("");
+                setImportPreview(null);
+              }}
+            >
+              <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+              <p className="ant-upload-text">{t("users.dragFileHere")}</p>
+              <p className="ant-upload-hint">{importFileName || t("users.importReady")}</p>
+            </Upload.Dragger>
+          </div>
+          <div className="directory-import-preview panel">
+            <div className="panel-head">
+              <Typography.Title level={4}>{t("users.previewSummary")}</Typography.Title>
+              <Tag>{importFileName || t("users.uploadFile")}</Tag>
+            </div>
+            <div className="directory-import-preview-body">
+              {importPreview ? (
+                <>
+                  <div className="directory-preview-stats">
+                    <Statistic title={t("users.usersCreated")} value={Number(importPreview.summary?.created_users ?? importPreview.summary?.create_count ?? 0)} />
+                    <Statistic title={t("users.usersUpdated")} value={Number(importPreview.summary?.updated_users ?? importPreview.summary?.update_count ?? 0)} />
+                    <Statistic title={t("users.keysCreated")} value={Number(importPreview.summary?.runtime_keys_created ?? 0)} />
+                  </div>
+                  <Descriptions bordered column={1} size="small">
+                    <Descriptions.Item label={t("users.orgNodesToCreate")}>
+                      {Array.isArray(importPreview.org_nodes_to_create || importPreview.org_nodes_created)
+                        ? (importPreview.org_nodes_to_create || importPreview.org_nodes_created).join(", ") || "-"
+                        : "-"}
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("users.rolesToCreate")}>
+                      {Array.isArray(importPreview.roles_to_create || importPreview.roles_created)
+                        ? (importPreview.roles_to_create || importPreview.roles_created).join(", ") || "-"
+                        : "-"}
+                    </Descriptions.Item>
+                  </Descriptions>
+                  <Table
+                    size="small"
+                    rowKey={(row) => `${row.external_ref}:${row.user_name}`}
+                    pagination={false}
+                    dataSource={Array.isArray(importPreview.users) ? importPreview.users : []}
+                    columns={[
+                      { title: columnLabel("name", t), dataIndex: "user_name", key: "user_name" },
+                      { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
+                      { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+                      {
+                        title: columnLabel("role_names", t),
+                        dataIndex: "roles",
+                        key: "roles",
+                        render: (value: string[] | string) =>
+                          Array.isArray(value) ? value.join(", ") : String(value || "-"),
+                      },
+                    ]}
+                  />
+                </>
+              ) : (
+                <Empty description={t("users.importReady")} />
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+    </section>
+  );
+}
+
+function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Dedicated role workspace separate from user and org browsing concerns. */
+
+  const { t } = useI18n();
+  const state = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
+  const activeRoles = (state.data || []).filter((role) => role.status === "active").length;
+
+  return (
+    <section className="roles-workspace">
+      <div className="stats">
+        <Statistic title={t("roles.activeCount")} value={activeRoles} />
+        <Statistic title={t("common.rows", { count: state.data?.length || 0 })} value={state.data?.length || 0} />
+      </div>
+      <section className="panel">
+        <div className="panel-head">
+          <Typography.Title level={4}>{t("roles.directory")}</Typography.Title>
+          <Typography.Text type="secondary">{t("roles.summary")}</Typography.Text>
+        </div>
+        {state.error ? <Alert type="error" message={state.error} /> : (
+          <Table
+            size="small"
+            rowKey="id"
+            loading={state.loading}
+            dataSource={state.data || []}
+            pagination={false}
+            columns={[
+              { title: columnLabel("name", t), dataIndex: "name", key: "name" },
+              {
+                title: columnLabel("description", t),
+                dataIndex: "description",
+                key: "description",
+                render: (value: string | null) => value || t("roles.emptyDescription"),
+              },
+              {
+                title: columnLabel("status", t),
+                dataIndex: "status",
+                key: "status",
+                render: (value: string) => <Tag>{optionLabel(value, t)}</Tag>,
+              },
+            ]}
+          />
+        )}
+      </section>
+    </section>
   );
 }
 
@@ -2292,7 +2886,8 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
   };
   return (
     <Space direction="vertical" size={12} className="full">
-      <Button type="primary" onClick={() => setOpen(true)}>{t("common.createKey")}</Button>
+      <Alert type="info" showIcon message={t("apiKey.serviceTitle")} description={t("apiKey.serviceDescription")} />
+      <Button type="primary" onClick={() => setOpen(true)}>{t("apiKey.serviceCreate")}</Button>
       <DataPanel
         title={t("nav.apiKeys")}
         state={state}
@@ -2316,7 +2911,7 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
       />
       <RecordDetails record={selected} title={t("nav.apiKeys")} onClose={() => setSelected(null)} />
       <Drawer title={t("common.createTitle", { title: t("nav.apiKeys") })} open={open} onClose={() => setOpen(false)} extra={<Button type="primary" onClick={create}>{t("common.save")}</Button>}>
-        <Form form={form} layout="vertical" initialValues={{ scopes: ["runtime"] }}>
+        <Form form={form} layout="vertical" initialValues={{ scopes: ["admin"] }}>
           <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
           <Form.Item name="scopes" label={t("field.scopes")}><Select mode="tags" /></Form.Item>
         </Form>
@@ -2611,6 +3206,117 @@ function DataPanel({
       )}
     </section>
   );
+}
+
+function mergeDirectoryUsers(
+  baseUsers: DirectoryUserRecord[],
+  nextUsers: DirectoryUserRecord[],
+  orgNodes: AnyRecord[],
+  roles: AnyRecord[],
+) {
+  /** Merge server and session users while hydrating org paths and role names where possible. */
+
+  const roleNameById = new Map(roles.map((role) => [String(role.id), String(role.name)]));
+  const orgPathById = new Map(orgNodes.map((node) => [String(node.id), String(node.path || "")]));
+  const merged = new Map<string, DirectoryUserRecord>();
+
+  for (const user of [...baseUsers, ...nextUsers]) {
+    const key = String(user.external_ref || user.id || user.user_id || "");
+    if (!key) continue;
+    const roleIds = Array.from(new Set((user.role_ids || []).map(String)));
+    const roleNames = user.role_names?.length
+      ? user.role_names.map(String)
+      : roleIds.map((roleId) => roleNameById.get(roleId)).filter(Boolean) as string[];
+    merged.set(key, {
+      ...user,
+      role_ids: roleIds,
+      role_names: roleNames,
+      org_path: user.org_path ?? (user.org_node_id ? orgPathById.get(String(user.org_node_id)) || "" : ""),
+      status: String(user.status || "active"),
+    });
+  }
+
+  return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function buildOrgTree(orgNodes: AnyRecord[]): OrgTreeNode[] {
+  /** Convert flat org-node rows into Ant Tree-compatible records. */
+
+  const nodes = new Map<string, OrgTreeNode>();
+  const roots: OrgTreeNode[] = [];
+  for (const orgNode of orgNodes) {
+    nodes.set(String(orgNode.id), {
+      key: String(orgNode.id),
+      title: String(orgNode.name || orgNode.path || "Root"),
+      children: [],
+    });
+  }
+  for (const orgNode of orgNodes) {
+    const node = nodes.get(String(orgNode.id));
+    if (!node) continue;
+    const parentId = orgNode.parent_id ? String(orgNode.parent_id) : "";
+    if (parentId && nodes.has(parentId)) {
+      nodes.get(parentId)?.children?.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
+function collectOrgDescendantIds(orgNodes: AnyRecord[], orgNodeId: string) {
+  /** Collect one org node and all descendant ids for user filtering. */
+
+  const childrenByParent = new Map<string, string[]>();
+  for (const orgNode of orgNodes) {
+    const parentId = orgNode.parent_id ? String(orgNode.parent_id) : "";
+    if (!childrenByParent.has(parentId)) {
+      childrenByParent.set(parentId, []);
+    }
+    childrenByParent.get(parentId)?.push(String(orgNode.id));
+  }
+
+  const pending = [orgNodeId];
+  const visited = new Set<string>();
+  while (pending.length) {
+    const current = pending.pop();
+    if (!current || visited.has(current)) continue;
+    visited.add(current);
+    for (const childId of childrenByParent.get(current) || []) {
+      pending.push(childId);
+    }
+  }
+  return visited;
+}
+
+function pathForOrgNode(orgNodes: AnyRecord[], orgNodeId: unknown) {
+  /** Resolve an org-node id to its display path. */
+
+  const key = orgNodeId ? String(orgNodeId) : "";
+  if (!key) return "";
+  const match = orgNodes.find((node) => String(node.id) === key);
+  return match ? String(match.path || "") : "";
+}
+
+function orgNodeIdForPath(orgNodes: AnyRecord[], orgPath: unknown) {
+  /** Resolve an org path string back to a node id when available. */
+
+  const path = String(orgPath || "");
+  const match = orgNodes.find((node) => String(node.path || "") === path);
+  return match ? String(match.id) : null;
+}
+
+function roleIdsForNames(roles: AnyRecord[], roleNames: string[]) {
+  /** Convert display role names back into known role ids where possible. */
+
+  const ids: string[] = [];
+  for (const roleName of roleNames) {
+    const match = roles.find((role) => String(role.name) === roleName);
+    if (match) {
+      ids.push(String(match.id));
+    }
+  }
+  return ids;
 }
 
 function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsType<AnyRecord> {

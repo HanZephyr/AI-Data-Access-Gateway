@@ -182,6 +182,22 @@ class UserCreateRequest(BaseModel):
     role_ids: list[str] = []
 
 
+class RoleCreateRequest(BaseModel):
+    """Payload for creating a directory role."""
+
+    name: str
+    description: str | None = None
+    status: str = "active"
+
+
+class RoleUpdateRequest(BaseModel):
+    """Partial update payload for directory roles."""
+
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
 class UserExcelImportRequest(BaseModel):
     """Structured row payload used by preview/execute import endpoints."""
 
@@ -808,6 +824,16 @@ def create_user(
     }
 
 
+@router.get("/users")
+def list_users(
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, object]]:
+    """List directory users enriched with organization, role, and runtime-key metadata."""
+
+    return [user.to_dict() for user in DirectoryService(session).list_users()]
+
+
 @router.post("/users/{user_id}/reset-key")
 def reset_user_key(
     user_id: str,
@@ -889,6 +915,37 @@ def list_roles(
 
     roles = session.execute(select(Role).order_by(Role.name)).scalars()
     return [_serialize_role(role) for role in roles]
+
+
+@router.post("/roles", status_code=status.HTTP_201_CREATED)
+def create_role(
+    payload: RoleCreateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Create a directory role for user assignment and policy targeting."""
+
+    role = Role(**payload.model_dump())
+    session.add(role)
+    session.commit()
+    session.refresh(role)
+    return _serialize_role(role)
+
+
+@router.patch("/roles/{role_id}")
+def update_role(
+    role_id: str,
+    payload: RoleUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Update editable directory role fields used by the admin console."""
+
+    role = _get_by_id(session, Role, role_id, "Role not found")
+    _apply_updates(role, payload.model_dump(exclude_unset=True))
+    session.commit()
+    session.refresh(role)
+    return _serialize_role(role)
 
 
 @router.get("/org-nodes")

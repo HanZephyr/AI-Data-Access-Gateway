@@ -1,0 +1,156 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+type MockResponse = {
+  ok: boolean;
+  status?: number;
+  statusText?: string;
+  json?: unknown;
+  text?: string;
+};
+
+const routeMap: Record<string, MockResponse> = {
+  "/admin/datasources": { ok: true, json: [] },
+  "/admin/resources": { ok: true, json: [] },
+  "/admin/audit-events": { ok: true, json: [] },
+  "/admin/org-nodes": {
+    ok: true,
+    json: [
+      { id: "org_company", name: "Company", parent_id: null, path: "Company", depth: 0, status: "active" },
+      { id: "org_finance", name: "Finance", parent_id: "org_company", path: "Company/Finance", depth: 1, status: "active" },
+    ],
+  },
+  "/admin/roles": {
+    ok: true,
+    json: [
+      { id: "role_analyst", name: "Analyst", description: null, status: "active" },
+      { id: "role_reviewer", name: "Reviewer", description: null, status: "active" },
+    ],
+  },
+  "/admin/users": {
+    ok: true,
+    json: [
+      {
+        id: "user_1",
+        name: "Alice",
+        external_ref: "u001",
+        org_node_id: "org_finance",
+        org_path: "Company/Finance",
+        role_ids: ["role_analyst"],
+        role_names: ["Analyst"],
+        status: "active",
+      },
+    ],
+  },
+  "/admin/api-keys": { ok: true, json: [] },
+};
+
+function createStorage() {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => {
+      store.clear();
+    },
+  };
+}
+
+function createMatchMedia() {
+  return (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => undefined,
+    removeListener: () => undefined,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+  });
+}
+
+async function mountConsoleApp(initialPage?: string) {
+  vi.resetModules();
+  document.body.innerHTML = '<div id="root"></div>';
+  const storage = createStorage();
+  vi.stubGlobal("localStorage", storage);
+  vi.stubGlobal("matchMedia", createMatchMedia());
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    value: createMatchMedia(),
+  });
+  localStorage.setItem("adg.language", "en-US");
+  localStorage.setItem("adg.apiKey", "adg_admin");
+  if (initialPage) {
+    localStorage.setItem("adg.page", initialPage);
+  }
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const match = routeMap[url];
+    if (!match) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        json: async () => ({ detail: "Not Found" }),
+        text: async () => "Not Found",
+      } as Response;
+    }
+    return {
+      ok: match.ok,
+      status: match.status ?? 200,
+      statusText: match.statusText ?? "OK",
+      json: async () => match.json,
+      text: async () => match.text ?? JSON.stringify(match.json ?? {}),
+    } as Response;
+  });
+  await import("./main");
+}
+
+beforeEach(() => {
+  vi.unstubAllGlobals();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  document.body.innerHTML = "";
+});
+
+describe("Users console page", () => {
+  it("shows a users navigation item and no standalone organization page", async () => {
+    await mountConsoleApp("users");
+
+    expect((await screen.findAllByText("Users")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Organization")).not.toBeInTheDocument();
+  }, 10000);
+
+  it("opens the excel import modal with click and drag upload affordances", async () => {
+    await mountConsoleApp("users");
+    fireEvent.click(await screen.findByText("Import Excel"));
+
+    expect((await screen.findAllByText("Upload file")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Drag file here")).toBeInTheDocument();
+    expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
+  });
+
+  it("renders the org tree and user detail workspace on the users page", async () => {
+    await mountConsoleApp("users");
+
+    expect(await screen.findByText("Organization tree")).toBeInTheDocument();
+    expect(screen.getAllByText("User directory").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByText("Runtime key")).toBeInTheDocument();
+    });
+  });
+});

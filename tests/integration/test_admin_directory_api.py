@@ -9,7 +9,7 @@ from adg.app.main import create_app
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
-from adg.control_plane.models.directory import OrgNode, Role, User
+from adg.control_plane.models.directory import OrgNode, Role, User, UserRole
 from adg.control_plane.services.api_key_service import create_api_key as create_api_key_record
 from adg.shared.security import hash_api_key, verify_api_key
 
@@ -55,6 +55,7 @@ def build_directory_app() -> tuple[TestClient, sessionmaker[Session]]:
                     org_node_id="org_finance",
                     status="active",
                 ),
+                UserRole(user_id="user_1", role_id="role_finance"),
             ]
         )
         create_api_key_record(
@@ -139,6 +140,27 @@ def test_admin_can_reset_user_key() -> None:
         assert verify_api_key(body["api_key"], active_keys[0].key_hash)
 
 
+def test_admin_can_list_users_with_org_path_roles_and_runtime_key_status() -> None:
+    client, _ = build_directory_app()
+
+    response = client.get("/admin/users", headers=admin_auth())
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "user_1",
+            "name": "Existing User",
+            "external_ref": "u-existing",
+            "org_node_id": "org_finance",
+            "org_path": "Company/Finance",
+            "role_ids": ["role_finance"],
+            "role_names": ["Finance"],
+            "status": "active",
+            "runtime_key_status": "active",
+        }
+    ]
+
+
 def test_admin_can_list_roles_and_org_nodes() -> None:
     client, _ = build_directory_app()
 
@@ -178,6 +200,66 @@ def test_admin_can_list_roles_and_org_nodes() -> None:
             "parent_id": "org_company",
             "path": "Company/Finance",
             "depth": 1,
+            "status": "active",
+        },
+    ]
+
+
+def test_admin_can_create_and_update_roles() -> None:
+    client, _ = build_directory_app()
+
+    create_response = client.post(
+        "/admin/roles",
+        json={
+            "name": "Analyst",
+            "description": "Can review finance datasets",
+        },
+        headers=admin_auth(),
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["name"] == "Analyst"
+    assert created["description"] == "Can review finance datasets"
+    assert created["status"] == "active"
+
+    update_response = client.patch(
+        f"/admin/roles/{created['id']}",
+        json={
+            "description": "Can review finance and audit datasets",
+            "status": "disabled",
+        },
+        headers=admin_auth(),
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json() == {
+        "id": created["id"],
+        "name": "Analyst",
+        "description": "Can review finance and audit datasets",
+        "status": "disabled",
+    }
+
+    list_response = client.get("/admin/roles", headers=admin_auth())
+
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {
+            "id": "role_admin",
+            "name": "Admin",
+            "description": None,
+            "status": "active",
+        },
+        {
+            "id": created["id"],
+            "name": "Analyst",
+            "description": "Can review finance and audit datasets",
+            "status": "disabled",
+        },
+        {
+            "id": "role_finance",
+            "name": "Finance",
+            "description": None,
             "status": "active",
         },
     ]
