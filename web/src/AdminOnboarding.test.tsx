@@ -3,6 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { Button } from "antd";
 
 import { AdminOnboarding } from "./AdminOnboarding";
 
@@ -54,6 +55,31 @@ describe("AdminOnboarding", () => {
     expect(screen.getByText("管理员登录")).toBeInTheDocument();
     expect(screen.getByText("初始化管理员 API Key")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "登录控制台" })).toBeDisabled();
+  });
+
+  it("renders a language switcher slot on the login page", () => {
+    render(
+      <AdminOnboarding
+        apiKey=""
+        authError={null}
+        validating={false}
+        onApiKeyChange={() => undefined}
+        onContinue={() => undefined}
+        languageControl={<Button aria-label="切换界面语言">简体中文</Button>}
+        copy={{
+          title: "管理员登录",
+          description: "请输入管理员 API Key 进入控制台。",
+          inputLabel: "管理员 API Key",
+          inputPlaceholder: "输入 init-admin 输出的密钥",
+          continueLabel: "登录控制台",
+          methodsTitle: "初始化管理员 API Key",
+          methods: [],
+          authErrorTitle: "认证失败",
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText("切换界面语言")).toBeInTheDocument();
   });
 
   it("shows the docker initialization method after expanding the help panel", () => {

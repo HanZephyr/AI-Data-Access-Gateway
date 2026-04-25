@@ -229,11 +229,33 @@ body {
   width: 132px;
 }
 
+.language-switcher {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-switcher-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--mist-300);
+  background: var(--mist-50);
+  color: var(--ink-700);
+  box-shadow: var(--shadow-1);
+}
+
+.language-switcher .ant-select {
+  width: 132px;
+}
+
 .mobile-page-select {
   display: none;
 }
 
-.language-select .ant-select-selector {
+.language-switcher .ant-select-selector {
   background: var(--mist-50) !important;
   font-weight: 700;
 }
@@ -285,6 +307,15 @@ body {
   border: 1px solid rgba(18, 118, 111, 0.14);
   background: rgba(255, 255, 255, 0.96);
   box-shadow: var(--shadow-2);
+}
+
+.admin-login-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-login-language .ant-select {
+  width: 156px;
 }
 
 .admin-login-mark,
@@ -757,7 +788,13 @@ body {
     width: 100%;
   }
 
-  .language-select {
+  .language-select,
+  .language-switcher .ant-select,
+  .admin-login-language .ant-select {
+    width: 100%;
+  }
+
+  .language-switcher {
     width: 100%;
   }
 

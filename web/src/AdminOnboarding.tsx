@@ -30,6 +30,7 @@ export function AdminOnboarding({
   validating,
   onApiKeyChange,
   onContinue,
+  languageControl,
   copy,
 }: {
   apiKey: string;
@@ -37,6 +38,7 @@ export function AdminOnboarding({
   validating: boolean;
   onApiKeyChange: (value: string) => void;
   onContinue: () => void;
+  languageControl?: React.ReactNode;
   copy: AdminOnboardingCopy;
 }) {
   /** Guide operators through bootstrap before the authenticated console becomes available. */
@@ -46,6 +48,7 @@ export function AdminOnboarding({
   return (
     <section className="admin-login-page">
       <div className="admin-login-card">
+        {languageControl ? <div className="admin-login-toolbar">{languageControl}</div> : null}
         <div className="admin-login-header">
           <Typography.Text className="admin-login-mark">ADG</Typography.Text>
           <Typography.Title level={1}>{copy.title}</Typography.Title>

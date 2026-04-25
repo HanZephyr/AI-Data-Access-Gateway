@@ -61,6 +61,8 @@ import { validateAdminApiKey } from "./adminAuth";
 import { ApiKeyField } from "./ApiKeyField";
 import { findTreePathByKey } from "./catalogNavigation";
 import { CompactActionButton } from "./CompactActionButton";
+import { languageOptions, resolveInitialLanguage, type Language } from "./language";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 import "./styles.css";
 
 type PageKey =
@@ -83,7 +85,6 @@ type CatalogJumpTarget = {
   /** Tree node key that should be focused after navigating into the datasource workspace. */
   key: string;
 };
-type Language = "zh-CN" | "zh-TW" | "en-US";
 type TranslationParams = Record<string, string | number>;
 
 const translations = {
@@ -94,6 +95,7 @@ const translations = {
     "topbar.showApiKey": "Show API key",
     "topbar.hideApiKey": "Hide API key",
     "topbar.language": "Language",
+    "topbar.switchLanguage": "Switch page language",
     "nav.overview": "Overview",
     "nav.datasources": "Data Sources",
     "nav.tags": "Tags",
@@ -263,6 +265,7 @@ const translations = {
     "topbar.showApiKey": "显示 API 密钥",
     "topbar.hideApiKey": "隐藏 API 密钥",
     "topbar.language": "语言",
+    "topbar.switchLanguage": "切换页面语言",
     "nav.overview": "概览",
     "nav.datasources": "数据源",
     "nav.tags": "标签",
@@ -430,6 +433,7 @@ const translations = {
     "topbar.showApiKey": "顯示 API 金鑰",
     "topbar.hideApiKey": "隱藏 API 金鑰",
     "topbar.language": "語言",
+    "topbar.switchLanguage": "切換頁面語言",
     "nav.overview": "總覽",
     "nav.datasources": "資料來源",
     "nav.tags": "標籤",
@@ -615,12 +619,6 @@ type FieldConfig = {
   loading?: boolean;
 };
 
-const languages: Array<{ value: Language; label: string }> = [
-  { value: "zh-CN", label: "简体中文" },
-  { value: "zh-TW", label: "繁體中文" },
-  { value: "en-US", label: "English" }
-];
-
 const antdLocales: Record<Language, typeof zhCN> = {
   "zh-CN": zhCN,
   "zh-TW": zhTW,
@@ -639,10 +637,14 @@ const pages: Array<{ key: PageKey; labelKey: TranslationKey; icon: React.ReactNo
 ];
 
 function getStoredLanguage(): Language {
-  /** Return the persisted language, falling back to Simplified Chinese. */
+  /** Prefer persisted language, then a supported browser language, otherwise English. */
 
   const stored = localStorage.getItem("adg.language");
-  return languages.some((item) => item.value === stored) ? (stored as Language) : "zh-CN";
+  const browserLanguages =
+    typeof navigator === "undefined"
+      ? []
+      : [...(navigator.languages || []), navigator.language].filter(Boolean);
+  return resolveInitialLanguage(stored, browserLanguages);
 }
 
 function translate(language: Language, key: TranslationKey, params: TranslationParams = {}) {
@@ -831,6 +833,15 @@ function ConsoleApp() {
         validating={api.validating}
         onApiKeyChange={setDraftApiKey}
         onContinue={() => void api.validateAndSaveApiKey(draftApiKey)}
+        languageControl={
+          <LanguageSwitcher
+            className="admin-login-language"
+            label={t("topbar.switchLanguage")}
+            value={language}
+            options={languageOptions}
+            onChange={setLanguage}
+          />
+        }
         copy={{
           title: t("onboarding.title"),
           description: t("onboarding.description"),
@@ -896,11 +907,11 @@ function ConsoleApp() {
             onChange={(key) => setPage(key as PageKey)}
           />
           <div className="topbar-actions">
-            <Select
+            <LanguageSwitcher
               className="language-select"
-              aria-label={t("topbar.language")}
+              label={t("topbar.switchLanguage")}
               value={language}
-              options={languages}
+              options={languageOptions}
               onChange={setLanguage}
             />
             <ApiKeyField
