@@ -38,7 +38,6 @@ def identity() -> IdentityContext:
     return IdentityContext(
         user_id="user-1",
         roles=["analyst"],
-        groups=["finance"],
     )
 
 
@@ -186,7 +185,9 @@ def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
     assert decision.reason == "denied_by_policy"
 
 
-def test_tag_policy_matches_attached_resource_tag(db_session: Session) -> None:
+def test_legacy_group_tag_policy_does_not_match_runtime_identity(
+    db_session: Session,
+) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     tag = Tag(id="tag_pii", name="pii", category="classification")
     db_session.add(tag)
@@ -209,7 +210,7 @@ def test_tag_policy_matches_attached_resource_tag(db_session: Session) -> None:
     )
 
     assert decision.allowed is False
-    assert decision.reason == "denied_by_policy"
+    assert decision.reason == "no_matching_allow"
 
 
 def test_field_policy_can_narrow_resource_access(db_session: Session) -> None:

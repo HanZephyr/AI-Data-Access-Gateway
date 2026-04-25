@@ -186,6 +186,4 @@ class RuntimePolicyService:
             return policy.subject_id == identity.user_id
         if policy.subject_type == "role":
             return policy.subject_id in identity.roles
-        if policy.subject_type == "group":
-            return policy.subject_id in identity.groups
         return False

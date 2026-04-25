@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -416,6 +417,54 @@ def test_admin_policy_and_masking_reject_unknown_resource() -> None:
         headers=auth(),
     )
     assert masking.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        (
+            "/admin/resource-policies",
+            {
+                "subject_type": "group",
+                "subject_id": "finance",
+                "effect": "allow",
+                "action": "read",
+                "resource_id": "res_customers",
+            },
+        ),
+        (
+            "/admin/field-policies",
+            {
+                "subject_type": "group",
+                "subject_id": "finance",
+                "effect": "deny",
+                "resource_id": "res_customers",
+                "field_name": "email",
+                "action": "read",
+            },
+        ),
+        (
+            "/admin/masking-policies",
+            {
+                "resource_id": "res_customers",
+                "field_name": "email",
+                "strategy": "fixed",
+                "config": {"replacement": "REDACTED"},
+                "subject_type": "group",
+                "subject_id": "finance",
+            },
+        ),
+    ],
+)
+def test_admin_policy_subjects_reject_group_type(
+    path: str,
+    payload: dict[str, object],
+) -> None:
+    client = build_console_app()
+
+    response = client.post(path, json=payload, headers=auth())
+
+    assert response.status_code == 422
 
 
 def test_admin_api_keys_audit_and_mcp_setup() -> None:

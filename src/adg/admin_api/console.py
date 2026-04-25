@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -26,6 +26,8 @@ from adg.control_plane.services.api_key_service import create_api_key as create_
 from adg.mcp_api.runtime_tools import serialize_runtime_tool_definitions
 
 router = APIRouter(prefix="/admin", tags=["admin-console"])
+
+PolicySubjectType = Literal["all", "user", "role"]
 
 
 class TagRequest(BaseModel):
@@ -77,7 +79,7 @@ class DatasourceTagRequest(BaseModel):
 class ResourcePolicyRequest(BaseModel):
     """Payload for creating a resource-level policy."""
 
-    subject_type: str
+    subject_type: PolicySubjectType
     subject_id: str
     effect: str
     action: str
@@ -90,7 +92,7 @@ class ResourcePolicyRequest(BaseModel):
 class ResourcePolicyUpdateRequest(BaseModel):
     """Partial update payload for resource-level policies."""
 
-    subject_type: str | None = None
+    subject_type: PolicySubjectType | None = None
     subject_id: str | None = None
     effect: str | None = None
     action: str | None = None
@@ -103,7 +105,7 @@ class ResourcePolicyUpdateRequest(BaseModel):
 class FieldPolicyRequest(BaseModel):
     """Payload for creating a field-level policy."""
 
-    subject_type: str
+    subject_type: PolicySubjectType
     subject_id: str
     effect: str
     resource_id: str
@@ -116,7 +118,7 @@ class FieldPolicyRequest(BaseModel):
 class FieldPolicyUpdateRequest(BaseModel):
     """Partial update payload for field-level policies."""
 
-    subject_type: str | None = None
+    subject_type: PolicySubjectType | None = None
     subject_id: str | None = None
     effect: str | None = None
     resource_id: str | None = None
@@ -133,7 +135,7 @@ class MaskingPolicyRequest(BaseModel):
     field_name: str
     strategy: str
     config: dict[str, object] = {}
-    subject_type: str | None = None
+    subject_type: PolicySubjectType | None = None
     subject_id: str | None = None
     status: str = "active"
 
@@ -145,7 +147,7 @@ class MaskingPolicyUpdateRequest(BaseModel):
     field_name: str | None = None
     strategy: str | None = None
     config: dict[str, object] | None = None
-    subject_type: str | None = None
+    subject_type: PolicySubjectType | None = None
     subject_id: str | None = None
     status: str | None = None
 

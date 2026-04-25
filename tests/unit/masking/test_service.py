@@ -3,7 +3,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.orm import Session
 
+from adg.connectors.base import QueryResult
+from adg.control_plane.models.masking import MaskingPolicy
+from adg.control_plane.models.resource import Resource
 from adg.masking.service import MaskingService
+from adg.policy.runtime import IdentityContext
 from adg.shared.errors import ValidationError
 
 SECRET = "unit-test-secret-value"
@@ -76,3 +80,54 @@ def test_decrypt_rejects_expired_contexts(db_session: Session) -> None:
 
     with pytest.raises(ValidationError, match="Decrypt context expired"):
         service.decrypt_values(user_id="user-1", values=[marker])
+
+
+def test_group_scoped_masking_policy_does_not_match_runtime_identity(
+    db_session: Session,
+) -> None:
+    db_session.add(
+        Resource(
+            id="res_customers",
+            datasource_id="ds_1",
+            parent_id=None,
+            kind="relational_table",
+            name="customers",
+            path="warehouse.public.customers",
+            display_name="customers",
+            query_language="sql",
+            metadata_json="{}",
+        )
+    )
+    db_session.add(
+        MaskingPolicy(
+            resource_id="res_customers",
+            field_name="email",
+            strategy="fixed",
+            config_json='{"replacement":"REDACTED"}',
+            subject_type="group",
+            subject_id="finance",
+            status="active",
+        )
+    )
+    db_session.flush()
+
+    masked, masked_columns = MaskingService(
+        db_session,
+        secret_key=SECRET,
+    ).apply_to_result(
+        identity=IdentityContext(
+            user_id="user-1",
+            roles=["analyst"],
+            groups=["finance"],
+        ),
+        datasource_id="ds_1",
+        query_id="qry_1",
+        resources=[db_session.get(Resource, "res_customers")],
+        result=QueryResult(
+            columns=[{"name": "email", "data_type": "string"}],
+            rows=[{"email": "alice@example.com"}],
+        ),
+    )
+
+    assert masked.rows == [{"email": "alice@example.com"}]
+    assert masked_columns == []
