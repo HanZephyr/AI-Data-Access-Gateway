@@ -1,10 +1,10 @@
 FROM python:3.12-slim AS backend
 
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md alembic.ini ./
 COPY src ./src
 COPY examples ./examples
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e ".[all]"
 
 ENV ADG_CONTROL_PLANE_DATABASE_URL=sqlite:///./data/adg-control-plane.db
 EXPOSE 8000

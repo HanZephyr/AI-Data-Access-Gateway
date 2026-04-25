@@ -78,6 +78,13 @@ docker compose up --build
 docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db
 ```
 
+The production-style Compose stack starts:
+
+- backend API on `http://127.0.0.1:8000`
+- web console on `http://127.0.0.1:8080`
+
+The web container serves the built Vite bundle through Nginx and proxies `/admin`, `/mcp`, `/internal`, and `/healthz` requests to the backend service. It no longer runs `npm run dev` or bind-mounts the repository.
+
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.
 
 Milestone 2 adds datasource CRUD, connector registry and thin relational adapters, metadata scanning, and resource snapshot persistence.

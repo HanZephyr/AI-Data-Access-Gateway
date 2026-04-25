@@ -1,10 +1,13 @@
 services:
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       ADG_ENV: production
       ADG_CONTROL_PLANE_DATABASE_URL: sqlite:///./data/adg-control-plane.db
       ADG_SECRET_KEY: ${ADG_SECRET_KEY:?Set ADG_SECRET_KEY before starting docker compose}
+      PYTHONUNBUFFERED: "1"
     ports:
       - "8000:8000"
     command: >
@@ -12,17 +15,30 @@ services:
       uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port 8000"
     volumes:
       - adg-data:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   web:
-    image: node:20-alpine
-    working_dir: /app/web
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    build:
+      context: .
+      dockerfile: web/Dockerfile
     ports:
-      - "5173:5173"
-    volumes:
-      - .:/app
+      - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   adg-data:
