@@ -16,7 +16,12 @@ def bootstrap_admin_api_key(database_url: str, *, name: str = "Bootstrap Admin")
     session_factory = create_session_factory(engine)
 
     with session_factory() as session:
-        record, plaintext = create_api_key(session, name=name, scopes=["admin"])
+        record, plaintext = create_api_key(
+            session,
+            name=name,
+            scopes=["admin"],
+            user_id=None,
+        )
         session.commit()
         session.refresh(record)
 

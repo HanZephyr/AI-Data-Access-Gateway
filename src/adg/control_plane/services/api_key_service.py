@@ -14,6 +14,7 @@ def create_api_key(
     scopes: list[str],
     expires_at: datetime | None = None,
     plaintext: str | None = None,
+    user_id: str | None = None,
 ) -> tuple[ApiKey, str]:
     """Create an API key record and return the raw key exactly once to the caller."""
 
@@ -21,6 +22,7 @@ def create_api_key(
     api_key = ApiKey(
         name=name,
         key_hash=hash_api_key(raw_key),
+        user_id=user_id,
         status="active",
         scopes=json.dumps(scopes, separators=(",", ":")),
         expires_at=expires_at,

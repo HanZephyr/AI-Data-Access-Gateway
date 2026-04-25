@@ -22,4 +22,5 @@ def test_bootstrap_admin_api_key_creates_random_admin_credentials(tmp_path: Path
     assert result["api_key"].startswith("adg_")
     assert result["name"] == "Bootstrap Admin"
     assert verify_api_key(result["api_key"], stored.key_hash)
+    assert stored.user_id is None
     assert json.loads(stored.scopes) == ["admin"]
