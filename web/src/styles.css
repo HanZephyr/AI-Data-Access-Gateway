@@ -27,7 +27,8 @@ body,
 }
 
 body {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     linear-gradient(180deg, rgba(18, 118, 111, 0.08), rgba(238, 243, 241, 0) 240px),
     var(--mist-100);
@@ -314,6 +315,7 @@ body {
 .admin-login-page {
   min-height: 100vh;
   min-height: 100dvh;
+  overflow-y: auto;
   display: grid;
   place-items: center;
   padding: 24px;
