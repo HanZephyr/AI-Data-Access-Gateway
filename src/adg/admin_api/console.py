@@ -1064,6 +1064,13 @@ def get_mcp_setup(
         "server_url": f"{base_url}/mcp",
         "http_tool_url_template": f"{base_url}/api/tools/{{tool_name}}",
         "api_key_header": get_settings().api_key_header,
+        "identity_source": "api_key",
+        "auth_mode": "key-derived identity",
+        "identity_contract": {
+            "mode": "derived-from-authenticated-key",
+            "caller_supplies_identity": False,
+            "payload_scope": "business parameters only",
+        },
         "tools": serialize_runtime_tool_definitions(),
     }
 

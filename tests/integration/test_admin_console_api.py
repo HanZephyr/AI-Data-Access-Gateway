@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -503,5 +504,16 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert body["server_url"] == "http://testserver/mcp"
     assert body["http_tool_url_template"] == "http://testserver/api/tools/{tool_name}"
     assert body["api_key_header"] == "X-ADG-API-Key"
+    assert body["identity_source"] == "api_key"
+    assert body["auth_mode"] == "key-derived identity"
+    assert body["identity_contract"] == {
+        "mode": "derived-from-authenticated-key",
+        "caller_supplies_identity": False,
+        "payload_scope": "business parameters only",
+    }
     assert any(tool["name"] == "execute_query" for tool in body["tools"])
     assert any(tool["description"] for tool in body["tools"])
+    serialized = json.dumps(body, sort_keys=True)
+    assert "user_id" not in serialized
+    assert "\"roles\"" not in serialized
+    assert "groups" not in serialized

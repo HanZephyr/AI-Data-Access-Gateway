@@ -20,7 +20,7 @@ describe("buildMcpPlatformGuides", () => {
     expect(codex?.snippets[0]?.code).toContain("[mcp_servers.adg]");
     expect(codex?.snippets[0]?.code).toContain('url = "https://gateway.example.com/mcp"');
     expect(codex?.snippets[0]?.code).toContain("[mcp_servers.adg.http_headers]");
-    expect(codex?.snippets[0]?.code).toContain('X-ADG-API-Key = "${ADG_RUNTIME_API_KEY}"');
+    expect(codex?.snippets[0]?.code).toContain('X-ADG-API-Key = "${ADG_USER_RUNTIME_KEY}"');
   });
 
   it("builds a Claude Code project config snippet with remote HTTP headers", () => {
@@ -30,6 +30,15 @@ describe("buildMcpPlatformGuides", () => {
 
     expect(jsonSnippet?.code).toContain('"type": "http"');
     expect(jsonSnippet?.code).toContain('"url": "https://gateway.example.com/mcp"');
-    expect(jsonSnippet?.code).toContain('"X-ADG-API-Key": "${ADG_RUNTIME_API_KEY}"');
+    expect(jsonSnippet?.code).toContain('"X-ADG-API-Key": "${ADG_USER_RUNTIME_KEY}"');
+  });
+
+  it("keeps connector snippets free of caller-supplied identity fields", () => {
+    const guides = buildMcpPlatformGuides(setup);
+    const combined = guides.flatMap((guide) => guide.snippets).map((snippet) => snippet.code).join("\n");
+
+    expect(combined).not.toContain("user_id");
+    expect(combined).not.toContain("roles");
+    expect(combined).not.toContain("groups");
   });
 });

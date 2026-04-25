@@ -16,7 +16,7 @@ export type McpPlatformGuide = {
   snippets: McpGuideSnippet[];
 };
 
-const runtimeEnvVar = "ADG_RUNTIME_API_KEY";
+const runtimeEnvVar = "ADG_USER_RUNTIME_KEY";
 
 export function buildMcpPlatformGuides(setup: McpSetupPayload): McpPlatformGuide[] {
   const header = setup.api_key_header;
