@@ -12,6 +12,7 @@ from adg.app.dependencies import AuthenticatedApiKey, require_admin_api_key
 from adg.app.settings import get_settings
 from adg.audit.models import AuditEvent
 from adg.control_plane.db import get_session
+from adg.control_plane.imports.connectors.registry import get_directory_importer
 from adg.control_plane.imports.pipeline import execute_excel_import, preview_excel_import
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
@@ -186,6 +187,13 @@ class UserExcelImportRequest(BaseModel):
 
     rows: list[dict[str, Any]]
     delimiter: str = "/"
+
+
+class UserImporterPullRequest(BaseModel):
+    """Manual pull request for a third-party directory connector."""
+
+    mode: Literal["preview", "execute"] = "preview"
+    config: dict[str, Any] = {}
 
 
 @router.get("/resources")
@@ -844,6 +852,31 @@ def execute_users_excel_import(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     session.commit()
+    return result.to_dict()
+
+
+@router.post("/users/importers/{platform}/pull")
+def pull_import_from_platform(
+    platform: str,
+    payload: UserImporterPullRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Manually pull one importer batch and run it through preview or execute."""
+
+    try:
+        batch = get_directory_importer(platform).fetch(payload.config)
+        rows = batch.to_rows()
+        if payload.mode == "execute":
+            result = execute_excel_import(session, rows=rows, delimiter=batch.delimiter)
+            session.commit()
+        else:
+            result = preview_excel_import(session, rows=rows, delimiter=batch.delimiter)
+    except ValueError as exc:
+        detail = str(exc)
+        if detail.startswith("Unsupported importer platform:"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
     return result.to_dict()
 
 
