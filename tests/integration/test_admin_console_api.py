@@ -450,4 +450,9 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
 
     setup = client.get("/admin/mcp/setup", headers=auth())
     assert setup.status_code == 200
-    assert "execute_query" in setup.json()["tools"]
+    body = setup.json()
+    assert body["server_url"] == "http://testserver/mcp/server/mcp"
+    assert body["http_tool_url_template"] == "http://testserver/mcp/tools/{tool_name}"
+    assert body["api_key_header"] == "X-ADG-API-Key"
+    assert any(tool["name"] == "execute_query" for tool in body["tools"])
+    assert any(tool["description"] for tool in body["tools"])

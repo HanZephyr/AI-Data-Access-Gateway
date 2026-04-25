@@ -36,6 +36,15 @@ def require_api_key(
     """Authenticate a request against active API keys stored in the control plane."""
 
     raw_api_key = request.headers.get(get_settings().api_key_header)
+    return authenticate_api_key_value(session, raw_api_key)
+
+
+def authenticate_api_key_value(
+    session: Session,
+    raw_api_key: str | None,
+) -> AuthenticatedApiKey:
+    """Authenticate one raw API key value against the active control-plane keys."""
+
     if raw_api_key is None or raw_api_key == "":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,13 +76,7 @@ def require_admin_api_key(
 ) -> AuthenticatedApiKey:
     """Require the authenticated API key to carry the admin scope."""
 
-    if "admin" not in json.loads(api_key.scopes):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin scope required",
-        )
-
-    return api_key
+    return require_scope(api_key, "admin", "Admin scope required")
 
 
 def require_runtime_api_key(
@@ -81,10 +84,33 @@ def require_runtime_api_key(
 ) -> AuthenticatedApiKey:
     """Require the authenticated API key to carry the runtime scope."""
 
-    if "runtime" not in json.loads(api_key.scopes):
+    return require_scope(api_key, "runtime", "Runtime scope required")
+
+
+def require_scope(
+    api_key: AuthenticatedApiKey,
+    scope: str,
+    detail: str,
+) -> AuthenticatedApiKey:
+    """Require one authenticated API key to include a specific scope."""
+
+    if scope not in json.loads(api_key.scopes):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Runtime scope required",
+            detail=detail,
         )
 
     return api_key
+
+
+def authenticate_runtime_api_key_value(
+    session: Session,
+    raw_api_key: str | None,
+) -> AuthenticatedApiKey:
+    """Authenticate one raw API key value and require the runtime scope."""
+
+    return require_scope(
+        authenticate_api_key_value(session, raw_api_key),
+        "runtime",
+        "Runtime scope required",
+    )

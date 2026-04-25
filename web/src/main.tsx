@@ -63,6 +63,7 @@ import { findTreePathByKey } from "./catalogNavigation";
 import { CompactActionButton } from "./CompactActionButton";
 import { languageOptions, resolveInitialLanguage, type Language } from "./language";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { buildMcpPlatformGuides, type McpPlatformGuide, type McpSetupPayload } from "./mcpGuides";
 import "./styles.css";
 
 type PageKey =
@@ -85,6 +86,7 @@ type CatalogJumpTarget = {
   /** Tree node key that should be focused after navigating into the datasource workspace. */
   key: string;
 };
+type McpPlatformKey = McpPlatformGuide["key"];
 type TranslationParams = Record<string, string | number>;
 
 const translations = {
@@ -199,9 +201,49 @@ const translations = {
     "onboarding.method.docker": "Docker",
     "onboarding.method.dockerDescription": "Use this when the backend is already running inside Docker Compose and you want to initialize the key from the container.",
     "onboarding.authErrorTitle": "Authentication failed",
-    "mcp.toolUrl": "Tool URL",
+    "mcp.summaryTitle": "Remote MCP endpoint",
+    "mcp.summaryDescription": "Connect external MCP clients to the gateway's runtime tool server and pass a runtime-scoped API key on every request.",
+    "mcp.serverUrl": "MCP server URL",
+    "mcp.toolUrl": "Legacy HTTP facade",
+    "mcp.transport": "Transport",
+    "mcp.transportValue": "Streamable HTTP",
+    "mcp.authMode": "Authentication",
+    "mcp.authModeValue": "Send a runtime-scoped API key in the {header} header on every MCP request.",
     "mcp.apiKeyHeader": "API key header",
-    "mcp.tools": "Tools",
+    "mcp.tools": "Tool catalog",
+    "mcp.platformsTitle": "Client setup guides",
+    "mcp.platformsDescription": "Pick your agent client and copy the matching config snippet and setup steps.",
+    "mcp.notesTitle": "Connection notes",
+    "mcp.note.runtimeKey": "Use a runtime-scoped API key here. Admin-only keys cannot call runtime MCP tools.",
+    "mcp.note.identity": "Per-user identity can be passed through tool arguments such as user_id, roles, and groups.",
+    "mcp.note.reload": "Restart the client, or reload its MCP configuration, after editing local config files.",
+    "mcp.platform.codex.title": "Codex App",
+    "mcp.platform.codex.summary": "Register the remote MCP server in ~/.codex/config.toml and attach the runtime API key as HTTP headers.",
+    "mcp.platform.codex.step1": "Open ~/.codex/config.toml on the machine that runs Codex.",
+    "mcp.platform.codex.step2": "Paste the TOML block below and replace the environment variable with your runtime API key source.",
+    "mcp.platform.codex.step3": "Save the file, then restart Codex or reload MCP servers.",
+    "mcp.platform.claude-code.title": "Claude Code",
+    "mcp.platform.claude-code.summary": "Claude Code can add remote MCP servers from JSON and also understands project-level .mcp.json files.",
+    "mcp.platform.claude-code.step1": "Use the CLI snippet for a quick import, or paste the JSON snippet into your project's .mcp.json file.",
+    "mcp.platform.claude-code.step2": "Store the runtime API key in an environment variable before launching Claude Code.",
+    "mcp.platform.claude-code.step3": "Run /mcp inside Claude Code to verify the server and manage authentication state.",
+    "mcp.platform.trae.title": "Trae",
+    "mcp.platform.trae.summary": "Trae can import MCP servers from the settings panel or from a workspace-level .trae/mcp.json file.",
+    "mcp.platform.trae.step1": "Open Settings > MCP, choose manual configuration, and select Streamable HTTP when prompted.",
+    "mcp.platform.trae.step2": "Paste the JSON snippet below, or save the same content into .trae/mcp.json in your project root.",
+    "mcp.platform.trae.step3": "Reload the MCP panel or restart Trae so the new server and tools appear.",
+    "mcp.platform.mcporter.title": "mcporter",
+    "mcp.platform.mcporter.summary": "mcporter can consume remote MCP servers from its own JSONC config and reuse the same server from scripts or the CLI.",
+    "mcp.platform.mcporter.step1": "Create config/mcporter.json in your project, or use ~/.mcporter/mcporter.json for a user-level setup.",
+    "mcp.platform.mcporter.step2": "Paste the JSON snippet below and store the runtime API key in ADG_RUNTIME_API_KEY.",
+    "mcp.platform.mcporter.step3": "Run mcporter list adg to confirm the server and inspect the imported tool signatures.",
+    "mcp.tool.list_datasources": "List the datasources visible to the current runtime identity.",
+    "mcp.tool.list_tags": "List the governance tags visible to the current runtime identity.",
+    "mcp.tool.list_resources": "List readable resources underneath one datasource.",
+    "mcp.tool.list_resources_by_tag": "Find readable resources by one or more governance tag names.",
+    "mcp.tool.describe_resource": "Describe one resource and its readable columns.",
+    "mcp.tool.preview_resource": "Preview rows from one resource with policy and masking enforcement.",
+    "mcp.tool.execute_query": "Run one read-only SQL query scoped to declared resources.",
     "option.active": "active",
     "option.disabled": "disabled",
     "option.allow": "allow",
@@ -366,9 +408,49 @@ const translations = {
     "onboarding.method.docker": "Docker",
     "onboarding.method.dockerDescription": "适合已经通过 Docker Compose 启动后端容器的部署方式。",
     "onboarding.authErrorTitle": "认证失败",
-    "mcp.toolUrl": "工具 URL",
+    "mcp.summaryTitle": "远程 MCP 接入地址",
+    "mcp.summaryDescription": "把外部 MCP 客户端接到网关的运行时工具服务时，需要在每一个 MCP 请求里都携带 runtime scope 的 API Key。",
+    "mcp.serverUrl": "MCP 服务地址",
+    "mcp.toolUrl": "兼容 HTTP 工具地址",
+    "mcp.transport": "传输方式",
+    "mcp.transportValue": "Streamable HTTP",
+    "mcp.authMode": "鉴权方式",
+    "mcp.authModeValue": "在每一个 MCP 请求上通过 {header} 请求头传入 runtime scope 的 API Key。",
     "mcp.apiKeyHeader": "API 密钥请求头",
-    "mcp.tools": "工具",
+    "mcp.tools": "工具清单",
+    "mcp.platformsTitle": "客户端接入示例",
+    "mcp.platformsDescription": "按你正在使用的 AI Agent 平台选择配置方式，直接复制对应示例即可。",
+    "mcp.notesTitle": "接入说明",
+    "mcp.note.runtimeKey": "这里必须使用 runtime scope 的 API Key；只有 admin scope 的密钥不能调用运行时 MCP 工具。",
+    "mcp.note.identity": "如果需要按终端用户做资源授权，可以在工具参数中传入 user_id、roles、groups 等身份字段。",
+    "mcp.note.reload": "修改本地配置文件之后，请重启客户端，或者重新加载 MCP 配置。",
+    "mcp.platform.codex.title": "Codex App",
+    "mcp.platform.codex.summary": "在 ~/.codex/config.toml 里注册远程 MCP 服务，并通过 HTTP Header 传入 runtime API Key。",
+    "mcp.platform.codex.step1": "在运行 Codex 的机器上打开 ~/.codex/config.toml。",
+    "mcp.platform.codex.step2": "粘贴下方 TOML 配置，并把环境变量替换成你自己的 runtime API Key 来源。",
+    "mcp.platform.codex.step3": "保存文件后，重启 Codex 或重新加载 MCP servers。",
+    "mcp.platform.claude-code.title": "Claude Code",
+    "mcp.platform.claude-code.summary": "Claude Code 既支持通过 JSON 直接导入远程 MCP，也支持项目级 .mcp.json 配置文件。",
+    "mcp.platform.claude-code.step1": "想快速导入就直接执行 CLI 示例；想做项目共享就把 JSON 示例写入项目根目录的 .mcp.json。",
+    "mcp.platform.claude-code.step2": "启动 Claude Code 之前，先把 runtime API Key 放进环境变量。",
+    "mcp.platform.claude-code.step3": "进入 Claude Code 后执行 /mcp，确认服务在线并检查鉴权状态。",
+    "mcp.platform.trae.title": "Trae",
+    "mcp.platform.trae.summary": "Trae 可以在设置面板里手动添加 MCP，也可以从工作区级别的 .trae/mcp.json 自动导入。",
+    "mcp.platform.trae.step1": "打开 Settings > MCP，选择手动配置，并在界面里选用 Streamable HTTP。",
+    "mcp.platform.trae.step2": "把下面的 JSON 配置粘进去，或者把同样内容保存到项目根目录的 .trae/mcp.json。",
+    "mcp.platform.trae.step3": "重新打开 MCP 面板，或者重启 Trae，让新服务和工具列表生效。",
+    "mcp.platform.mcporter.title": "mcporter",
+    "mcp.platform.mcporter.summary": "mcporter 可以从自己的 JSONC 配置里加载远程 MCP 服务，后续在 CLI 和脚本里复用同一套服务定义。",
+    "mcp.platform.mcporter.step1": "在项目里创建 config/mcporter.json；如果想做全局复用，也可以使用 ~/.mcporter/mcporter.json。",
+    "mcp.platform.mcporter.step2": "粘贴下方 JSON 配置，并把 runtime API Key 存到 ADG_RUNTIME_API_KEY 环境变量里。",
+    "mcp.platform.mcporter.step3": "执行 mcporter list adg，确认服务已连通并查看自动导入的工具签名。",
+    "mcp.tool.list_datasources": "列出当前运行时身份可见的数据源。",
+    "mcp.tool.list_tags": "列出当前运行时身份可见的治理标签。",
+    "mcp.tool.list_resources": "列出某个数据源下当前身份可读的资源。",
+    "mcp.tool.list_resources_by_tag": "按一个或多个标签名称查找当前身份可读的资源。",
+    "mcp.tool.describe_resource": "查看单个资源及其当前可见字段的详细信息。",
+    "mcp.tool.preview_resource": "在策略和脱敏生效后预览单个资源的数据行。",
+    "mcp.tool.execute_query": "在声明资源范围内执行只读 SQL 查询。",
     "option.active": "启用",
     "option.disabled": "停用",
     "option.allow": "允许",
@@ -533,9 +615,49 @@ const translations = {
     "onboarding.method.docker": "Docker",
     "onboarding.method.dockerDescription": "適合已經透過 Docker Compose 啟動後端容器的部署方式。",
     "onboarding.authErrorTitle": "認證失敗",
-    "mcp.toolUrl": "工具 URL",
+    "mcp.summaryTitle": "遠端 MCP 接入位址",
+    "mcp.summaryDescription": "把外部 MCP 客戶端接到閘道的執行期工具服務時，需要在每一個 MCP 請求中都帶上 runtime scope 的 API Key。",
+    "mcp.serverUrl": "MCP 服務位址",
+    "mcp.toolUrl": "相容 HTTP 工具位址",
+    "mcp.transport": "傳輸方式",
+    "mcp.transportValue": "Streamable HTTP",
+    "mcp.authMode": "驗證方式",
+    "mcp.authModeValue": "在每一個 MCP 請求上透過 {header} 標頭傳入 runtime scope 的 API Key。",
     "mcp.apiKeyHeader": "API 金鑰標頭",
-    "mcp.tools": "工具",
+    "mcp.tools": "工具清單",
+    "mcp.platformsTitle": "客戶端接入範例",
+    "mcp.platformsDescription": "依照你正在使用的 AI Agent 平台挑選設定方式，直接複製對應範例即可。",
+    "mcp.notesTitle": "接入說明",
+    "mcp.note.runtimeKey": "這裡必須使用 runtime scope 的 API Key；只有 admin scope 的金鑰不能呼叫執行期 MCP 工具。",
+    "mcp.note.identity": "如果需要依終端使用者做資源授權，可以在工具參數中傳入 user_id、roles、groups 等身份欄位。",
+    "mcp.note.reload": "修改本地設定檔之後，請重新啟動客戶端，或重新載入 MCP 設定。",
+    "mcp.platform.codex.title": "Codex App",
+    "mcp.platform.codex.summary": "在 ~/.codex/config.toml 裡註冊遠端 MCP 服務，並透過 HTTP Header 傳入 runtime API Key。",
+    "mcp.platform.codex.step1": "在執行 Codex 的機器上打開 ~/.codex/config.toml。",
+    "mcp.platform.codex.step2": "貼上下方 TOML 設定，並把環境變數替換成你自己的 runtime API Key 來源。",
+    "mcp.platform.codex.step3": "儲存後重新啟動 Codex，或重新載入 MCP servers。",
+    "mcp.platform.claude-code.title": "Claude Code",
+    "mcp.platform.claude-code.summary": "Claude Code 既支援透過 JSON 直接匯入遠端 MCP，也支援專案層級的 .mcp.json 設定檔。",
+    "mcp.platform.claude-code.step1": "想快速匯入就直接執行 CLI 範例；想做專案共用就把 JSON 範例寫入專案根目錄的 .mcp.json。",
+    "mcp.platform.claude-code.step2": "啟動 Claude Code 之前，先把 runtime API Key 放進環境變數。",
+    "mcp.platform.claude-code.step3": "進入 Claude Code 後執行 /mcp，確認服務在線並檢查驗證狀態。",
+    "mcp.platform.trae.title": "Trae",
+    "mcp.platform.trae.summary": "Trae 可以在設定面板中手動新增 MCP，也可以從工作區層級的 .trae/mcp.json 自動匯入。",
+    "mcp.platform.trae.step1": "打開 Settings > MCP，選擇手動設定，並在介面中選用 Streamable HTTP。",
+    "mcp.platform.trae.step2": "把下面的 JSON 設定貼進去，或把相同內容儲存到專案根目錄的 .trae/mcp.json。",
+    "mcp.platform.trae.step3": "重新打開 MCP 面板，或重新啟動 Trae，讓新服務與工具列表生效。",
+    "mcp.platform.mcporter.title": "mcporter",
+    "mcp.platform.mcporter.summary": "mcporter 可以從自己的 JSONC 設定載入遠端 MCP 服務，之後在 CLI 與腳本中重複使用同一套服務定義。",
+    "mcp.platform.mcporter.step1": "在專案中建立 config/mcporter.json；如果想全域重用，也可以使用 ~/.mcporter/mcporter.json。",
+    "mcp.platform.mcporter.step2": "貼上下方 JSON 設定，並把 runtime API Key 存到 ADG_RUNTIME_API_KEY 環境變數裡。",
+    "mcp.platform.mcporter.step3": "執行 mcporter list adg，確認服務已連通並查看自動匯入的工具簽名。",
+    "mcp.tool.list_datasources": "列出目前執行期身份可見的資料源。",
+    "mcp.tool.list_tags": "列出目前執行期身份可見的治理標籤。",
+    "mcp.tool.list_resources": "列出某個資料源下目前身份可讀的資源。",
+    "mcp.tool.list_resources_by_tag": "依一個或多個標籤名稱查找目前身份可讀的資源。",
+    "mcp.tool.describe_resource": "查看單一資源及其目前可見欄位的詳細資訊。",
+    "mcp.tool.preview_resource": "在策略與脫敏生效後預覽單一資源的資料列。",
+    "mcp.tool.execute_query": "在宣告資源範圍內執行唯讀 SQL 查詢。",
     "option.active": "啟用",
     "option.disabled": "停用",
     "option.allow": "允許",
@@ -2209,19 +2331,132 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
   );
 }
 
+function mcpPlatformTitleKey(platform: McpPlatformKey) {
+  return `mcp.platform.${platform}.title` as TranslationKey;
+}
+
+function mcpPlatformSummaryKey(platform: McpPlatformKey) {
+  return `mcp.platform.${platform}.summary` as TranslationKey;
+}
+
+function mcpPlatformSteps(platform: McpPlatformKey, t: I18nContextValue["t"]) {
+  return [1, 2, 3].map((index) => t(`mcp.platform.${platform}.step${index}` as TranslationKey));
+}
+
+function mcpToolDescription(name: string, fallback: string, t: I18nContextValue["t"]) {
+  const key = `mcp.tool.${name}` as TranslationKey;
+  return key in translations["en-US"] ? t(key) : fallback;
+}
+
 function McpSetup({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Display the HTTP facade details needed by MCP-style clients. */
+  /** Show standardized MCP connection details and client-specific import examples. */
 
   const { t } = useI18n();
-  const state = useData<AnyRecord>(() => api.request("/admin/mcp/setup"), [api.apiKey]);
+  const state = useData<McpSetupPayload>(() => api.request("/admin/mcp/setup"), [api.apiKey]);
   if (state.error) return <Alert type="error" message={state.error} />;
   if (!state.data) return <Empty />;
+  const guides = buildMcpPlatformGuides(state.data);
+  const toolColumns: ColumnsType<McpSetupPayload["tools"][number]> = [
+    {
+      title: t("field.name"),
+      dataIndex: "name",
+      key: "name",
+      render: (value: string) => <Tag>{value}</Tag>,
+    },
+    {
+      title: t("column.description"),
+      dataIndex: "description",
+      key: "description",
+      render: (value: string, row) => mcpToolDescription(row.name, value, t),
+    },
+  ];
   return (
-    <Descriptions bordered column={1} size="small">
-      <Descriptions.Item label={t("mcp.toolUrl")}>{state.data.tool_url}</Descriptions.Item>
-      <Descriptions.Item label={t("mcp.apiKeyHeader")}>{state.data.api_key_header}</Descriptions.Item>
-      <Descriptions.Item label={t("mcp.tools")}>{state.data.tools.map((tool: string) => <Tag key={tool}>{tool}</Tag>)}</Descriptions.Item>
-    </Descriptions>
+    <Space direction="vertical" size={18} className="full">
+      <section className="mcp-section">
+        <div className="mcp-section-heading">
+          <Typography.Title level={4}>{t("mcp.summaryTitle")}</Typography.Title>
+          <Typography.Paragraph>{t("mcp.summaryDescription")}</Typography.Paragraph>
+        </div>
+        <Descriptions bordered column={1} size="small">
+          <Descriptions.Item label={t("mcp.serverUrl")}>
+            <Typography.Text copyable>{state.data.server_url}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label={t("mcp.toolUrl")}>
+            <Typography.Text copyable>{state.data.http_tool_url_template}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label={t("mcp.transport")}>{t("mcp.transportValue")}</Descriptions.Item>
+          <Descriptions.Item label={t("mcp.apiKeyHeader")}>
+            <Typography.Text copyable>{state.data.api_key_header}</Typography.Text>
+          </Descriptions.Item>
+          <Descriptions.Item label={t("mcp.authMode")}>
+            {t("mcp.authModeValue", { header: state.data.api_key_header })}
+          </Descriptions.Item>
+        </Descriptions>
+      </section>
+
+      <section className="mcp-section">
+        <div className="mcp-section-heading">
+          <Typography.Title level={4}>{t("mcp.tools")}</Typography.Title>
+        </div>
+        <Table
+          rowKey="name"
+          size="small"
+          pagination={false}
+          columns={toolColumns}
+          dataSource={state.data.tools}
+        />
+      </section>
+
+      <section className="mcp-section">
+        <div className="mcp-section-heading">
+          <Typography.Title level={4}>{t("mcp.platformsTitle")}</Typography.Title>
+          <Typography.Paragraph>{t("mcp.platformsDescription")}</Typography.Paragraph>
+        </div>
+        <Tabs
+          className="mcp-platform-tabs"
+          items={guides.map((guide) => ({
+            key: guide.key,
+            label: t(mcpPlatformTitleKey(guide.key)),
+            children: (
+              <div className="mcp-platform-panel">
+                <Typography.Paragraph className="mcp-platform-summary">
+                  {t(mcpPlatformSummaryKey(guide.key))}
+                </Typography.Paragraph>
+                <ol className="mcp-platform-steps">
+                  {mcpPlatformSteps(guide.key, t).map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                <div className="mcp-snippet-list">
+                  {guide.snippets.map((snippet) => (
+                    <section key={`${guide.key}-${snippet.label}`} className="mcp-snippet">
+                      <div className="mcp-snippet-header">
+                        <Typography.Text strong>{snippet.label}</Typography.Text>
+                        <Typography.Text copyable={{ text: snippet.code }}>
+                          {snippet.language.toUpperCase()}
+                        </Typography.Text>
+                      </div>
+                      <pre className="mcp-code-block"><code>{snippet.code}</code></pre>
+                    </section>
+                  ))}
+                </div>
+              </div>
+            ),
+          }))}
+        />
+      </section>
+
+      <section className="mcp-section">
+        <div className="mcp-section-heading">
+          <Typography.Title level={4}>{t("mcp.notesTitle")}</Typography.Title>
+        </div>
+        <ul className="mcp-notes">
+          <li>{t("mcp.note.runtimeKey")}</li>
+          <li>{t("mcp.note.identity")}</li>
+          <li>{t("mcp.note.reload")}</li>
+        </ul>
+      </section>
+    </Space>
   );
 }
 

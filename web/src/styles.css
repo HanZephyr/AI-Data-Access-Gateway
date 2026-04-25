@@ -781,6 +781,78 @@ body {
   margin: auto;
 }
 
+.mcp-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--mist-300);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-1);
+}
+
+.mcp-section-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.mcp-section-heading .ant-typography {
+  margin: 0;
+}
+
+.mcp-platform-tabs .ant-tabs-nav {
+  margin-bottom: 18px;
+}
+
+.mcp-platform-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.mcp-platform-summary.ant-typography {
+  margin: 0;
+  color: var(--ink-700);
+}
+
+.mcp-platform-steps,
+.mcp-notes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink-700);
+}
+
+.mcp-snippet-list {
+  display: grid;
+  gap: 14px;
+}
+
+.mcp-snippet {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--mist-300);
+  background: var(--mist-50);
+}
+
+.mcp-snippet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mcp-code-block {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  background: var(--ink-950);
+  color: #eef9f7;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -879,5 +951,10 @@ body {
   .catalog-tree,
   .catalog-detail {
     min-height: 320px;
+  }
+
+  .mcp-section,
+  .mcp-snippet {
+    padding: 14px;
   }
 }

@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from adg.control_plane.models.governance import (
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.control_plane.services.api_key_service import create_api_key as create_api_key_record
+from adg.mcp_api.runtime_tools import serialize_runtime_tool_definitions
 
 router = APIRouter(prefix="/admin", tags=["admin-console"])
 
@@ -842,22 +843,17 @@ def list_audit_events(
 
 @router.get("/mcp/setup")
 def get_mcp_setup(
+    request: Request,
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
 ) -> dict[str, Any]:
     """Return minimal MCP HTTP facade setup information for operators."""
 
+    base_url = str(request.base_url).rstrip("/")
     return {
-        "tool_url": "/mcp/tools/{tool_name}",
+        "server_url": f"{base_url}/mcp/server/mcp",
+        "http_tool_url_template": f"{base_url}/mcp/tools/{{tool_name}}",
         "api_key_header": get_settings().api_key_header,
-        "tools": [
-            "list_datasources",
-            "list_tags",
-            "list_resources",
-            "list_resources_by_tag",
-            "describe_resource",
-            "preview_resource",
-            "execute_query",
-        ],
+        "tools": serialize_runtime_tool_definitions(),
     }
 
 

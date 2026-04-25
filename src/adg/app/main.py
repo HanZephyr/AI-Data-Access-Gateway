@@ -1,24 +1,47 @@
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
+from sqlalchemy.orm import Session, sessionmaker
 
 from adg.admin_api.console import router as admin_console_router
 from adg.admin_api.datasources import router as admin_datasource_router
 from adg.admin_api.system import router as admin_system_router
 from adg.app.settings import get_settings
+from adg.control_plane.db import SessionLocal
+from adg.control_plane.db import get_session as get_db_session
 from adg.internal_api.decrypt import router as internal_decrypt_router
 from adg.mcp_api.tools import router as mcp_tools_router
+from adg.mcp_server.server import build_mcp_server_app, runtime_mcp_server
 
 
-def create_app() -> FastAPI:
+def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     """Build the FastAPI application and attach all V1 routers."""
 
     settings = get_settings()
-    app = FastAPI(title=settings.service_name)
+    factory = session_factory or SessionLocal
+    mcp_server_app = build_mcp_server_app(factory)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
+        async with runtime_mcp_server.session_manager.run():
+            yield
+
+    app = FastAPI(title=settings.service_name, lifespan=lifespan)
+    app.state.session_factory = factory
+    if session_factory is not None:
+        def override_session() -> Generator[Session, None, None]:
+            with factory() as session:
+                yield session
+
+        app.dependency_overrides[get_db_session] = override_session
     app.include_router(admin_console_router)
     app.include_router(admin_datasource_router)
     app.include_router(admin_system_router)
     app.include_router(internal_decrypt_router)
     app.include_router(mcp_tools_router)
+    app.mount("/mcp/server", mcp_server_app)
 
     @app.get("/health", tags=["system"])
     def health() -> dict[str, str]:
