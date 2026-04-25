@@ -39,7 +39,6 @@ export function LanguageSwitcher({
         <span className="language-switcher-content">
           <span className="language-switcher-leading">
             <GlobalOutlined />
-            <span>{label}</span>
           </span>
           <span className="language-switcher-value">{activeOption?.label || value}</span>
         </span>

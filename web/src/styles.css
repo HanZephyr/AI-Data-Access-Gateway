@@ -263,7 +263,7 @@ body {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   color: var(--ink-700);
   font-weight: 760;
 }

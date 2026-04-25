@@ -29,6 +29,7 @@ describe("LanguageSwitcher", () => {
 
     expect(screen.getByRole("button", { name: "切换界面语言" })).toBeInTheDocument();
     expect(screen.getByText("简体中文")).toBeInTheDocument();
+    expect(screen.queryByText("切换界面语言")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "切换界面语言" }));
     fireEvent.click(screen.getByText("English"));
