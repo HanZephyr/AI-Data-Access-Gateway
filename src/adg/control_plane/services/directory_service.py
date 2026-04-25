@@ -87,15 +87,12 @@ class DirectoryService:
 
         user_ids = [user.id for user in users]
         org_node_ids = sorted({user.org_node_id for user in users if user.org_node_id is not None})
-        org_path_by_id = (
-            dict(
-                self._session.execute(
-                    select(OrgNode.id, OrgNode.path).where(OrgNode.id.in_(org_node_ids))
-                ).all()
-            )
-            if org_node_ids
-            else {}
-        )
+        org_path_by_id: dict[str, str] = {}
+        if org_node_ids:
+            org_path_rows = self._session.execute(
+                select(OrgNode.id, OrgNode.path).where(OrgNode.id.in_(org_node_ids))
+            ).all()
+            org_path_by_id = {row[0]: row[1] for row in org_path_rows}
 
         role_ids_by_user_id: dict[str, list[str]] = defaultdict(list)
         role_names_by_user_id: dict[str, list[str]] = defaultdict(list)
@@ -127,7 +124,11 @@ class DirectoryService:
                 name=user.name,
                 external_ref=user.external_ref,
                 org_node_id=user.org_node_id,
-                org_path=org_path_by_id.get(user.org_node_id) if user.org_node_id is not None else None,
+                org_path=(
+                    org_path_by_id.get(user.org_node_id)
+                    if user.org_node_id is not None
+                    else None
+                ),
                 role_ids=role_ids_by_user_id.get(user.id, []),
                 role_names=role_names_by_user_id.get(user.id, []),
                 status=user.status,

@@ -3,8 +3,8 @@ import json
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from adg.control_plane.imports.models import ImportedUserRow
 from adg.control_plane.imports.excel import normalize_excel_import_rows
+from adg.control_plane.imports.models import ImportedUserRow
 from adg.control_plane.imports.pipeline import execute_excel_import, preview_excel_import
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.directory import OrgNode, Role, User, UserRole
@@ -87,7 +87,9 @@ def test_execute_excel_import_creates_missing_org_nodes_roles_and_runtime_key(
 
     created_user = db_session.execute(select(User).where(User.external_ref == "u001")).scalar_one()
     company = db_session.execute(select(OrgNode).where(OrgNode.path == "Company")).scalar_one()
-    finance = db_session.execute(select(OrgNode).where(OrgNode.path == "Company/Finance")).scalar_one()
+    finance = db_session.execute(
+        select(OrgNode).where(OrgNode.path == "Company/Finance")
+    ).scalar_one()
     analyst = db_session.execute(select(Role).where(Role.name == "Analyst")).scalar_one()
     user_roles = list(
         db_session.execute(select(UserRole).where(UserRole.user_id == created_user.id)).scalars()

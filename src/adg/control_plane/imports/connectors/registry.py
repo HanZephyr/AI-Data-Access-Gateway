@@ -1,9 +1,9 @@
-from adg.control_plane.imports.connectors.base import DirectoryImporter
+from adg.control_plane.imports.connectors.base import DirectoryImporter, PullOnlyDirectoryImporter
 from adg.control_plane.imports.connectors.dingtalk import DingTalkImporter
 from adg.control_plane.imports.connectors.feishu import FeishuImporter
 from adg.control_plane.imports.connectors.wecom import WeComImporter
 
-CONNECTOR_REGISTRY = {
+CONNECTOR_REGISTRY: dict[str, type[PullOnlyDirectoryImporter]] = {
     "feishu": FeishuImporter,
     "wecom": WeComImporter,
     "dingtalk": DingTalkImporter,

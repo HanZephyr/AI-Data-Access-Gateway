@@ -186,7 +186,9 @@ def test_admin_execute_updates_existing_user_without_rotating_runtime_key() -> N
 
     with session_factory() as session:
         user = session.execute(select(User).where(User.external_ref == "u-existing")).scalar_one()
-        finance = session.execute(select(OrgNode).where(OrgNode.path == "Company/Finance")).scalar_one()
+        finance = session.execute(
+            select(OrgNode).where(OrgNode.path == "Company/Finance")
+        ).scalar_one()
         active_keys = _active_runtime_keys_for_user(session, user.id)
         role_names = set(
             session.execute(select(Role.name).order_by(Role.name)).scalars()

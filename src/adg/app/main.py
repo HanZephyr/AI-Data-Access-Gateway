@@ -1,9 +1,7 @@
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from collections.abc import Awaitable, Callable
-
 from fastapi import FastAPI, Request, Response
 from sqlalchemy.orm import Session, sessionmaker
 

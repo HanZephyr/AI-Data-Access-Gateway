@@ -111,6 +111,9 @@ def test_group_scoped_masking_policy_does_not_match_runtime_identity(
     )
     db_session.flush()
 
+    resource = db_session.get(Resource, "res_customers")
+    assert resource is not None
+
     masked, masked_columns = MaskingService(
         db_session,
         secret_key=SECRET,
@@ -122,7 +125,7 @@ def test_group_scoped_masking_policy_does_not_match_runtime_identity(
         ),
         datasource_id="ds_1",
         query_id="qry_1",
-        resources=[db_session.get(Resource, "res_customers")],
+        resources=[resource],
         result=QueryResult(
             columns=[{"name": "email", "data_type": "string"}],
             rows=[{"email": "alice@example.com"}],

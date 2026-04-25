@@ -1,15 +1,16 @@
 from collections.abc import Iterator
 
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
 
 from adg.app.main import create_app
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
-from adg.control_plane.imports.connectors.base import DirectoryImportBatch, ImportedUserRow
+from adg.control_plane.imports.connectors.base import DirectoryImportBatch
 from adg.control_plane.imports.connectors.dingtalk import DingTalkImporter
 from adg.control_plane.imports.connectors.feishu import FeishuImporter
 from adg.control_plane.imports.connectors.registry import CONNECTOR_REGISTRY
 from adg.control_plane.imports.connectors.wecom import WeComImporter
+from adg.control_plane.imports.models import ImportedUserRow
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
 from adg.shared.security import hash_api_key

@@ -84,7 +84,8 @@ def execute_excel_import(
 
     normalized_rows = normalize_excel_import_rows(rows, delimiter=delimiter)
     org_nodes_by_path = {
-        node.path: node for node in session.execute(select(OrgNode).order_by(OrgNode.depth)).scalars()
+        node.path: node
+        for node in session.execute(select(OrgNode).order_by(OrgNode.depth)).scalars()
     }
     roles_by_name = {role.name: role for role in session.execute(select(Role)).scalars()}
     users_by_external_ref = {
@@ -106,7 +107,11 @@ def execute_excel_import(
             org_nodes_by_path,
             org_nodes_created,
         )
-        if row.org_path is None and org_node.path == ROOT_ORG_PATH and ROOT_ORG_PATH in org_nodes_created:
+        if (
+            row.org_path is None
+            and org_node.path == ROOT_ORG_PATH
+            and ROOT_ORG_PATH in org_nodes_created
+        ):
             root_org_node_created = True
         role_ids = _resolve_roles(session, row.roles, roles_by_name, roles_created)
         user = users_by_external_ref.get(row.external_ref)

@@ -41,6 +41,9 @@ class PullOnlyDirectoryImporter:
     platform = "unknown"
     delimiter = "/"
 
+    def normalize(self, payload: Mapping[str, Any]) -> DirectoryImportBatch:
+        raise NotImplementedError
+
     def fetch(self, config: Mapping[str, Any]) -> DirectoryImportBatch:
         payload = config.get("payload")
         if not isinstance(payload, Mapping):

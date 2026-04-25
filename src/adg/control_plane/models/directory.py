@@ -15,7 +15,11 @@ class OrgNode(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     code: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
-    parent_id: Mapped[str | None] = mapped_column(ForeignKey("org_nodes.id"), nullable=True, index=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("org_nodes.id"),
+        nullable=True,
+        index=True,
+    )
     path: Mapped[str] = mapped_column(String(512), nullable=False, unique=True, index=True)
     depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
@@ -39,7 +43,11 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuidv7)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    org_node_id: Mapped[str | None] = mapped_column(ForeignKey("org_nodes.id"), nullable=True, index=True)
+    org_node_id: Mapped[str | None] = mapped_column(
+        ForeignKey("org_nodes.id"),
+        nullable=True,
+        index=True,
+    )
     external_ref: Mapped[str] = mapped_column(String(200), nullable=False, unique=True, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
     created_at: Mapped[datetime] = mapped_column(

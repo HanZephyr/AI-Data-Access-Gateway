@@ -4,8 +4,8 @@ from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
-from sqlalchemy.exc import NoResultFound
 from sqlalchemy import delete, select
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from adg.app.dependencies import AuthenticatedApiKey, require_admin_api_key
@@ -13,6 +13,7 @@ from adg.app.settings import get_settings
 from adg.audit.models import AuditEvent
 from adg.control_plane.db import get_session
 from adg.control_plane.imports.connectors.registry import get_directory_importer
+from adg.control_plane.imports.models import ExcelImportExecution, ExcelImportPreview
 from adg.control_plane.imports.pipeline import execute_excel_import, preview_excel_import
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
@@ -893,6 +894,7 @@ def pull_import_from_platform(
     try:
         batch = get_directory_importer(platform).fetch(payload.config)
         rows = batch.to_rows()
+        result: ExcelImportExecution | ExcelImportPreview
         if payload.mode == "execute":
             result = execute_excel_import(session, rows=rows, delimiter=batch.delimiter)
             session.commit()
@@ -1452,7 +1454,10 @@ def _require_org_node(session: Session, org_node_id: str) -> OrgNode:
 
     org_node = session.get(OrgNode, org_node_id)
     if org_node is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization node not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization node not found",
+        )
     return org_node
 
 
