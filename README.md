@@ -83,7 +83,7 @@ The production-style Compose stack starts:
 - backend API on `http://127.0.0.1:8000`
 - web console on `http://127.0.0.1:8080`
 
-The web container serves the built Vite bundle through Nginx and proxies `/admin`, `/mcp`, `/internal`, and `/healthz` requests to the backend service. It no longer runs `npm run dev` or bind-mounts the repository.
+The web container serves the built Vite bundle through Nginx and proxies `/admin`, `/mcp`, `/internal`, and `/health` requests to the backend service. It no longer runs `npm run dev` or bind-mounts the repository.
 
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.
 
