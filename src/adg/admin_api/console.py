@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from adg.audit.models import AuditEvent
 from adg.control_plane.db import get_session
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.directory import OrgNode, Role
 from adg.control_plane.models.governance import (
     DatasourceTag,
     FieldPolicy,
@@ -23,6 +25,7 @@ from adg.control_plane.models.governance import (
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.control_plane.services.api_key_service import create_api_key as create_api_key_record
+from adg.control_plane.services.directory_service import DirectoryService
 from adg.mcp_api.runtime_tools import serialize_runtime_tool_definitions
 
 router = APIRouter(prefix="/admin", tags=["admin-console"])
@@ -166,6 +169,15 @@ class ApiKeyUpdateRequest(BaseModel):
     name: str | None = None
     scopes: list[str] | None = None
     expires_at: datetime | None = None
+
+
+class UserCreateRequest(BaseModel):
+    """Payload for provisioning a directory user and its first runtime key."""
+
+    name: str
+    external_ref: str
+    org_node_id: str | None = None
+    role_ids: list[str] = []
 
 
 @router.get("/resources")
@@ -750,6 +762,74 @@ def delete_masking_policy(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def create_user(
+    payload: UserCreateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Create a directory user and return its initial plaintext runtime key once."""
+
+    if payload.org_node_id is not None:
+        _require_org_node(session, payload.org_node_id)
+    _require_roles(session, payload.role_ids)
+    user, plaintext = DirectoryService(session).create_user(
+        name=payload.name,
+        external_ref=payload.external_ref,
+        org_node_id=payload.org_node_id,
+        role_ids=payload.role_ids,
+    )
+    session.commit()
+    session.refresh(user)
+    return {
+        "id": user.id,
+        "name": user.name,
+        "external_ref": user.external_ref,
+        "org_node_id": user.org_node_id,
+        "role_ids": list(payload.role_ids),
+        "status": user.status,
+        "api_key": plaintext,
+    }
+
+
+@router.post("/users/{user_id}/reset-key")
+def reset_user_key(
+    user_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Rotate a user's runtime key and return the new plaintext value once."""
+
+    try:
+        plaintext = DirectoryService(session).reset_runtime_key(user_id)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from exc
+    session.commit()
+    return {"api_key": plaintext}
+
+
+@router.get("/roles")
+def list_roles(
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, Any]]:
+    """List directory roles for admin assignment UIs."""
+
+    roles = session.execute(select(Role).order_by(Role.name)).scalars()
+    return [_serialize_role(role) for role in roles]
+
+
+@router.get("/org-nodes")
+def list_org_nodes(
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, Any]]:
+    """List organization nodes ordered by path for admin assignment UIs."""
+
+    org_nodes = session.execute(select(OrgNode).order_by(OrgNode.path)).scalars()
+    return [_serialize_org_node(node) for node in org_nodes]
+
+
 @router.get("/api-keys")
 def list_api_keys(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
@@ -893,6 +973,31 @@ def _serialize_resource_field(field: ResourceField) -> dict[str, Any]:
         "ordinal_position": field.ordinal_position,
         "description": field.description,
         "status": field.status,
+    }
+
+
+def _serialize_role(role: Role) -> dict[str, Any]:
+    """Convert a directory role into a JSON-ready admin payload."""
+
+    return {
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "status": role.status,
+    }
+
+
+def _serialize_org_node(node: OrgNode) -> dict[str, Any]:
+    """Convert an organization node into a JSON-ready admin payload."""
+
+    return {
+        "id": node.id,
+        "name": node.name,
+        "code": node.code,
+        "parent_id": node.parent_id,
+        "path": node.path,
+        "depth": node.depth,
+        "status": node.status,
     }
 
 
@@ -1204,6 +1309,23 @@ def _require_datasource(session: Session, datasource_id: str) -> Datasource:
     if datasource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Datasource not found")
     return datasource
+
+
+def _require_org_node(session: Session, org_node_id: str) -> OrgNode:
+    """Validate that a referenced organization node exists."""
+
+    org_node = session.get(OrgNode, org_node_id)
+    if org_node is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization node not found")
+    return org_node
+
+
+def _require_roles(session: Session, role_ids: list[str]) -> None:
+    """Validate that all referenced directory roles exist."""
+
+    for role_id in role_ids:
+        if session.get(Role, role_id) is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
 
 def _require_tag(session: Session, tag_id: str) -> Tag:
