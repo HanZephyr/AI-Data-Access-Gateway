@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-26-user-directory-runtime-identity-redesign.md`
 **Date:** 2026-04-26
-**Status:** Draft
+**Status:** Approved
 
 ---
 
