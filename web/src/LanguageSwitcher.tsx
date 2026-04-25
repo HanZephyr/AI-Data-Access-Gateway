@@ -1,5 +1,5 @@
-import { GlobalOutlined } from "@ant-design/icons";
-import { Select, Tooltip } from "antd";
+import { CheckOutlined, DownOutlined, GlobalOutlined } from "@ant-design/icons";
+import { Button, Dropdown } from "antd";
 
 import type { Language } from "./language";
 
@@ -16,19 +16,35 @@ export function LanguageSwitcher({
   onChange: (value: Language) => void;
   className?: string;
 }) {
+  const activeOption = options.find((option) => option.value === value);
+
   return (
-    <div className={["language-switcher", className].filter(Boolean).join(" ")}>
-      <Tooltip title={label}>
-        <span className="language-switcher-icon" aria-hidden="true">
-          <GlobalOutlined />
-        </span>
-      </Tooltip>
-      <Select
+    <Dropdown
+      trigger={["click"]}
+      menu={{
+        selectable: true,
+        selectedKeys: [value],
+        items: options.map((option) => ({
+          key: option.value,
+          label: option.label,
+          icon: option.value === value ? <CheckOutlined /> : <span className="language-switcher-menu-spacer" />,
+        })),
+        onClick: ({ key }) => onChange(key as Language),
+      }}
+    >
+      <Button
         aria-label={label}
-        value={value}
-        options={options}
-        onChange={(nextValue) => onChange(nextValue as Language)}
-      />
-    </div>
+        className={["language-switcher", className].filter(Boolean).join(" ")}
+      >
+        <span className="language-switcher-content">
+          <span className="language-switcher-leading">
+            <GlobalOutlined />
+            <span>{label}</span>
+          </span>
+          <span className="language-switcher-value">{activeOption?.label || value}</span>
+        </span>
+        <DownOutlined className="language-switcher-caret" />
+      </Button>
+    </Dropdown>
   );
 }

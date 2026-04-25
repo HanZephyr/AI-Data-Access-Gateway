@@ -27,9 +27,10 @@ describe("LanguageSwitcher", () => {
       />,
     );
 
-    expect(screen.getByRole("combobox", { name: "切换界面语言" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "切换界面语言" })).toBeInTheDocument();
+    expect(screen.getByText("简体中文")).toBeInTheDocument();
 
-    fireEvent.mouseDown(screen.getByRole("combobox"));
+    fireEvent.click(screen.getByRole("button", { name: "切换界面语言" }));
     fireEvent.click(screen.getByText("English"));
 
     expect(onChange).toHaveBeenCalledWith("en-US");
