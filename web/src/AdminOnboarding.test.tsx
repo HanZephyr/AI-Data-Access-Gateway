@@ -43,7 +43,7 @@ describe("AdminOnboarding", () => {
               key: "docker",
               label: "Docker",
               description: "适合通过 Docker Compose 启动的部署方式。",
-              commandValue: "docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db",
+              commandValue: "docker exec -it ai-data-access-gateway-backend-1 init-admin",
             }
           ],
           authErrorTitle: "认证失败",
@@ -88,7 +88,7 @@ describe("AdminOnboarding", () => {
               key: "docker",
               label: "Docker",
               description: "适合 Docker Compose 部署。",
-              commandValue: "docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db",
+              commandValue: "docker exec -it ai-data-access-gateway-backend-1 init-admin",
             }
           ],
           authErrorTitle: "认证失败",
@@ -100,7 +100,7 @@ describe("AdminOnboarding", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Docker" }));
 
     expect(
-      screen.getByDisplayValue("docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db"),
+      screen.getByDisplayValue("docker exec -it ai-data-access-gateway-backend-1 init-admin"),
     ).toBeInTheDocument();
   });
 });

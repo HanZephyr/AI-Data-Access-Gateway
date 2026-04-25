@@ -75,7 +75,7 @@ Run with Docker Compose:
 ```bash
 $env:ADG_SECRET_KEY = "<generate-a-long-random-secret>"
 docker compose up --build
-docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db
+docker exec -it ai-data-access-gateway-backend-1 init-admin
 ```
 
 The production-style Compose stack starts:

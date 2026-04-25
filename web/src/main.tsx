@@ -848,7 +848,7 @@ function ConsoleApp() {
               key: "docker",
               label: t("onboarding.method.docker"),
               description: t("onboarding.method.dockerDescription"),
-              commandValue: "docker compose exec backend init-admin --database-url sqlite:///./data/adg-control-plane.db",
+              commandValue: "docker exec -it ai-data-access-gateway-backend-1 init-admin",
             },
           ],
           authErrorTitle: t("onboarding.authErrorTitle"),
