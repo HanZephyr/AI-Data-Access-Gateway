@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from adg.app.dependencies import AuthenticatedApiKey, authenticate_runtime_api_key_value
+from adg.app.dependencies import AuthenticatedRuntimeKey, authenticate_runtime_api_key_value
 from adg.app.settings import get_settings
 from adg.control_plane.db import SessionLocal
 from adg.gateway_runtime.tools import GatewayRuntimeService
@@ -109,11 +109,17 @@ def _run_runtime_tool(ctx: McpContext, tool_name: str, payload: dict[str, Any]) 
         sessionmaker[Session],
         getattr(request.app.state, "session_factory", SessionLocal),
     )
-    authenticated = cast(AuthenticatedApiKey, request.state.authenticated_api_key)
+    authenticated = cast(AuthenticatedRuntimeKey, request.state.authenticated_api_key)
 
     with session_factory() as session:
         runtime = GatewayRuntimeService(session)
-        response = dispatch_runtime_tool_call(runtime, tool_name, payload, authenticated.id)
+        response = dispatch_runtime_tool_call(
+            runtime,
+            tool_name,
+            payload,
+            authenticated.runtime_identity,
+            authenticated.id,
+        )
         session.commit()
         return response
 
@@ -124,17 +130,10 @@ def _run_runtime_tool(ctx: McpContext, tool_name: str, payload: dict[str, Any]) 
 )
 def list_datasources(
     ctx: McpContext,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """List datasources visible to the calling runtime identity."""
 
-    return _run_runtime_tool(
-        ctx,
-        "list_datasources",
-        {"user_id": user_id, "roles": roles or [], "groups": groups or []},
-    )
+    return _run_runtime_tool(ctx, "list_datasources", {})
 
 
 @runtime_mcp_server.tool(
@@ -143,17 +142,10 @@ def list_datasources(
 )
 def list_tags(
     ctx: McpContext,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """List tags visible to the calling runtime identity."""
 
-    return _run_runtime_tool(
-        ctx,
-        "list_tags",
-        {"user_id": user_id, "roles": roles or [], "groups": groups or []},
-    )
+    return _run_runtime_tool(ctx, "list_tags", {})
 
 
 @runtime_mcp_server.tool(
@@ -163,9 +155,6 @@ def list_tags(
 def list_resources(
     ctx: McpContext,
     datasource_id: str,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """List readable resources under one datasource."""
 
@@ -174,9 +163,6 @@ def list_resources(
         "list_resources",
         {
             "datasource_id": datasource_id,
-            "user_id": user_id,
-            "roles": roles or [],
-            "groups": groups or [],
         },
     )
 
@@ -188,9 +174,6 @@ def list_resources(
 def list_resources_by_tag(
     ctx: McpContext,
     tag_names: list[str],
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """List readable resources that match one or more tag names."""
 
@@ -199,9 +182,6 @@ def list_resources_by_tag(
         "list_resources_by_tag",
         {
             "tag_names": tag_names,
-            "user_id": user_id,
-            "roles": roles or [],
-            "groups": groups or [],
         },
     )
 
@@ -213,9 +193,6 @@ def list_resources_by_tag(
 def describe_resource(
     ctx: McpContext,
     resource_id: str,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """Describe one resource and its visible columns."""
 
@@ -224,9 +201,6 @@ def describe_resource(
         "describe_resource",
         {
             "resource_id": resource_id,
-            "user_id": user_id,
-            "roles": roles or [],
-            "groups": groups or [],
         },
     )
 
@@ -239,9 +213,6 @@ def preview_resource(
     ctx: McpContext,
     resource_id: str,
     limit: int = 20,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """Preview rows from one resource with policy enforcement."""
 
@@ -251,9 +222,6 @@ def preview_resource(
         {
             "resource_id": resource_id,
             "limit": limit,
-            "user_id": user_id,
-            "roles": roles or [],
-            "groups": groups or [],
         },
     )
 
@@ -268,9 +236,6 @@ def execute_query(
     resource_ids: list[str],
     query: str,
     limit: int = 100,
-    user_id: str | None = None,
-    roles: list[str] | None = None,
-    groups: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run one guarded read-only SQL query."""
 
@@ -282,8 +247,5 @@ def execute_query(
             "resource_ids": resource_ids,
             "query": query,
             "limit": limit,
-            "user_id": user_id,
-            "roles": roles or [],
-            "groups": groups or [],
         },
     )

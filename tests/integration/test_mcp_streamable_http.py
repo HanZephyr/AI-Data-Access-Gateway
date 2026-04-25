@@ -10,6 +10,7 @@ from adg.control_plane.db import create_engine_from_url, create_session_factory
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.directory import Role, User, UserRole
 from adg.mcp_server.server import runtime_mcp_server
 from adg.shared.security import hash_api_key
 
@@ -21,10 +22,22 @@ def build_streamable_mcp_app() -> tuple[FastAPI, sessionmaker[Session]]:
 
     with session_factory() as session:
         session.add(
+            User(
+                id="user_1",
+                name="Alice",
+                external_ref="u001",
+                org_node_id=None,
+                status="active",
+            )
+        )
+        session.add(Role(id="role_finance", name="Finance"))
+        session.add(UserRole(user_id="user_1", role_id="role_finance"))
+        session.add(
             ApiKey(
                 id="key_runtime",
                 name="runtime",
                 key_hash=hash_api_key("adg_runtime"),
+                user_id="user_1",
                 status="active",
                 scopes='["runtime"]',
             )
@@ -62,8 +75,14 @@ async def test_streamable_mcp_server_lists_tools_and_calls_runtime_tool() -> Non
                     await session.initialize()
 
                     tools = await session.list_tools()
-                    assert any(tool.name == "list_datasources" for tool in tools.tools)
+                    list_datasources_tool = next(
+                        tool for tool in tools.tools if tool.name == "list_datasources"
+                    )
+                    properties = list_datasources_tool.inputSchema.get("properties", {})
+                    assert "user_id" not in properties
+                    assert "roles" not in properties
+                    assert "groups" not in properties
 
-                    result = await session.call_tool("list_datasources", {"user_id": "user-1"})
+                    result = await session.call_tool("list_datasources", {})
                     assert result.structuredContent is not None
                     assert result.structuredContent["datasources"][0]["id"] == "ds_1"

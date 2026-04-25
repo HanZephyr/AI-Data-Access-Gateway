@@ -1,8 +1,14 @@
+import pytest
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from adg.app.dependencies import authenticate_runtime_api_key_value
+from adg.control_plane.models.api_key import ApiKey
+from adg.control_plane.models.directory import OrgNode, Role, User, UserRole
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
 from adg.control_plane.models.resource import Resource
 from adg.policy.runtime import IdentityContext, RuntimePolicyService
+from adg.shared.security import hash_api_key
 
 
 def add_resource(
@@ -34,6 +40,70 @@ def identity() -> IdentityContext:
         roles=["analyst"],
         groups=["finance"],
     )
+
+
+def test_runtime_identity_is_loaded_from_key_binding(db_session: Session) -> None:
+    db_session.add(
+        OrgNode(
+            id="org_finance",
+            name="Finance",
+            code="FIN",
+            parent_id=None,
+            path="/finance",
+            depth=0,
+            status="active",
+        )
+    )
+    db_session.add(
+        User(
+            id="user_1",
+            name="Alice",
+            external_ref="u001",
+            org_node_id="org_finance",
+            status="active",
+        )
+    )
+    db_session.add(Role(id="role_finance", name="Finance"))
+    db_session.add(UserRole(user_id="user_1", role_id="role_finance"))
+    db_session.add(
+        ApiKey(
+            id="key_runtime",
+            name="runtime",
+            key_hash=hash_api_key("adg_runtime"),
+            user_id="user_1",
+            status="active",
+            scopes='["runtime"]',
+        )
+    )
+    db_session.flush()
+
+    authenticated = authenticate_runtime_api_key_value(db_session, "adg_runtime")
+
+    assert hasattr(authenticated, "user_id") and authenticated.user_id == "user_1"
+    assert hasattr(authenticated, "role_ids") and authenticated.role_ids == ["role_finance"]
+    assert (
+        hasattr(authenticated, "org_node_id")
+        and authenticated.org_node_id == "org_finance"
+    )
+
+
+def test_runtime_identity_rejects_unbound_runtime_key(db_session: Session) -> None:
+    db_session.add(
+        ApiKey(
+            id="key_runtime",
+            name="runtime",
+            key_hash=hash_api_key("adg_runtime"),
+            status="active",
+            scopes='["runtime"]',
+        )
+    )
+    db_session.flush()
+
+    with pytest.raises(HTTPException) as exc_info:
+        authenticate_runtime_api_key_value(db_session, "adg_runtime")
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Runtime key must be bound to a user"
 
 
 def test_resource_access_defaults_to_allow_when_no_policies_exist(

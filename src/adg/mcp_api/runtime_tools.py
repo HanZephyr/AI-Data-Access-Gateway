@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from adg.gateway_runtime.tools import GatewayRuntimeService
 from adg.policy.runtime import IdentityContext
 
@@ -44,6 +46,8 @@ RUNTIME_TOOL_DEFINITIONS = [
     ),
 ]
 
+FORBIDDEN_RUNTIME_IDENTITY_FIELDS = frozenset({"user_id", "roles", "groups"})
+
 
 def serialize_runtime_tool_definitions() -> list[dict[str, str]]:
     """Return JSON-ready runtime tool metadata for operator-facing setup guides."""
@@ -58,44 +62,50 @@ def dispatch_runtime_tool_call(
     runtime: GatewayRuntimeService,
     tool_name: str,
     payload: dict[str, Any],
+    runtime_identity: IdentityContext,
     api_key_id: str,
 ) -> dict[str, Any]:
     """Dispatch one runtime tool call to the shared service implementation."""
 
-    identity = _identity_from_payload(payload)
+    forbidden_fields = FORBIDDEN_RUNTIME_IDENTITY_FIELDS & payload.keys()
+    if forbidden_fields:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Runtime identity fields are not accepted",
+        )
 
     if tool_name == "list_datasources":
-        return runtime.list_datasources(identity=identity, api_key_id=api_key_id)
+        return runtime.list_datasources(identity=runtime_identity, api_key_id=api_key_id)
     if tool_name == "list_tags":
-        return runtime.list_tags(identity=identity, api_key_id=api_key_id)
+        return runtime.list_tags(identity=runtime_identity, api_key_id=api_key_id)
     if tool_name == "list_resources":
         return runtime.list_resources(
-            identity=identity,
+            identity=runtime_identity,
             api_key_id=api_key_id,
             datasource_id=str(payload["datasource_id"]),
         )
     if tool_name == "list_resources_by_tag":
         return runtime.list_resources_by_tag(
-            identity=identity,
+            identity=runtime_identity,
             api_key_id=api_key_id,
             tag_names=[str(item) for item in payload.get("tag_names", [])],
         )
     if tool_name == "describe_resource":
         return runtime.describe_resource(
-            identity=identity,
+            identity=runtime_identity,
             api_key_id=api_key_id,
             resource_id=str(payload["resource_id"]),
         )
     if tool_name == "preview_resource":
         return runtime.preview_resource(
-            identity=identity,
+            identity=runtime_identity,
             api_key_id=api_key_id,
             resource_id=str(payload["resource_id"]),
             limit=int(payload.get("limit", 20)),
         )
     if tool_name == "execute_query":
         return runtime.execute_query(
-            identity=identity,
+            identity=runtime_identity,
             api_key_id=api_key_id,
             datasource_id=str(payload["datasource_id"]),
             resource_ids=[str(item) for item in payload.get("resource_ids", [])],
@@ -103,13 +113,3 @@ def dispatch_runtime_tool_call(
             limit=int(payload.get("limit", 100)),
         )
     raise KeyError(tool_name)
-
-
-def _identity_from_payload(payload: dict[str, Any]) -> IdentityContext:
-    """Build runtime identity attributes from one trusted tool payload."""
-
-    return IdentityContext(
-        user_id=None if payload.get("user_id") is None else str(payload["user_id"]),
-        roles=[str(item) for item in payload.get("roles", [])],
-        groups=[str(item) for item in payload.get("groups", [])],
-    )

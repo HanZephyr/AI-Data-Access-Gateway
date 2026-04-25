@@ -1,19 +1,68 @@
 from dataclasses import dataclass, field
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from adg.control_plane.models.directory import Role, User, UserRole
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag
 from adg.control_plane.models.resource import Resource
 
 
 @dataclass(frozen=True)
 class IdentityContext:
-    """Caller identity attributes supplied by a trusted runtime client."""
+    """Key-derived runtime identity used during policy and audit evaluation."""
 
     user_id: str | None
     roles: list[str] = field(default_factory=list)
     groups: list[str] = field(default_factory=list)
+    org_node_id: str | None = None
+
+    @property
+    def role_ids(self) -> list[str]:
+        """Expose role identifiers with the new directory-driven naming."""
+
+        return self.roles
+
+
+def load_runtime_identity_for_user(
+    session: Session,
+    *,
+    user_id: str | None,
+) -> IdentityContext:
+    """Load one runtime identity from a user binding on an authenticated API key."""
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Runtime key must be bound to a user",
+        )
+
+    user = session.execute(
+        select(User).where(User.id == user_id, User.status == "active")
+    ).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Runtime key user was not found",
+        )
+
+    role_ids = list(
+        session.execute(
+            select(Role.id)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(
+                UserRole.user_id == user.id,
+                Role.status == "active",
+            )
+            .order_by(Role.id)
+        ).scalars()
+    )
+    return IdentityContext(
+        user_id=user.id,
+        roles=role_ids,
+        org_node_id=user.org_node_id,
+    )
 
 
 @dataclass(frozen=True)
