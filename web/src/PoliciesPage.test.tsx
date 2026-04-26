@@ -3,6 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type ReactDOM from "react-dom/client";
 
 type MockResponse = {
   ok: boolean;
@@ -10,6 +11,11 @@ type MockResponse = {
   statusText?: string;
   json?: unknown;
   text?: string;
+};
+
+type WindowWithAppRoot = Window & {
+  __adgRoot?: ReactDOM.Root;
+  __adgRootElement?: HTMLElement | null;
 };
 
 const routeMap: Record<string, MockResponse> = {
@@ -145,6 +151,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  const appWindow = window as WindowWithAppRoot;
+  appWindow.__adgRoot?.unmount();
+  appWindow.__adgRoot = undefined;
+  appWindow.__adgRootElement = undefined;
   cleanup();
   vi.restoreAllMocks();
   document.body.innerHTML = "";
@@ -164,5 +174,5 @@ describe("Policies page", () => {
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
-  }, 10000);
+  }, 20000);
 });

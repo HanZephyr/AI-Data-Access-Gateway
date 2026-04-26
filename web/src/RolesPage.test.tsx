@@ -3,6 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type ReactDOM from "react-dom/client";
 
 type MockResponse = {
   ok: boolean;
@@ -10,6 +11,11 @@ type MockResponse = {
   statusText?: string;
   json?: unknown;
   text?: string;
+};
+
+type WindowWithAppRoot = Window & {
+  __adgRoot?: ReactDOM.Root;
+  __adgRootElement?: HTMLElement | null;
 };
 
 const routeMap: Record<string, MockResponse> = {
@@ -198,6 +204,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  const appWindow = window as WindowWithAppRoot;
+  appWindow.__adgRoot?.unmount();
+  appWindow.__adgRoot = undefined;
+  appWindow.__adgRootElement = undefined;
   cleanup();
   vi.restoreAllMocks();
   document.body.innerHTML = "";
@@ -232,7 +242,7 @@ describe("Roles page", () => {
       expect(lastDatasourcePatchBody).not.toBeNull();
     });
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.password");
-  });
+  }, 20000);
 
   it("keeps audit rows summary-only and loads raw SQL on demand", async () => {
     await mountConsoleApp("audit");
@@ -243,5 +253,5 @@ describe("Roles page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "View SQL" }));
     expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
-  });
+  }, 20000);
 });

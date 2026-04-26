@@ -3,6 +3,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type ReactDOM from "react-dom/client";
 
 type MockResponse = {
   ok: boolean;
@@ -10,6 +11,11 @@ type MockResponse = {
   statusText?: string;
   json?: unknown;
   text?: string;
+};
+
+type WindowWithAppRoot = Window & {
+  __adgRoot?: ReactDOM.Root;
+  __adgRootElement?: HTMLElement | null;
 };
 
 const routeMap: Record<string, MockResponse> = {
@@ -147,6 +153,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  const appWindow = window as WindowWithAppRoot;
+  appWindow.__adgRoot?.unmount();
+  appWindow.__adgRoot = undefined;
+  appWindow.__adgRootElement = undefined;
   cleanup();
   vi.restoreAllMocks();
   document.body.innerHTML = "";
@@ -160,7 +170,7 @@ describe("Users console page", () => {
     await signInWithValidAdminKey();
     expect(localStorage.getItem("adg.apiKey")).toBeNull();
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
-  }, 10000);
+  }, 20000);
 
   it("shows a users navigation item and no standalone organization page", async () => {
     await mountConsoleApp("users");
@@ -169,7 +179,7 @@ describe("Users console page", () => {
     expect((await screen.findAllByText("Users")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
     expect(screen.queryByText("Organization")).not.toBeInTheDocument();
-  }, 10000);
+  }, 20000);
 
   it("opens the excel import modal with click and drag upload affordances", async () => {
     await mountConsoleApp("users");

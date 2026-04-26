@@ -14,7 +14,7 @@ from adg.masking.service import MaskingService
 from adg.policy.runtime import RuntimePolicyService
 from adg.shared.errors import ValidationError
 
-router = APIRouter(prefix="/internal", tags=["internal"])
+router = APIRouter(prefix="/runtime", tags=["runtime"])
 
 
 @router.post("/decrypt")
@@ -77,13 +77,15 @@ def decrypt_values(
             detail=str(error),
         ) from error
 
+    datasource_ids = {resource.datasource_id for resource in resources}
+    datasource_id = next(iter(datasource_ids)) if len(datasource_ids) == 1 else None
     AuditService(session).record_event(
         user_id=user_id,
         api_key_id=api_key.id,
         event_type="decryption",
         decision="allowed",
-        datasource_id=None,
-        resource_ids=[],
+        datasource_id=datasource_id,
+        resource_ids=resource_ids,
         query_id=None,
         sql_text=None,
         reason=None,

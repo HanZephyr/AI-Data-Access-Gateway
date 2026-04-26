@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/admin": backendTarget,
         "/mcp": backendTarget,
-        "/internal": backendTarget
+        "/runtime": backendTarget
       }
     }
   };

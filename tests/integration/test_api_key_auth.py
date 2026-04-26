@@ -1,13 +1,17 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
 
-from adg.app.dependencies import AuthenticatedApiKey, require_api_key
+from adg.app.dependencies import (
+    AuthenticatedApiKey,
+    authenticate_api_key_value,
+    require_api_key,
+)
 from adg.app.settings import get_settings
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
@@ -109,3 +113,38 @@ def test_require_api_key_honors_configured_header(monkeypatch: MonkeyPatch) -> N
     finally:
         monkeypatch.delenv("ADG_API_KEY_HEADER", raising=False)
         get_settings.cache_clear()
+
+
+def test_require_api_key_matches_by_direct_hash_lookup() -> None:
+    class FakeScalarResult:
+        def __init__(self, value: object | None) -> None:
+            self._value = value
+
+        def scalar_one_or_none(self) -> object | None:
+            return self._value
+
+    class FakeSession:
+        def __init__(self, api_key: ApiKey) -> None:
+            self.api_key = api_key
+            self.captured_statement: object | None = None
+
+        def execute(self, statement: object) -> FakeScalarResult:
+            self.captured_statement = statement
+            return FakeScalarResult(self.api_key)
+
+    raw_key = "adg_direct_lookup"
+    api_key = ApiKey(
+        id="key_lookup",
+        name="lookup",
+        key_hash=hash_api_key(raw_key),
+        status="active",
+        scopes='["admin"]',
+    )
+    session = FakeSession(api_key)
+
+    authenticated = authenticate_api_key_value(cast(Session, session), raw_key)
+
+    assert authenticated.id == "key_lookup"
+    compiled = str(session.captured_statement)
+    assert "api_keys.key_hash" in compiled
+    assert "api_keys.status" in compiled

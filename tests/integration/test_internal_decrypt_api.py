@@ -91,11 +91,11 @@ def build_internal_app(
     return TestClient(app), marker, session_factory
 
 
-def test_internal_decrypt_returns_plaintext_and_audits() -> None:
+def test_runtime_decrypt_returns_plaintext_and_audits_resource_scope() -> None:
     client, marker, session_factory = build_internal_app()
 
     response = client.post(
-        "/internal/decrypt",
+        "/runtime/decrypt",
         json={"values": [marker]},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
@@ -106,13 +106,15 @@ def test_internal_decrypt_returns_plaintext_and_audits() -> None:
         event = session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "decryption"
     assert event.decision == "allowed"
+    assert event.datasource_id == "ds_1"
+    assert event.resource_ids == ["res_customers"]
 
 
-def test_internal_decrypt_rejects_expired_context() -> None:
+def test_runtime_decrypt_rejects_expired_context() -> None:
     client, marker, _ = build_internal_app(expired=True)
 
     response = client.post(
-        "/internal/decrypt",
+        "/runtime/decrypt",
         json={"values": [marker]},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )
@@ -121,7 +123,7 @@ def test_internal_decrypt_rejects_expired_context() -> None:
     assert response.json()["detail"] == "Decrypt context expired"
 
 
-def test_internal_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
+def test_runtime_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
     client, marker, session_factory = build_internal_app()
 
     with session_factory() as session:
@@ -134,7 +136,7 @@ def test_internal_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
         session.commit()
 
     response = client.post(
-        "/internal/decrypt",
+        "/runtime/decrypt",
         json={"values": [marker]},
         headers={"X-ADG-API-Key": "adg_runtime"},
     )

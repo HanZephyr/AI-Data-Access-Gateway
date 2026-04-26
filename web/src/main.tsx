@@ -4723,4 +4723,26 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+declare global {
+  interface Window {
+    __adgRoot?: ReactDOM.Root;
+    __adgRootElement?: HTMLElement | null;
+  }
+}
+
+const appRootElement = document.getElementById("root") as HTMLElement | null;
+if (appRootElement) {
+  const staleRootElement = window.__adgRootElement;
+  if (window.__adgRoot && staleRootElement && !staleRootElement.isConnected) {
+    window.__adgRoot = undefined;
+    window.__adgRootElement = undefined;
+  } else if (window.__adgRoot && staleRootElement !== appRootElement) {
+    window.__adgRoot.unmount();
+    window.__adgRoot = undefined;
+    window.__adgRootElement = undefined;
+  }
+  const appRoot = window.__adgRoot ?? ReactDOM.createRoot(appRootElement);
+  window.__adgRoot = appRoot;
+  window.__adgRootElement = appRootElement;
+  appRoot.render(<App />);
+}

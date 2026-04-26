@@ -11,7 +11,7 @@ from adg.app.settings import get_settings
 from adg.control_plane.db import get_session
 from adg.control_plane.models.api_key import ApiKey
 from adg.policy.runtime import IdentityContext, load_runtime_identity_for_user
-from adg.shared.security import verify_api_key
+from adg.shared.security import hash_api_key
 
 
 @dataclass(frozen=True)
@@ -71,23 +71,25 @@ def authenticate_api_key_value(
             detail="Missing API key",
         )
 
-    api_keys = session.execute(select(ApiKey).where(ApiKey.status == "active")).scalars()
-
-    # API keys are hashed, so the request key must be checked against each active hash.
-    for api_key in api_keys:
-        if verify_api_key(raw_api_key, api_key.key_hash):
-            if api_key.expires_at is not None and _normalize_expiration(
-                api_key.expires_at
-            ) <= datetime.now(UTC):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Expired API key",
-                )
-            return AuthenticatedApiKey(
-                id=api_key.id,
-                scopes=api_key.scopes,
-                user_id=api_key.user_id,
+    api_key = session.execute(
+        select(ApiKey).where(
+            ApiKey.status == "active",
+            ApiKey.key_hash == hash_api_key(raw_api_key),
+        )
+    ).scalar_one_or_none()
+    if api_key is not None:
+        if api_key.expires_at is not None and _normalize_expiration(
+            api_key.expires_at
+        ) <= datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Expired API key",
             )
+        return AuthenticatedApiKey(
+            id=api_key.id,
+            scopes=api_key.scopes,
+            user_id=api_key.user_id,
+        )
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

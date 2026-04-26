@@ -1,6 +1,6 @@
 # AI Data Access Gateway
 
-AI Data Access Gateway is a secure data access gateway for AI agents. It exposes controlled metadata discovery and read-only data access while enforcing authorization, SQL safety checks, masking, reversible desensitization, internal decryption, and audit logging.
+AI Data Access Gateway is a secure data access gateway for AI agents. It exposes controlled metadata discovery and read-only data access while enforcing authorization, SQL safety checks, masking, reversible desensitization, runtime decryption, and audit logging.
 
 ## Development
 
@@ -22,6 +22,7 @@ Run the backend:
 
 ```bash
 $env:ADG_CONTROL_PLANE_DATABASE_URL="sqlite:///./data/adg-control-plane.db"
+$env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
 uv run --extra dev uvicorn adg.app.main:create_app --factory --reload
 ```
 
@@ -74,6 +75,7 @@ Run with Docker Compose:
 
 ```bash
 $env:ADG_SECRET_KEY = "<generate-a-long-random-secret>"
+$env:ADG_CREDENTIAL_ENCRYPTION_KEY = "<generate-a-second-long-random-secret>"
 docker compose up --build
 docker exec -it ai-data-access-gateway-backend-1 init-admin
 ```
@@ -91,7 +93,7 @@ Milestone 2 adds datasource CRUD, connector registry and thin relational adapter
 
 Milestone 3 adds MCP-style runtime tool handlers, an authenticated HTTP tool facade, conservative SQL Guard, runtime resource and field policy checks, tag visibility, read-only connector execution, and runtime audit events.
 
-Milestone 4 adds masking policies, fixed/partial/hash/reversible masking, decrypt contexts, internal decrypt API support, and masking/decrypt audit events.
+Milestone 4 adds masking policies, fixed/partial/hash/reversible masking, decrypt contexts, runtime decrypt API support, and masking/decrypt audit events.
 
 Milestone 5 adds admin APIs for console workflows and a Vite React + Ant Design web console under `web/`.
 
