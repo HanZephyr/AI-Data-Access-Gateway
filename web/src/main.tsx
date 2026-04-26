@@ -6,6 +6,7 @@ import {
   ClusterOutlined,
   DatabaseOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EditOutlined,
   ExperimentOutlined,
   EyeOutlined,
@@ -63,9 +64,9 @@ import {
 import {
   buildDirectoryImportPayload,
   buildUserCreatePayload,
-  normalizeOrgPathDelimiter,
-  parseDirectoryRowsFromText,
-  type DirectoryImportRow,
+  directoryImportTemplateFields,
+  parseDirectoryRowsFromFile,
+  parseJsonPayloadText,
 } from "./directoryForms";
 import { AdminOnboarding } from "./AdminOnboarding";
 import { validateAdminApiKey } from "./adminAuth";
@@ -103,7 +104,9 @@ type DirectoryUserRecord = {
 };
 type OrgTreeNode = {
   key: string;
-  title: string;
+  title: React.ReactNode;
+  path?: string;
+  directUserNames?: string[];
   children?: OrgTreeNode[];
 };
 type CatalogTreeNode = AnyRecord & {
@@ -117,6 +120,7 @@ type CatalogJumpTarget = {
 };
 type McpPlatformKey = McpPlatformGuide["key"];
 type TranslationParams = Record<string, string | number>;
+type ImportPlatformKey = "feishu" | "wecom" | "dingtalk";
 
 const translations = {
   "en-US": {
@@ -247,6 +251,29 @@ const translations = {
     "users.keysCreated": "Runtime keys created",
     "users.rootMapped": "Empty org paths map to the root organization node.",
     "users.importReady": "Upload a file to preview org changes, new roles, and affected users.",
+    "users.downloadTemplate": "Download template",
+    "users.templateGuide": "Template fields",
+    "users.templateGuideSummary": "Fill the template first, then upload the edited Excel file. Required columns must stay in place.",
+    "users.field": "Field",
+    "users.required": "Required",
+    "users.format": "Format",
+    "users.requirement": "Requirement",
+    "users.importPlatform": "Platform import",
+    "users.importPlatformHint": "Use a pull-only connector payload for Feishu, WeCom, or DingTalk.",
+    "users.platformPayload": "Connector payload",
+    "users.platformPayloadHint": "Paste the normalized directory payload or captured platform response JSON here.",
+    "users.orgCreateRoot": "New root node",
+    "users.orgCreateChild": "Add child node",
+    "users.orgEdit": "Edit node",
+    "users.orgDelete": "Delete node",
+    "users.orgDeleteConfirm": "Delete this organization node?",
+    "users.orgNodeTitle": "Organization node",
+    "users.orgNodeMembers": "Direct members",
+    "users.orgNodeSelected": "Selected node",
+    "users.importTabExcel": "Excel",
+    "users.importTabFeishu": "Feishu",
+    "users.importTabWecom": "WeCom",
+    "users.importTabDingtalk": "DingTalk",
     "roles.directory": "Role directory",
     "roles.summary": "Independent directory roles used by runtime authorization.",
     "roles.activeCount": "Active roles",
@@ -316,8 +343,11 @@ const translations = {
     "mcp.tool.execute_query": "Run one read-only SQL query scoped to declared resources.",
     "option.active": "active",
     "option.disabled": "disabled",
+    "option.all": "all users",
     "option.allow": "allow",
     "option.deny": "deny",
+    "option.user": "user",
+    "option.role": "role",
     "option.fixed": "fixed",
     "option.partial": "partial",
     "option.hash": "hash",
@@ -499,6 +529,29 @@ const translations = {
     "users.keysCreated": "新建运行时密钥数",
     "users.rootMapped": "空组织路径会映射到根组织节点。",
     "users.importReady": "上传文件后先预览，再确认组织变更、角色新增和影响用户。",
+    "users.downloadTemplate": "下载模板",
+    "users.templateGuide": "字段说明",
+    "users.templateGuideSummary": "请先下载模板并填写，再上传修改后的 Excel 文件。必填列不可删除或改名。",
+    "users.field": "字段",
+    "users.required": "是否必填",
+    "users.format": "格式",
+    "users.requirement": "要求说明",
+    "users.importPlatform": "平台导入",
+    "users.importPlatformHint": "使用飞书、企业微信、钉钉的 pull-only connector 载荷执行导入。",
+    "users.platformPayload": "连接器载荷",
+    "users.platformPayloadHint": "在这里粘贴标准化后的目录载荷，或平台接口返回的 JSON 响应。",
+    "users.orgCreateRoot": "新建根节点",
+    "users.orgCreateChild": "新增子节点",
+    "users.orgEdit": "编辑节点",
+    "users.orgDelete": "删除节点",
+    "users.orgDeleteConfirm": "确认删除该组织节点？",
+    "users.orgNodeTitle": "组织节点",
+    "users.orgNodeMembers": "直属成员",
+    "users.orgNodeSelected": "当前选中节点",
+    "users.importTabExcel": "Excel",
+    "users.importTabFeishu": "飞书",
+    "users.importTabWecom": "企业微信",
+    "users.importTabDingtalk": "钉钉",
     "roles.directory": "角色目录",
     "roles.summary": "运行时授权使用的独立目录角色。",
     "roles.activeCount": "启用角色数",
@@ -567,8 +620,11 @@ const translations = {
     "mcp.tool.execute_query": "在声明资源范围内执行只读 SQL 查询。",
     "option.active": "启用",
     "option.disabled": "停用",
+    "option.all": "全员",
     "option.allow": "允许",
     "option.deny": "拒绝",
+    "option.user": "用户",
+    "option.role": "角色",
     "option.fixed": "固定替换",
     "option.partial": "部分遮罩",
     "option.hash": "哈希",
@@ -750,6 +806,29 @@ const translations = {
     "users.keysCreated": "建立執行時金鑰數",
     "users.rootMapped": "空的組織路徑會映射到根組織節點。",
     "users.importReady": "上傳檔案後先預覽，再確認組織變更、角色新增與受影響使用者。",
+    "users.downloadTemplate": "下載模板",
+    "users.templateGuide": "欄位說明",
+    "users.templateGuideSummary": "請先下載模板並填寫，再上傳修改後的 Excel 檔。必填欄位不可刪除或改名。",
+    "users.field": "欄位",
+    "users.required": "是否必填",
+    "users.format": "格式",
+    "users.requirement": "要求說明",
+    "users.importPlatform": "平台匯入",
+    "users.importPlatformHint": "使用飛書、企業微信、釘釘的 pull-only connector 載荷執行匯入。",
+    "users.platformPayload": "連接器載荷",
+    "users.platformPayloadHint": "在這裡貼上標準化後的目錄載荷，或平台介面回傳的 JSON 回應。",
+    "users.orgCreateRoot": "新增根節點",
+    "users.orgCreateChild": "新增子節點",
+    "users.orgEdit": "編輯節點",
+    "users.orgDelete": "刪除節點",
+    "users.orgDeleteConfirm": "確認刪除這個組織節點？",
+    "users.orgNodeTitle": "組織節點",
+    "users.orgNodeMembers": "直屬成員",
+    "users.orgNodeSelected": "目前選取節點",
+    "users.importTabExcel": "Excel",
+    "users.importTabFeishu": "飛書",
+    "users.importTabWecom": "企業微信",
+    "users.importTabDingtalk": "釘釘",
     "roles.directory": "角色目錄",
     "roles.summary": "供執行時授權使用的獨立目錄角色。",
     "roles.activeCount": "啟用角色數",
@@ -818,8 +897,11 @@ const translations = {
     "mcp.tool.execute_query": "在宣告資源範圍內執行唯讀 SQL 查詢。",
     "option.active": "啟用",
     "option.disabled": "停用",
+    "option.all": "全員",
     "option.allow": "允許",
     "option.deny": "拒絕",
+    "option.user": "使用者",
+    "option.role": "角色",
     "option.fixed": "固定替換",
     "option.partial": "部分遮罩",
     "option.hash": "雜湊",
@@ -1046,6 +1128,21 @@ function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
   return { data, loading, error, reload };
 }
 
+function useViewportBreakpoint(maxWidth: number) {
+  /** Return whether the current viewport width is at or below one responsive breakpoint. */
+
+  const read = () => (typeof window === "undefined" ? false : window.innerWidth <= maxWidth);
+  const [matches, setMatches] = useState(read);
+
+  useEffect(() => {
+    const onResize = () => setMatches(read());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [maxWidth]);
+
+  return matches;
+}
+
 function App() {
   /** Configure Ant Design theming and provide translation state to the console. */
 
@@ -1094,6 +1191,7 @@ function ConsoleApp() {
   const [page, setPage] = useState<PageKey>(getStoredPage);
   const [catalogJumpTarget, setCatalogJumpTarget] = useState<CatalogJumpTarget | null>(null);
   const [draftApiKey, setDraftApiKey] = useState("");
+  const showCompactPageSelect = useViewportBreakpoint(1280);
   const api = useApi();
   const showOnboarding = !api.apiKey || Boolean(api.authError);
   const navigationItems = pages.map((item) => ({
@@ -1192,13 +1290,15 @@ function ConsoleApp() {
               {currentPageTitle}
             </Typography.Title>
           </div>
-          <Select
-            className="mobile-page-select"
-            aria-label={currentPageTitle}
-            value={page}
-            options={navigationItems.map((item) => ({ key: item.key, value: item.key, label: item.label }))}
-            onChange={(key) => setPage(key as PageKey)}
-          />
+          {showCompactPageSelect ? (
+            <Select
+              className="mobile-page-select"
+              aria-label={currentPageTitle}
+              value={page}
+              options={navigationItems.map((item) => ({ key: item.key, value: item.key, label: item.label }))}
+              onChange={(key) => setPage(key as PageKey)}
+            />
+          ) : null}
           <div className="topbar-actions">
             <LanguageSwitcher
               className="language-select language-select-header"
@@ -1294,6 +1394,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
 
   const { message: messageApi, modal } = AntApp.useApp();
   const { t } = useI18n();
+  const compactDirectoryLayout = useViewportBreakpoint(1280);
   const orgNodesState = useData<AnyRecord[]>(() => api.request("/admin/org-nodes"), [api.apiKey]);
   const rolesState = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
   const usersState = useData<DirectoryUserRecord[]>(
@@ -1315,12 +1416,20 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
   const [importPreview, setImportPreview] = useState<AnyRecord | null>(null);
   const [importFileName, setImportFileName] = useState("");
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSource, setImportSource] = useState<"excel" | ImportPlatformKey>("excel");
+  const [orgNodeModalOpen, setOrgNodeModalOpen] = useState(false);
+  const [editingOrgNodeId, setEditingOrgNodeId] = useState<string | null>(null);
+  const [orgNodeParentId, setOrgNodeParentId] = useState<string | null>(null);
   const [createForm] = Form.useForm();
   const [importForm] = Form.useForm();
+  const [orgNodeForm] = Form.useForm();
   const orgNodes = orgNodesState.data || [];
   const roles = rolesState.data || [];
   const users = mergeDirectoryUsers(usersState.data || [], sessionUsers, orgNodes, roles);
   const orgTree = buildOrgTree(orgNodes);
+  const selectedOrgNode = selectedOrgId
+    ? orgNodes.find((node) => String(node.id) === selectedOrgId) || null
+    : null;
   const orgDescendantIds = selectedOrgId ? collectOrgDescendantIds(orgNodes, selectedOrgId) : null;
   const filteredUsers = orgDescendantIds
     ? users.filter((user) => user.org_node_id && orgDescendantIds.has(String(user.org_node_id)))
@@ -1341,6 +1450,65 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     orgNodesState.reload();
     rolesState.reload();
     usersState.reload();
+  };
+
+  const openCreateOrgNode = (mode: "root" | "child" | "edit") => {
+    if (mode !== "root" && !selectedOrgNode) return;
+    if (mode === "edit" && selectedOrgNode) {
+      setEditingOrgNodeId(String(selectedOrgNode.id));
+      setOrgNodeParentId(String(selectedOrgNode.parent_id || "") || null);
+      orgNodeForm.setFieldsValue({
+        name: selectedOrgNode.name,
+        code: selectedOrgNode.code || "",
+        status: selectedOrgNode.status,
+      });
+    } else {
+      setEditingOrgNodeId(null);
+      setOrgNodeParentId(mode === "child" && selectedOrgNode ? String(selectedOrgNode.id) : null);
+      orgNodeForm.setFieldsValue({
+        name: "",
+        code: "",
+        status: "active",
+      });
+    }
+    setOrgNodeModalOpen(true);
+  };
+
+  const saveOrgNode = async () => {
+    const values = await orgNodeForm.validateFields();
+    const payload = {
+      name: String(values.name || "").trim(),
+      code: String(values.code || "").trim() || null,
+      status: String(values.status || "active"),
+    };
+    if (editingOrgNodeId) {
+      await api.request(`/admin/org-nodes/${editingOrgNodeId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ ...payload, parent_id: orgNodeParentId }),
+      });
+    } else {
+      await api.request("/admin/org-nodes", {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          parent_id: orgNodeParentId,
+        }),
+      });
+    }
+    setOrgNodeModalOpen(false);
+    setEditingOrgNodeId(null);
+    setOrgNodeParentId(null);
+    orgNodeForm.resetFields();
+    reloadDirectory();
+    messageApi.success(t("common.saved"));
+  };
+
+  const deleteOrgNode = async () => {
+    if (!selectedOrgNode) return;
+    await api.request(`/admin/org-nodes/${selectedOrgNode.id}`, { method: "DELETE" });
+    setSelectedOrgId(null);
+    reloadDirectory();
+    messageApi.success(t("common.deleted"));
   };
 
   const saveUser = async () => {
@@ -1385,20 +1553,33 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
 
   const previewImport = async (mode: "preview" | "execute") => {
     const values = await importForm.validateFields();
-    if (!importFile) {
-      messageApi.error(t("users.importReady"));
-      return;
-    }
-    const fileText = await importFile.text();
-    const rows = parseDirectoryRowsFromText(fileText);
-    const payload = buildDirectoryImportPayload(rows, values.delimiter);
     setPreviewLoading(true);
     try {
-      const endpoint = mode === "execute" ? "/admin/users/imports/excel/execute" : "/admin/users/imports/excel/preview";
-      const result = await api.request<AnyRecord>(endpoint, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      let result: AnyRecord;
+      if (importSource === "excel") {
+        if (!importFile) {
+          messageApi.error(t("users.importReady"));
+          return;
+        }
+        const rows = await parseDirectoryRowsFromFile(importFile);
+        const payload = buildDirectoryImportPayload(rows, values.delimiter);
+        const endpoint = mode === "execute"
+          ? "/admin/users/imports/excel/execute"
+          : "/admin/users/imports/excel/preview";
+        result = await api.request<AnyRecord>(endpoint, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        const resultPayload = parseJsonPayloadText(String(values[`${importSource}Payload`] || ""));
+        result = await api.request<AnyRecord>(`/admin/users/importers/${importSource}/pull`, {
+          method: "POST",
+          body: JSON.stringify({
+            mode,
+            config: { payload: resultPayload },
+          }),
+        });
+      }
       setImportPreview(result);
       if (mode === "execute") {
         const executedUsers = Array.isArray(result.users)
@@ -1418,22 +1599,37 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
         reloadDirectory();
         messageApi.success(t("common.saved"));
       }
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error));
     } finally {
       setPreviewLoading(false);
     }
   };
 
   return (
-    <section className="directory-workspace">
+    <section className={`directory-workspace${compactDirectoryLayout ? " directory-workspace-compact" : ""}`}>
       <div className="directory-tree-pane panel">
         <div className="panel-head">
           <Typography.Title level={4}>{t("users.organizationTree")}</Typography.Title>
-          <Button onClick={() => setSelectedOrgId(null)}>{t("common.refresh")}</Button>
+          <Space size={4} wrap>
+            <IconAction title={t("users.orgCreateRoot")} icon={<PlusOutlined />} onClick={() => openCreateOrgNode("root")} />
+            <IconAction title={t("users.orgCreateChild")} icon={<PlusOutlined />} onClick={() => openCreateOrgNode("child")} />
+            <IconAction title={t("users.orgEdit")} icon={<EditOutlined />} onClick={() => openCreateOrgNode("edit")} />
+            <Popconfirm title={t("users.orgDeleteConfirm")} onConfirm={() => void deleteOrgNode()}>
+              <Button size="small" icon={<DeleteOutlined />} disabled={!selectedOrgNode} />
+            </Popconfirm>
+            <Button onClick={() => { setSelectedOrgId(null); reloadDirectory(); }}>{t("common.refresh")}</Button>
+          </Space>
         </div>
         <div className="directory-tree-body">
+          {selectedOrgNode ? (
+            <Typography.Paragraph className="directory-tree-summary">
+              {t("users.orgNodeSelected")}: {String(selectedOrgNode.path || selectedOrgNode.name)}
+            </Typography.Paragraph>
+          ) : null}
           <Tree
             blockNode
-            treeData={orgTree}
+            treeData={toOrgTreeData(orgTree)}
             selectedKeys={selectedOrgId ? [selectedOrgId] : []}
             onSelect={(keys) => setSelectedOrgId(String(keys[0] || ""))}
           />
@@ -1454,7 +1650,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
             </Button>
           </Space>
         </div>
-        <div className="directory-main">
+        <div className={`directory-main${compactDirectoryLayout ? " directory-main-compact" : ""}`}>
           <section className="panel directory-list-panel">
             <div className="panel-head">
               <Typography.Title level={4}>{t("users.directory")}</Typography.Title>
@@ -1470,13 +1666,14 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                 onClick: () => setSelectedUserId(String(row.id || row.user_id || row.external_ref)),
               })}
               columns={[
-                { title: columnLabel("name", t), dataIndex: "name", key: "name" },
-                { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
-                { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+                { title: columnLabel("name", t), dataIndex: "name", key: "name", width: 160, ellipsis: true },
+                { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref", width: 150, ellipsis: true },
+                { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path", width: 220, ellipsis: true },
                 {
                   title: columnLabel("role_names", t),
                   dataIndex: "role_names",
                   key: "role_names",
+                  width: 200,
                   render: (value: string[]) => (
                     <Space size={[6, 6]} wrap>
                       {(value || []).map((role) => <Tag key={role}>{role}</Tag>)}
@@ -1484,6 +1681,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                   ),
                 },
               ]}
+              scroll={{ x: 760 }}
             />
           </section>
           <section className="panel directory-detail-panel">
@@ -1511,6 +1709,13 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                       <Space size={[6, 6]} wrap>
                         {selectedUser.role_names.length
                           ? selectedUser.role_names.map((role) => <Tag key={role}>{role}</Tag>)
+                          : <Typography.Text type="secondary">-</Typography.Text>}
+                      </Space>
+                    </Descriptions.Item>
+                    <Descriptions.Item label={t("users.orgNodeMembers")}>
+                      <Space size={[6, 6]} wrap>
+                        {(Array.isArray(selectedOrgNode?.direct_user_names) ? selectedOrgNode?.direct_user_names : []).length
+                          ? (selectedOrgNode?.direct_user_names || []).map((userName: string) => <Tag key={userName}>{userName}</Tag>)
                           : <Typography.Text type="secondary">-</Typography.Text>}
                       </Space>
                     </Descriptions.Item>
@@ -1577,84 +1782,118 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
         ]}
         width={880}
       >
-        <div className="directory-import-layout">
-          <div className="directory-import-uploader">
-            <Typography.Text strong>{t("users.uploadFile")}</Typography.Text>
-            <Typography.Paragraph>{t("users.importHint")}</Typography.Paragraph>
-            <Form form={importForm} layout="vertical" initialValues={{ delimiter: "/" }}>
-              <Form.Item name="delimiter" label={t("field.orgDelimiter")}>
-                <Input aria-label={t("field.orgDelimiter")} />
-              </Form.Item>
-            </Form>
-            <Upload.Dragger
-              multiple={false}
-              beforeUpload={(file) => {
-                setImportFile(file);
-                setImportFileName(file.name);
-                return false;
-              }}
-              showUploadList={Boolean(importFile)}
-              onRemove={() => {
-                setImportFile(null);
-                setImportFileName("");
-                setImportPreview(null);
-              }}
-            >
-              <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-              <p className="ant-upload-text">{t("users.dragFileHere")}</p>
-              <p className="ant-upload-hint">{importFileName || t("users.importReady")}</p>
-            </Upload.Dragger>
-          </div>
-          <div className="directory-import-preview panel">
-            <div className="panel-head">
-              <Typography.Title level={4}>{t("users.previewSummary")}</Typography.Title>
-              <Tag>{importFileName || t("users.uploadFile")}</Tag>
-            </div>
-            <div className="directory-import-preview-body">
-              {importPreview ? (
-                <>
-                  <div className="directory-preview-stats">
-                    <Statistic title={t("users.usersCreated")} value={Number(importPreview.summary?.created_users ?? importPreview.summary?.create_count ?? 0)} />
-                    <Statistic title={t("users.usersUpdated")} value={Number(importPreview.summary?.updated_users ?? importPreview.summary?.update_count ?? 0)} />
-                    <Statistic title={t("users.keysCreated")} value={Number(importPreview.summary?.runtime_keys_created ?? 0)} />
+        <Tabs
+          activeKey={importSource}
+          onChange={(value) => {
+            setImportSource(value as "excel" | ImportPlatformKey);
+            setImportPreview(null);
+          }}
+          items={[
+            {
+              key: "excel",
+              label: t("users.importTabExcel"),
+              children: (
+                <div className={`directory-import-layout${compactDirectoryLayout ? " directory-import-layout-compact" : ""}`}>
+                  <div className="directory-import-uploader">
+                    <Space align="center" wrap>
+                      <Typography.Text strong>{t("users.uploadFile")}</Typography.Text>
+                      <Button
+                        icon={<DownloadOutlined />}
+                        href="/adg-user-import-template.xlsx"
+                        target="_blank"
+                      >
+                        {t("users.downloadTemplate")}
+                      </Button>
+                    </Space>
+                    <Typography.Paragraph>{t("users.importHint")}</Typography.Paragraph>
+                    <Typography.Paragraph type="secondary">{t("users.templateGuideSummary")}</Typography.Paragraph>
+                    <Table
+                      size="small"
+                      pagination={false}
+                      rowKey="field"
+                      dataSource={directoryImportTemplateFields}
+                      columns={[
+                        { title: t("users.field"), dataIndex: "field", key: "field", width: 120 },
+                        { title: t("users.required"), dataIndex: "required", key: "required", width: 96, render: (value: boolean) => (value ? "Yes" : "No") },
+                        { title: t("users.format"), dataIndex: "format", key: "format", width: 200 },
+                        { title: t("users.requirement"), dataIndex: "notes", key: "notes" },
+                      ]}
+                    />
+                    <Form form={importForm} layout="vertical" initialValues={{ delimiter: "/" }}>
+                      <Form.Item name="delimiter" label={t("field.orgDelimiter")}>
+                        <Input aria-label={t("field.orgDelimiter")} />
+                      </Form.Item>
+                    </Form>
+                    <Upload.Dragger
+                      multiple={false}
+                      beforeUpload={(file) => {
+                        setImportFile(file);
+                        setImportFileName(file.name);
+                        return false;
+                      }}
+                      showUploadList={Boolean(importFile)}
+                      onRemove={() => {
+                        setImportFile(null);
+                        setImportFileName("");
+                        setImportPreview(null);
+                      }}
+                    >
+                      <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+                      <p className="ant-upload-text">{t("users.dragFileHere")}</p>
+                      <p className="ant-upload-hint">{importFileName || t("users.importReady")}</p>
+                    </Upload.Dragger>
                   </div>
-                  <Descriptions bordered column={1} size="small">
-                    <Descriptions.Item label={t("users.orgNodesToCreate")}>
-                      {Array.isArray(importPreview.org_nodes_to_create || importPreview.org_nodes_created)
-                        ? (importPreview.org_nodes_to_create || importPreview.org_nodes_created).join(", ") || "-"
-                        : "-"}
-                    </Descriptions.Item>
-                    <Descriptions.Item label={t("users.rolesToCreate")}>
-                      {Array.isArray(importPreview.roles_to_create || importPreview.roles_created)
-                        ? (importPreview.roles_to_create || importPreview.roles_created).join(", ") || "-"
-                        : "-"}
-                    </Descriptions.Item>
-                  </Descriptions>
-                  <Table
-                    size="small"
-                    rowKey={(row) => `${row.external_ref}:${row.user_name}`}
-                    pagination={false}
-                    dataSource={Array.isArray(importPreview.users) ? importPreview.users : []}
-                    columns={[
-                      { title: columnLabel("name", t), dataIndex: "user_name", key: "user_name" },
-                      { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
-                      { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
-                      {
-                        title: columnLabel("role_names", t),
-                        dataIndex: "roles",
-                        key: "roles",
-                        render: (value: string[] | string) =>
-                          Array.isArray(value) ? value.join(", ") : String(value || "-"),
-                      },
-                    ]}
-                  />
-                </>
-              ) : (
-                <Empty description={t("users.importReady")} />
-              )}
-            </div>
-          </div>
-        </div>
+                  <ImportPreviewPanel importPreview={importPreview} importFileName={importFileName} t={t} />
+                </div>
+              ),
+            },
+            ...(["feishu", "wecom", "dingtalk"] as ImportPlatformKey[]).map((platform) => ({
+              key: platform,
+              label: t(`users.importTab${platform.charAt(0).toUpperCase()}${platform.slice(1)}` as TranslationKey),
+              children: (
+                <div className={`directory-import-layout${compactDirectoryLayout ? " directory-import-layout-compact" : ""}`}>
+                  <div className="directory-import-uploader">
+                    <Typography.Text strong>{t("users.importPlatform")}</Typography.Text>
+                    <Typography.Paragraph>{t("users.importPlatformHint")}</Typography.Paragraph>
+                    <Form form={importForm} layout="vertical">
+                      <Form.Item
+                        name={`${platform}Payload`}
+                        label={t("users.platformPayload")}
+                        rules={[{ required: true, message: t("common.required", { label: t("users.platformPayload") }) }]}
+                      >
+                        <Input.TextArea aria-label={t("users.platformPayload")} autoSize={{ minRows: 14, maxRows: 22 }} placeholder={t("users.platformPayloadHint")} />
+                      </Form.Item>
+                    </Form>
+                  </div>
+                  <ImportPreviewPanel importPreview={importPreview} importFileName={t(`users.importTab${platform.charAt(0).toUpperCase()}${platform.slice(1)}` as TranslationKey)} t={t} />
+                </div>
+              ),
+            })),
+          ]}
+        />
+      </Modal>
+
+      <Modal
+        title={t("users.orgNodeTitle")}
+        open={orgNodeModalOpen}
+        onCancel={() => {
+          setOrgNodeModalOpen(false);
+          setEditingOrgNodeId(null);
+          setOrgNodeParentId(null);
+        }}
+        onOk={() => void saveOrgNode()}
+      >
+        <Form form={orgNodeForm} layout="vertical">
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="code" label="Code">
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+        </Form>
       </Modal>
     </section>
   );
@@ -2679,35 +2918,227 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   /** Shared policy CRUD page that adapts required fields by policy kind. */
 
   const isField = kind === "field";
+  const { message: messageApi } = AntApp.useApp();
+  const { t } = useI18n();
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
+  const tags = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
+  const users = useData<DirectoryUserRecord[]>(() => api.request("/admin/users"), [api.apiKey]);
+  const roles = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
+  const state = useData<AnyRecord[]>(() => api.request(`/admin/${kind}-policies`), [api.apiKey, kind]);
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const [editing, setEditing] = useState<AnyRecord | null>(null);
+  const [targetMode, setTargetMode] = useState<"resource" | "tag">("resource");
+  const [editingTargetMode, setEditingTargetMode] = useState<"resource" | "tag">("resource");
+  const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
+  const createSubjectType = Form.useWatch("subject_type", form) || "user";
+  const editSubjectType = Form.useWatch("subject_type", editForm) || "user";
+
+  const openCreate = () => {
+    setTargetMode("resource");
+    form.resetFields();
+    form.setFieldsValue({ subject_type: "user", effect: "allow", action: "read", priority: 0, status: "active" });
+    setOpen(true);
+  };
+
+  const create = async () => {
+    const values = await form.validateFields();
+    await api.request(`/admin/${kind}-policies`, {
+      method: "POST",
+      body: JSON.stringify(normalizePolicyValues(values, targetMode, isField)),
+    });
+    messageApi.success(t("common.saved"));
+    setOpen(false);
+    state.reload();
+  };
+
+  const update = async () => {
+    if (!editing) return;
+    const values = await editForm.validateFields();
+    await api.request(`/admin/${kind}-policies/${editing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify(normalizePolicyValues(values, editingTargetMode, isField)),
+    });
+    messageApi.success(t("common.saved"));
+    setEditing(null);
+    state.reload();
+  };
+
+  const remove = async (row: AnyRecord) => {
+    await api.request(`/admin/${kind}-policies/${row.id}`, { method: "DELETE" });
+    messageApi.success(t("common.deleted"));
+    state.reload();
+  };
+
+  const policyForm = (
+    targetForm: FormInstance<AnyRecord>,
+    currentSubjectType: string,
+    currentTargetMode: "resource" | "tag",
+    setCurrentTargetMode: React.Dispatch<React.SetStateAction<"resource" | "tag">>,
+  ) => {
+    return (
+      <Form form={targetForm} layout="vertical">
+        <div className="config-form-grid">
+          <Form.Item
+            name="subject_type"
+            label={t("field.subjectType")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.subjectType") }) }]}
+          >
+            <Select
+              options={["all", "user", "role"].map((value) => ({ value, label: optionLabel(value, t) }))}
+              onChange={(value) => {
+                if (value === "all") {
+                  targetForm.setFieldValue("subject_id", "all");
+                } else if (targetForm.getFieldValue("subject_id") === "all") {
+                  targetForm.setFieldValue("subject_id", undefined);
+                }
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="subject_id"
+            label={t("field.subject")}
+            rules={currentSubjectType === "all" ? undefined : [{ required: true, message: t("common.required", { label: t("field.subject") }) }]}
+          >
+            <PolicySubjectSelect
+              subjectType={String(currentSubjectType)}
+              users={users.data || []}
+              roles={roles.data || []}
+              t={t}
+            />
+          </Form.Item>
+          <Form.Item
+            name="effect"
+            label={t("field.effect")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.effect") }) }]}
+          >
+            <Select options={["allow", "deny"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+          <Form.Item
+            name="action"
+            label={t("field.action")}
+            rules={[{ required: true, message: t("common.required", { label: t("field.action") }) }]}
+          >
+            <Input autoComplete="off" />
+          </Form.Item>
+        </div>
+        {!isField ? (
+          <div className="config-form-grid">
+            <Form.Item label={t("field.type")}>
+              <Select
+                value={currentTargetMode}
+                options={[
+                  { value: "resource", label: t("tab.resource") },
+                  { value: "tag", label: columnLabel("tag_id", t) },
+                ]}
+                onChange={(value) => {
+                  setCurrentTargetMode(value);
+                  targetForm.setFieldsValue({ resource_id: undefined, tag_id: undefined });
+                }}
+              />
+            </Form.Item>
+            {currentTargetMode === "resource" ? (
+              <Form.Item
+                name="resource_id"
+                label={t("field.resourceId")}
+                rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
+              >
+                <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+              </Form.Item>
+            ) : (
+              <Form.Item
+                name="tag_id"
+                label={columnLabel("tag_id", t)}
+                rules={[{ required: true, message: t("common.required", { label: columnLabel("tag_id", t) }) }]}
+              >
+                <TagSelect tags={tags.data || []} t={t} />
+              </Form.Item>
+            )}
+          </div>
+        ) : null}
+        {isField ? (
+          <div className="config-form-grid">
+            <Form.Item
+              name="resource_id"
+              label={t("field.resourceId")}
+              rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
+            >
+              <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+            </Form.Item>
+            <Form.Item
+              name="field_name"
+              label={t("field.field")}
+              rules={[{ required: true, message: t("common.required", { label: t("field.field") }) }]}
+            >
+              <Input autoComplete="off" />
+            </Form.Item>
+          </div>
+        ) : null}
+        <div className="config-form-grid">
+          <Form.Item name="priority" label={t("field.priority")}>
+            <InputNumber className="full" />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+        </div>
+      </Form>
+    );
+  };
+
   return (
-    <CrudPanel
-      api={api}
-      title={isField ? "policy.fieldPolicies" : "policy.resourcePolicies"}
-      listPath={`/admin/${kind}-policies`}
-      createPath={`/admin/${kind}-policies`}
-      updatePath={(row) => `/admin/${kind}-policies/${row.id}`}
-      deletePath={(row) => `/admin/${kind}-policies/${row.id}`}
-      fields={[
-        { name: "subject_type", label: "field.subjectType", required: true },
-        { name: "subject_id", label: "field.subject", required: true },
-        { name: "effect", label: "field.effect", input: "select", options: ["allow", "deny"], required: true },
-        { name: "action", label: "field.action", required: true },
-        {
-          name: "resource_id",
-          label: "field.resourceId",
-          input: "resource-select",
-          resourceOptions: resources.data || [],
-          loading: resources.loading,
-          required: isField
-        },
-        ...(isField ? [{ name: "field_name", label: "field.field" as const, required: true }] : []),
-        ...(!isField ? [{ name: "tag_id", label: "field.tagId" as const }] : []),
-        { name: "priority", label: "field.priority", input: "number" as const },
-        { name: "status", label: "field.status", input: "select" as const, options: ["active", "disabled"] }
-      ]}
-      initialValues={{ action: "read", effect: "allow", priority: 0, status: "active" }}
-    />
+    <Space direction="vertical" size={12} className="full">
+      <Button type="primary" onClick={openCreate}>{t("common.create")}</Button>
+      <DataPanel
+        title={t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies")}
+        state={state}
+        columns={[
+          { title: columnLabel("subject_type", t), dataIndex: "subject_type", key: "subject_type", render: (value: string) => optionLabel(value, t) },
+          { title: columnLabel("subject_id", t), dataIndex: "subject_label", key: "subject_label" },
+          { title: columnLabel("effect", t), dataIndex: "effect", key: "effect", render: (value: string) => optionLabel(value, t) },
+          { title: columnLabel("action", t), dataIndex: "action", key: "action" },
+          ...(isField ? [] : [{ title: columnLabel("tag_id", t), dataIndex: "tag_name", key: "tag_name" }]),
+          { title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" },
+          ...(isField ? [{ title: columnLabel("field_name", t), dataIndex: "field_name", key: "field_name" }] : []),
+          { title: columnLabel("status", t), dataIndex: "status", key: "status", render: (value: string) => optionLabel(value, t) },
+        ]}
+        actions={(row) => (
+          <Space size={4} onClick={(event) => event.stopPropagation()}>
+            <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
+            <IconAction
+              title={t("common.edit")}
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditing(row);
+                setEditingTargetMode(row.tag_id ? "tag" : "resource");
+                editForm.setFieldsValue(row);
+              }}
+            />
+            <Popconfirm title={t("common.deleteConfirm", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })} onConfirm={() => remove(row)}>
+              <Button size="small" icon={<DeleteOutlined />} />
+            </Popconfirm>
+          </Space>
+        )}
+      />
+      <RecordDetails record={selected} title={t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies")} onClose={() => setSelected(null)} />
+      <Drawer
+        title={t("common.createTitle", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })}
+        open={open}
+        onClose={() => setOpen(false)}
+        extra={<Button type="primary" onClick={() => void create()}>{t("common.save")}</Button>}
+      >
+        {policyForm(form, createSubjectType, targetMode, setTargetMode)}
+      </Drawer>
+      <Drawer
+        title={t("common.editTitle", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })}
+        open={Boolean(editing)}
+        onClose={() => setEditing(null)}
+        extra={<Button type="primary" onClick={() => void update()}>{t("common.save")}</Button>}
+      >
+        {policyForm(editForm, editSubjectType, editingTargetMode, setEditingTargetMode)}
+      </Drawer>
+    </Space>
   );
 }
 
@@ -3239,15 +3670,84 @@ function mergeDirectoryUsers(
   return Array.from(merged.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function ImportPreviewPanel({
+  importPreview,
+  importFileName,
+  t,
+}: {
+  importPreview: AnyRecord | null;
+  importFileName: string;
+  t: I18nContextValue["t"];
+}) {
+  /** Render one shared preview panel for both Excel and connector-driven imports. */
+
+  return (
+    <div className="directory-import-preview panel">
+      <div className="panel-head">
+        <Typography.Title level={4}>{t("users.previewSummary")}</Typography.Title>
+        <Tag>{importFileName || t("users.uploadFile")}</Tag>
+      </div>
+      <div className="directory-import-preview-body">
+        {importPreview ? (
+          <>
+            <div className="directory-preview-stats">
+              <Statistic title={t("users.usersCreated")} value={Number(importPreview.summary?.created_users ?? importPreview.summary?.create_count ?? 0)} />
+              <Statistic title={t("users.usersUpdated")} value={Number(importPreview.summary?.updated_users ?? importPreview.summary?.update_count ?? 0)} />
+              <Statistic title={t("users.keysCreated")} value={Number(importPreview.summary?.runtime_keys_created ?? 0)} />
+            </div>
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label={t("users.orgNodesToCreate")}>
+                {Array.isArray(importPreview.org_nodes_to_create || importPreview.org_nodes_created)
+                  ? (importPreview.org_nodes_to_create || importPreview.org_nodes_created).join(", ") || "-"
+                  : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("users.rolesToCreate")}>
+                {Array.isArray(importPreview.roles_to_create || importPreview.roles_created)
+                  ? (importPreview.roles_to_create || importPreview.roles_created).join(", ") || "-"
+                  : "-"}
+              </Descriptions.Item>
+            </Descriptions>
+            <Table
+              size="small"
+              rowKey={(row) => `${row.external_ref}:${row.user_name}`}
+              pagination={false}
+              dataSource={Array.isArray(importPreview.users) ? importPreview.users : []}
+              columns={[
+                { title: columnLabel("name", t), dataIndex: "user_name", key: "user_name" },
+                { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
+                { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+                {
+                  title: columnLabel("role_names", t),
+                  dataIndex: "roles",
+                  key: "roles",
+                  render: (value: string[] | string) =>
+                    Array.isArray(value) ? value.join(", ") : String(value || "-"),
+                },
+              ]}
+            />
+          </>
+        ) : (
+          <Empty description={t("users.importReady")} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function buildOrgTree(orgNodes: AnyRecord[]): OrgTreeNode[] {
   /** Convert flat org-node rows into Ant Tree-compatible records. */
 
   const nodes = new Map<string, OrgTreeNode>();
   const roots: OrgTreeNode[] = [];
   for (const orgNode of orgNodes) {
+    const directUserNames = Array.isArray(orgNode.direct_user_names)
+      ? orgNode.direct_user_names.map(String)
+      : [];
     nodes.set(String(orgNode.id), {
       key: String(orgNode.id),
       title: String(orgNode.name || orgNode.path || "Root"),
+      path: String(orgNode.path || ""),
+      directUserNames,
       children: [],
     });
   }
@@ -3262,6 +3762,29 @@ function buildOrgTree(orgNodes: AnyRecord[]): OrgTreeNode[] {
     }
   }
   return roots;
+}
+
+function toOrgTreeData(nodes: OrgTreeNode[]): AnyRecord[] {
+  /** Decorate org nodes with direct-member names on leaf nodes. */
+
+  return nodes.map((node) => {
+    const isLeaf = !node.children?.length;
+    const directUsers = node.directUserNames || [];
+    return {
+      key: node.key,
+      title: (
+        <div className="directory-tree-node">
+          <span className="directory-tree-node-name">{node.title}</span>
+          {isLeaf && directUsers.length ? (
+            <Typography.Text type="secondary" className="directory-tree-node-members">
+              {directUsers.join(", ")}
+            </Typography.Text>
+          ) : null}
+        </div>
+      ),
+      children: toOrgTreeData(node.children || []),
+    };
+  });
 }
 
 function collectOrgDescendantIds(orgNodes: AnyRecord[], orgNodeId: string) {
@@ -3427,6 +3950,103 @@ function ResourceSelect({
       }
     />
   );
+}
+
+function TagSelect({
+  tags,
+  t,
+  value,
+  onChange,
+}: {
+  tags: AnyRecord[];
+  t: I18nContextValue["t"];
+  value?: string;
+  onChange?: (value?: string) => void;
+}) {
+  /** Searchable tag picker used by tag-scoped resource policies. */
+
+  return (
+    <Select
+      value={value}
+      onChange={onChange}
+      showSearch
+      allowClear
+      placeholder={t("placeholder.tagSearch")}
+      options={tags.map((tag) => ({
+        value: tag.id,
+        label: tag.name,
+      }))}
+      optionFilterProp="label"
+    />
+  );
+}
+
+function PolicySubjectSelect({
+  subjectType,
+  users,
+  roles,
+  t,
+  value,
+  onChange,
+}: {
+  subjectType: string;
+  users: DirectoryUserRecord[];
+  roles: AnyRecord[];
+  t: I18nContextValue["t"];
+  value?: string;
+  onChange?: (value?: string) => void;
+}) {
+  /** Pick one user or role for policy subjects without typing raw ids. */
+
+  if (subjectType === "all") {
+    return <Input value={t("option.all")} disabled aria-label={t("field.subject")} />;
+  }
+
+  const options = subjectType === "role"
+    ? roles.map((role) => ({ value: role.id, label: role.name }))
+    : users.map((user) => ({
+        value: user.id || user.user_id,
+        label: `${user.name}${user.org_path ? ` / ${user.org_path}` : ""}`,
+      }));
+
+  return (
+    <Select
+      value={value}
+      onChange={onChange}
+      showSearch
+      allowClear
+      placeholder={t("field.subject")}
+      options={options}
+      optionFilterProp="label"
+    />
+  );
+}
+
+function normalizePolicyValues(
+  values: AnyRecord,
+  targetMode: "resource" | "tag",
+  isField: boolean,
+) {
+  /** Normalize policy forms so resource and tag targeting remain mutually exclusive. */
+
+  const payload: AnyRecord = {
+    subject_type: values.subject_type,
+    subject_id: values.subject_type === "all" ? "all" : values.subject_id,
+    effect: values.effect,
+    action: values.action,
+    priority: Number(values.priority || 0),
+    status: values.status || "active",
+  };
+
+  if (isField) {
+    payload.resource_id = values.resource_id;
+    payload.field_name = String(values.field_name || "").trim();
+    return payload;
+  }
+
+  payload.resource_id = targetMode === "resource" ? values.resource_id : null;
+  payload.tag_id = targetMode === "tag" ? values.tag_id : null;
+  return payload;
 }
 
 function renderField(field: FieldConfig, t: I18nContextValue["t"]) {

@@ -1,3 +1,5 @@
+import { read, utils } from "xlsx";
+
 type LooseRecord = Record<string, unknown>;
 
 export type DirectoryImportRow = {
@@ -13,6 +15,45 @@ export type DirectoryUserFormInput = {
   orgNodeId?: unknown;
   roleIds?: unknown;
 };
+
+export type DirectoryImportFieldDoc = {
+  field: DirectoryImportRow extends infer T ? keyof T & string : string;
+  required: boolean;
+  format: string;
+  notes: string;
+};
+
+export const directoryImportTemplateFields: DirectoryImportFieldDoc[] = [
+  {
+    field: "user_name",
+    required: true,
+    format: "Plain text",
+    notes: "Display name of the user inside ADG.",
+  },
+  {
+    field: "org_path",
+    required: false,
+    format: "Organization path such as Company/Finance/BI",
+    notes: "Missing paths attach the user to the root organization node. Unknown nodes are created automatically.",
+  },
+  {
+    field: "external_ref",
+    required: true,
+    format: "Stable external unique identifier",
+    notes: "Used for upsert. Re-importing the same external_ref updates the user without rotating the runtime key.",
+  },
+  {
+    field: "roles",
+    required: false,
+    format: "Comma-separated role names",
+    notes: "Unknown roles are created automatically.",
+  },
+];
+
+export function parseJsonPayloadText(text: string) {
+  const trimmed = text.trim();
+  return trimmed ? JSON.parse(trimmed) : {};
+}
 
 export function normalizeOrgPathDelimiter(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
@@ -60,6 +101,24 @@ export function parseDirectoryRowsFromText(text: string) {
   }
 
   return parseDirectoryDelimited(trimmed);
+}
+
+export async function parseDirectoryRowsFromFile(file: File) {
+  const lowerName = file.name.toLowerCase();
+  if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+    const workbook = read(await file.arrayBuffer(), { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+    const rows = sheet ? (utils.sheet_to_json(sheet, { defval: "" }) as LooseRecord[]) : [];
+    return rows.map((row) => ({
+      user_name: String(row.user_name || "").trim(),
+      org_path: String(row.org_path || "").trim(),
+      external_ref: String(row.external_ref || "").trim(),
+      roles: normalizeRoleCell(row.roles),
+    }));
+  }
+
+  return parseDirectoryRowsFromText(await file.text());
 }
 
 function parseDirectoryJson(text: string) {

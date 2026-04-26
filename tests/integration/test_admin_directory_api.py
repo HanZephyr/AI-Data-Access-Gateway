@@ -192,6 +192,8 @@ def test_admin_can_list_roles_and_org_nodes() -> None:
             "path": "Company",
             "depth": 0,
             "status": "active",
+            "direct_user_count": 0,
+            "direct_user_names": [],
         },
         {
             "id": "org_finance",
@@ -201,6 +203,8 @@ def test_admin_can_list_roles_and_org_nodes() -> None:
             "path": "Company/Finance",
             "depth": 1,
             "status": "active",
+            "direct_user_count": 1,
+            "direct_user_names": ["Existing User"],
         },
     ]
 
@@ -261,5 +265,79 @@ def test_admin_can_create_and_update_roles() -> None:
             "name": "Finance",
             "description": None,
             "status": "active",
+        },
+    ]
+
+
+def test_admin_can_create_update_and_delete_org_nodes() -> None:
+    client, session_factory = build_directory_app()
+
+    create_response = client.post(
+        "/admin/org-nodes",
+        json={
+            "name": "Platform",
+            "parent_id": "org_company",
+        },
+        headers=admin_auth(),
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["name"] == "Platform"
+    assert created["path"] == "Company/Platform"
+    assert created["depth"] == 1
+
+    update_response = client.patch(
+        f"/admin/org-nodes/{created['id']}",
+        json={
+            "name": "Core Platform",
+        },
+        headers=admin_auth(),
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["path"] == "Company/Core Platform"
+
+    with session_factory() as session:
+        created_node = session.get(OrgNode, created["id"])
+        assert created_node is not None
+        assert created_node.path == "Company/Core Platform"
+
+    delete_response = client.delete(
+        f"/admin/org-nodes/{created['id']}",
+        headers=admin_auth(),
+    )
+
+    assert delete_response.status_code == 204
+
+
+def test_org_nodes_include_direct_user_names_for_leaf_nodes() -> None:
+    client, _ = build_directory_app()
+
+    response = client.get("/admin/org-nodes", headers=admin_auth())
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "org_company",
+            "name": "Company",
+            "code": None,
+            "parent_id": None,
+            "path": "Company",
+            "depth": 0,
+            "status": "active",
+            "direct_user_count": 0,
+            "direct_user_names": [],
+        },
+        {
+            "id": "org_finance",
+            "name": "Finance",
+            "code": None,
+            "parent_id": "org_company",
+            "path": "Company/Finance",
+            "depth": 1,
+            "status": "active",
+            "direct_user_count": 1,
+            "direct_user_names": ["Existing User"],
         },
     ]

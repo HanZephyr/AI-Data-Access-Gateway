@@ -13,8 +13,12 @@ type MockResponse = {
 };
 
 const routeMap: Record<string, MockResponse> = {
+  "/admin/system": { ok: true, json: { service_name: "AI Data Access Gateway" } },
   "/admin/datasources": { ok: true, json: [] },
   "/admin/resources": { ok: true, json: [] },
+  "/admin/tags": { ok: true, json: [] },
+  "/admin/resource-policies": { ok: true, json: [] },
+  "/admin/field-policies": { ok: true, json: [] },
   "/admin/audit-events": { ok: true, json: [] },
   "/admin/org-nodes": {
     ok: true,
@@ -46,6 +50,15 @@ const routeMap: Record<string, MockResponse> = {
     ],
   },
   "/admin/api-keys": { ok: true, json: [] },
+  "/admin/mcp/setup": {
+    ok: true,
+    json: {
+      server_url: "http://127.0.0.1:8000/mcp",
+      http_tool_url_template: "http://127.0.0.1:8000/api/tools/{tool_name}",
+      api_key_header: "X-ADG-API-Key",
+      tools: [],
+    },
+  },
 };
 
 function createStorage() {
@@ -115,6 +128,11 @@ async function mountConsoleApp(initialPage?: string) {
   await import("./main");
 }
 
+async function resizeWindow(width: number) {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+  fireEvent(window, new Event("resize"));
+}
+
 beforeEach(() => {
   vi.unstubAllGlobals();
 });
@@ -143,6 +161,22 @@ describe("Users console page", () => {
     expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
   });
 
+  it("shows template download, field guidance, and third-party import tabs in the import modal", async () => {
+    await mountConsoleApp("users");
+    fireEvent.click(await screen.findByText("Import Excel"));
+
+    expect(await screen.findByText("Download template")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Download template/i })).toHaveAttribute(
+      "href",
+      "/adg-user-import-template.xlsx",
+    );
+    expect(screen.getByText("user_name")).toBeInTheDocument();
+    expect(screen.getByText("external_ref")).toBeInTheDocument();
+    expect(screen.getByText("Feishu")).toBeInTheDocument();
+    expect(screen.getByText("WeCom")).toBeInTheDocument();
+    expect(screen.getByText("DingTalk")).toBeInTheDocument();
+  });
+
   it("renders the org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
 
@@ -152,5 +186,12 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getByText("Runtime key")).toBeInTheDocument();
     });
+  });
+
+  it("shows a compact page switcher before the narrowest layout so navigation remains reachable", async () => {
+    await mountConsoleApp("overview");
+    await resizeWindow(1180);
+
+    expect(await screen.findByRole("combobox", { name: "Overview" })).toBeInTheDocument();
   });
 });

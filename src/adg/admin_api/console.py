@@ -17,7 +17,7 @@ from adg.control_plane.imports.models import ExcelImportExecution, ExcelImportPr
 from adg.control_plane.imports.pipeline import execute_excel_import, preview_excel_import
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
-from adg.control_plane.models.directory import OrgNode, Role
+from adg.control_plane.models.directory import OrgNode, Role, User
 from adg.control_plane.models.governance import (
     DatasourceTag,
     FieldPolicy,
@@ -196,6 +196,24 @@ class RoleUpdateRequest(BaseModel):
 
     name: str | None = None
     description: str | None = None
+    status: str | None = None
+
+
+class OrgNodeCreateRequest(BaseModel):
+    """Payload for creating one organization node inside the directory tree."""
+
+    name: str
+    parent_id: str | None = None
+    code: str | None = None
+    status: str = "active"
+
+
+class OrgNodeUpdateRequest(BaseModel):
+    """Partial update payload for organization nodes."""
+
+    name: str | None = None
+    parent_id: str | None = None
+    code: str | None = None
     status: str | None = None
 
 
@@ -596,6 +614,8 @@ def create_resource_policy(
 
     if payload.resource_id is not None:
         _require_resource(session, payload.resource_id)
+    if payload.tag_id is not None:
+        _require_tag(session, payload.tag_id)
     policy = ResourcePolicy(**payload.model_dump())
     session.add(policy)
     session.commit()
@@ -628,6 +648,8 @@ def update_resource_policy(
     data = payload.model_dump(exclude_unset=True)
     if data.get("resource_id") is not None:
         _require_resource(session, data["resource_id"])
+    if data.get("tag_id") is not None:
+        _require_tag(session, data["tag_id"])
     _apply_updates(policy, data)
     session.commit()
     session.refresh(policy)
@@ -957,8 +979,70 @@ def list_org_nodes(
 ) -> list[dict[str, Any]]:
     """List organization nodes ordered by path for admin assignment UIs."""
 
-    org_nodes = session.execute(select(OrgNode).order_by(OrgNode.path)).scalars()
-    return [_serialize_org_node(node) for node in org_nodes]
+    return [node.to_dict() for node in DirectoryService(session).list_org_nodes()]
+
+
+@router.post("/org-nodes", status_code=status.HTTP_201_CREATED)
+def create_org_node(
+    payload: OrgNodeCreateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Create one organization node and derive its full path from the parent tree."""
+
+    if payload.parent_id is not None:
+        _require_org_node(session, payload.parent_id)
+    node = DirectoryService(session).create_org_node(**payload.model_dump())
+    session.commit()
+    session.refresh(node)
+    return _serialize_org_node(node, direct_user_names=[])
+
+
+@router.patch("/org-nodes/{org_node_id}")
+def update_org_node(
+    org_node_id: str,
+    payload: OrgNodeUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Update one organization node and cascade path changes through descendants."""
+
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("parent_id") is not None:
+        _require_org_node(session, str(data["parent_id"]))
+    try:
+        node = DirectoryService(session).update_org_node(org_node_id, **data)
+    except NoResultFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization node not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    session.commit()
+    session.refresh(node)
+    return _serialize_org_node(node, direct_user_names=[])
+
+
+@router.delete("/org-nodes/{org_node_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_org_node(
+    org_node_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Delete an organization node only when it has no child nodes or direct users."""
+
+    try:
+        DirectoryService(session).delete_org_node(org_node_id)
+    except NoResultFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization node not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/api-keys")
@@ -1125,7 +1209,11 @@ def _serialize_role(role: Role) -> dict[str, Any]:
     }
 
 
-def _serialize_org_node(node: OrgNode) -> dict[str, Any]:
+def _serialize_org_node(
+    node: OrgNode,
+    *,
+    direct_user_names: list[str] | None = None,
+) -> dict[str, Any]:
     """Convert an organization node into a JSON-ready admin payload."""
 
     return {
@@ -1136,6 +1224,8 @@ def _serialize_org_node(node: OrgNode) -> dict[str, Any]:
         "path": node.path,
         "depth": node.depth,
         "status": node.status,
+        "direct_user_count": len(direct_user_names or []),
+        "direct_user_names": list(direct_user_names or []),
     }
 
 
@@ -1336,11 +1426,13 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
         "id": policy.id,
         "subject_type": policy.subject_type,
         "subject_id": policy.subject_id,
+        "subject_label": _subject_label(session, policy.subject_type, policy.subject_id),
         "effect": policy.effect,
         "action": policy.action,
         "resource_label": _resource_label(session, policy.resource_id),
         "resource_id": policy.resource_id,
         "tag_id": policy.tag_id,
+        "tag_name": _tag_name(session, policy.tag_id),
         "priority": policy.priority,
         "status": policy.status,
     }
@@ -1353,6 +1445,7 @@ def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, 
         "id": policy.id,
         "subject_type": policy.subject_type,
         "subject_id": policy.subject_id,
+        "subject_label": _subject_label(session, policy.subject_type, policy.subject_id),
         "effect": policy.effect,
         "resource_label": _resource_label(session, policy.resource_id),
         "resource_id": policy.resource_id,
@@ -1420,6 +1513,31 @@ def _resource_label(session: Session, resource_id: str | None) -> str | None:
     if resource is None:
         return resource_id
     return f"{resource.display_name or resource.name} / {resource.path}"
+
+
+def _tag_name(session: Session, tag_id: str | None) -> str | None:
+    """Resolve one tag id into its display name when available."""
+
+    if tag_id is None:
+        return None
+    tag = session.get(Tag, tag_id)
+    return tag.name if tag is not None else tag_id
+
+
+def _subject_label(session: Session, subject_type: str, subject_id: str) -> str:
+    """Resolve one policy subject into a display label for admin tables."""
+
+    if subject_type == "all":
+        return subject_id
+    if subject_type == "user":
+        user = session.get(User, subject_id)
+        if user is not None:
+            return user.name
+    if subject_type == "role":
+        role = session.get(Role, subject_id)
+        if role is not None:
+            return role.name
+    return subject_id
 
 
 def _get_by_id(session: Session, model: type[Any], item_id: str, detail: str) -> Any:

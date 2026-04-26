@@ -670,6 +670,13 @@ body {
   gap: 16px;
 }
 
+.directory-workspace-compact,
+.directory-main-compact,
+.directory-import-layout-compact {
+  min-height: auto;
+  grid-template-columns: 1fr;
+}
+
 .directory-tree-pane,
 .directory-users-pane,
 .directory-list-panel,
@@ -688,6 +695,33 @@ body {
 
 .directory-tree-body .ant-tree {
   background: transparent;
+}
+
+.directory-tree-summary.ant-typography {
+  margin-bottom: 12px;
+  color: var(--ink-500);
+}
+
+.directory-tree-node {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.directory-tree-node-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-tree-node-members.ant-typography {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
 }
 
 .directory-users-pane {
@@ -759,6 +793,10 @@ body {
 
 .directory-import-uploader .ant-typography {
   margin: 0;
+}
+
+.directory-import-uploader .ant-table-wrapper {
+  background: #fff;
 }
 
 .directory-import-preview {
@@ -1095,5 +1133,19 @@ body {
   .mcp-section,
   .mcp-snippet {
     padding: 14px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .mobile-page-select {
+    display: block;
+    width: 100%;
+  }
+
+  .directory-workspace,
+  .directory-main,
+  .directory-import-layout {
+    min-height: auto;
+    grid-template-columns: 1fr;
   }
 }
