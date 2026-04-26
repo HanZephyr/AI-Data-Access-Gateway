@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-27-open-source-v1-release-docs-design.md`
 **Date:** 2026-04-27
-**Status:** Draft
+**Status:** Approved
 
 ---
 

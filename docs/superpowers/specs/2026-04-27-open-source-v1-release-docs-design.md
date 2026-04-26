@@ -1,7 +1,7 @@
 # Open Source V1 Release Documentation and Governance Design
 
 **Date:** 2026-04-27
-**Status:** Draft for review
+**Status:** Approved
 
 ---
 
