@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -186,18 +187,11 @@ def test_feishu_connector_normalizes_users_and_org_paths() -> None:
     )
 
 
-def test_feishu_connector_fetch_accepts_structured_platform_config() -> None:
+def test_feishu_connector_fetch_uses_platform_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connector = FeishuImporter()
-
-    batch = connector.fetch(
-        {
-            "delimiter": "/",
-            "departments_payload": sample_feishu_departments_response(),
-            "users_payload": sample_feishu_users_response(),
-        }
-    )
-
-    assert batch == DirectoryImportBatch(
+    expected = DirectoryImportBatch(
         users=[
             ImportedUserRow(
                 user_name="Alice",
@@ -207,6 +201,22 @@ def test_feishu_connector_fetch_accepts_structured_platform_config() -> None:
             )
         ]
     )
+    monkeypatch.setattr(
+        connector,
+        "_fetch_directory_batch",
+        lambda config: expected,
+    )
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "app_id": "cli_xxx",
+            "app_secret": "secret_xxx",
+            "root_department_id": "0",
+        }
+    )
+
+    assert batch == expected
 
 
 def test_wecom_connector_fetch_returns_unified_batch() -> None:
@@ -226,18 +236,11 @@ def test_wecom_connector_fetch_returns_unified_batch() -> None:
     )
 
 
-def test_wecom_connector_fetch_accepts_structured_platform_config() -> None:
+def test_wecom_connector_fetch_uses_platform_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connector = WeComImporter()
-
-    batch = connector.fetch(
-        {
-            "delimiter": "/",
-            "departments_payload": sample_wecom_departments_response(),
-            "users_payload": sample_wecom_users_response(),
-        }
-    )
-
-    assert batch == DirectoryImportBatch(
+    expected = DirectoryImportBatch(
         users=[
             ImportedUserRow(
                 user_name="Bob",
@@ -247,6 +250,22 @@ def test_wecom_connector_fetch_accepts_structured_platform_config() -> None:
             )
         ]
     )
+    monkeypatch.setattr(
+        connector,
+        "_fetch_directory_batch",
+        lambda config: expected,
+    )
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "corp_id": "wwcorp",
+            "corp_secret": "contact-secret",
+            "root_department_id": "1",
+        }
+    )
+
+    assert batch == expected
 
 
 def test_dingtalk_connector_fetch_returns_unified_batch() -> None:
@@ -266,18 +285,11 @@ def test_dingtalk_connector_fetch_returns_unified_batch() -> None:
     )
 
 
-def test_dingtalk_connector_fetch_accepts_structured_platform_config() -> None:
+def test_dingtalk_connector_fetch_uses_platform_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     connector = DingTalkImporter()
-
-    batch = connector.fetch(
-        {
-            "delimiter": "/",
-            "departments_payload": sample_dingtalk_departments_response(),
-            "users_payload": sample_dingtalk_users_response(),
-        }
-    )
-
-    assert batch == DirectoryImportBatch(
+    expected = DirectoryImportBatch(
         users=[
             ImportedUserRow(
                 user_name="Carol",
@@ -287,6 +299,22 @@ def test_dingtalk_connector_fetch_accepts_structured_platform_config() -> None:
             )
         ]
     )
+    monkeypatch.setattr(
+        connector,
+        "_fetch_directory_batch",
+        lambda config: expected,
+    )
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "app_key": "ding-app-key",
+            "app_secret": "ding-app-secret",
+            "root_department_id": "1",
+        }
+    )
+
+    assert batch == expected
 
 
 def test_connector_registry_exposes_supported_platforms() -> None:
@@ -323,17 +351,36 @@ def test_admin_can_pull_from_connector_and_preview_batch() -> None:
     }
 
 
-def test_admin_can_pull_from_structured_connector_config_and_preview_batch() -> None:
+def test_admin_can_pull_from_credential_connector_config_and_preview_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = _build_importer_app()
 
+    def fake_fetch(self: WeComImporter, config: dict[str, object]) -> DirectoryImportBatch:
+        assert config["corp_id"] == "wwcorp"
+        assert config["corp_secret"] == "contact-secret"
+        assert config["root_department_id"] == "1"
+        return DirectoryImportBatch(
+            users=[
+                ImportedUserRow(
+                    user_name="Bob",
+                    org_path="Company/Finance",
+                    external_ref="wx_123",
+                    roles=["Reviewer"],
+                )
+            ]
+        )
+
+    monkeypatch.setattr(WeComImporter, "fetch", fake_fetch)
     response = client.post(
         "/admin/users/importers/wecom/pull",
         json={
             "mode": "preview",
             "config": {
                 "delimiter": "/",
-                "departments_payload": sample_wecom_departments_response(),
-                "users_payload": sample_wecom_users_response(),
+                "corp_id": "wwcorp",
+                "corp_secret": "contact-secret",
+                "root_department_id": "1",
             },
         },
         headers=_admin_auth(),

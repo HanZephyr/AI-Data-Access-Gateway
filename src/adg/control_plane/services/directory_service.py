@@ -10,6 +10,8 @@ from adg.control_plane.models.directory import OrgNode, Role, User, UserRole
 from adg.control_plane.services.api_key_service import create_api_key
 
 _UNSET = object()
+ROOT_ORG_NAME = "Root"
+ROOT_ORG_PATH = ""
 
 
 @dataclass(slots=True)
@@ -199,12 +201,13 @@ class DirectoryService:
         code: str | None = None,
         status: str = "active",
     ) -> OrgNode:
-        parent = self._session.get(OrgNode, parent_id) if parent_id else None
+        parent = self._session.get(OrgNode, parent_id) if parent_id else self._ensure_root_node()
+        resolved_parent_id = None if parent is None else parent.id
         path = self._build_org_path(name, parent.path if parent is not None else None)
         node = OrgNode(
             name=name,
             code=code,
-            parent_id=parent_id,
+            parent_id=resolved_parent_id,
             path=path,
             depth=0 if parent is None else parent.depth + 1,
             status=status,
@@ -223,8 +226,18 @@ class DirectoryService:
         status: str | None = None,
     ) -> OrgNode:
         node = self._session.execute(select(OrgNode).where(OrgNode.id == node_id)).scalar_one()
+        if node.path == ROOT_ORG_PATH:
+            if name is not None and name.strip() != node.name:
+                raise ValueError("The root organization node name is fixed")
+            if parent_id is not _UNSET and parent_id is not None:
+                raise ValueError("The root organization node cannot be moved")
+
         resolved_parent_id = node.parent_id if parent_id is _UNSET else parent_id
-        parent = self._session.get(OrgNode, resolved_parent_id) if resolved_parent_id else None
+        parent = (
+            self._session.get(OrgNode, resolved_parent_id)
+            if resolved_parent_id
+            else (None if node.path == ROOT_ORG_PATH else self._ensure_root_node())
+        )
         if parent is not None and self._is_descendant(parent.id, node.id):
             raise ValueError("Organization nodes cannot be moved underneath their descendants")
 
@@ -259,6 +272,8 @@ class DirectoryService:
 
     def delete_org_node(self, node_id: str) -> None:
         node = self._session.execute(select(OrgNode).where(OrgNode.id == node_id)).scalar_one()
+        if node.path == ROOT_ORG_PATH:
+            raise ValueError("The root organization node cannot be deleted")
         child = self._session.execute(
             select(OrgNode.id).where(OrgNode.parent_id == node_id)
         ).scalar_one_or_none()
@@ -273,6 +288,7 @@ class DirectoryService:
         self._session.flush()
 
     def list_org_nodes(self) -> list[OrgNodeSummary]:
+        self._ensure_root_node()
         nodes = list(self._session.execute(select(OrgNode).order_by(OrgNode.path)).scalars())
         if not nodes:
             return []
@@ -322,6 +338,25 @@ class DirectoryService:
     def _build_org_path(self, name: str, parent_path: str | None) -> str:
         clean_name = name.strip()
         return clean_name if not parent_path else f"{parent_path}/{clean_name}"
+
+    def _ensure_root_node(self) -> OrgNode:
+        root = self._session.execute(
+            select(OrgNode).where(OrgNode.path == ROOT_ORG_PATH)
+        ).scalar_one_or_none()
+        if root is not None:
+            return root
+
+        root = OrgNode(
+            name=ROOT_ORG_NAME,
+            code=None,
+            parent_id=None,
+            path=ROOT_ORG_PATH,
+            depth=0,
+            status="active",
+        )
+        self._session.add(root)
+        self._session.flush()
+        return root
 
     def _is_descendant(self, candidate_id: str, ancestor_id: str) -> bool:
         current_id = candidate_id

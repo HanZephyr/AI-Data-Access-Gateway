@@ -1,5 +1,8 @@
+import json
+from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
+from urllib import error, parse, request
 
 from adg.control_plane.imports.connectors.base import (
     DirectoryImportBatch,
@@ -12,28 +15,56 @@ from adg.control_plane.imports.models import ImportedUserRow
 
 
 class FeishuImporter(PullOnlyDirectoryImporter):
-    """Normalize Feishu/Lark user payloads into the shared directory import batch."""
+    """Pull Feishu organization and user data with app credentials."""
 
     platform = "feishu"
+    _base_url = "https://open.feishu.cn/open-apis"
 
     def fetch(self, config: Mapping[str, Any]) -> DirectoryImportBatch:
         payload = config.get("payload")
         if isinstance(payload, Mapping):
             return self.normalize(cast(Mapping[str, Any], payload))
 
-        users_payload = config.get("users_payload")
-        if not isinstance(users_payload, Mapping):
-            raise ValueError("Feishu config must include users_payload")
-
         self.delimiter = str(config.get("delimiter") or "/").strip() or "/"
-        departments = self._build_department_path_map(config.get("departments_payload"))
-        users = self._extract_users(users_payload)
+        required_text(config.get("app_id"), field_name="app_id")
+        required_text(config.get("app_secret"), field_name="app_secret")
+        return self._fetch_directory_batch(config)
+
+    def normalize(self, payload: Mapping[str, Any]) -> DirectoryImportBatch:
+        users = payload.get("users")
+        if not isinstance(users, list):
+            raise ValueError("Feishu payload must include a users list")
+        return DirectoryImportBatch(
+            users=[
+                ImportedUserRow(
+                    user_name=required_text(user.get("name"), field_name="name"),
+                    org_path=normalized_path(user.get("department_path"), delimiter=self.delimiter),
+                    external_ref=required_text(
+                        user.get("user_id") or user.get("open_id"),
+                        field_name="user_id",
+                    ),
+                    roles=normalized_roles(user.get("roles")),
+                )
+                for user in cast(list[Mapping[str, Any]], users)
+            ],
+            delimiter=self.delimiter,
+        )
+
+    def _fetch_directory_batch(self, config: Mapping[str, Any]) -> DirectoryImportBatch:
+        token = self._fetch_app_access_token(
+            required_text(config.get("app_id"), field_name="app_id"),
+            required_text(config.get("app_secret"), field_name="app_secret"),
+        )
+        root_department_id = str(config.get("root_department_id") or "0").strip() or "0"
+        departments = self._fetch_departments(token, root_department_id)
+        department_paths = self._build_department_path_map({"items": departments})
+        users = self._fetch_users(token, [record["open_department_id"] for record in departments])
 
         return DirectoryImportBatch(
             users=[
                 ImportedUserRow(
                     user_name=required_text(user.get("name"), field_name="name"),
-                    org_path=self._resolve_org_path(user, departments),
+                    org_path=self._resolve_org_path(user, department_paths),
                     external_ref=required_text(
                         user.get("user_id") or user.get("open_id"),
                         field_name="user_id",
@@ -45,37 +76,117 @@ class FeishuImporter(PullOnlyDirectoryImporter):
             delimiter=self.delimiter,
         )
 
-    def normalize(self, payload: Mapping[str, Any]) -> DirectoryImportBatch:
-        users = payload.get("users")
-        if not isinstance(users, list):
-            raise ValueError("Feishu payload must include a users list")
-        return DirectoryImportBatch(
-            users=[
-                ImportedUserRow(
-                    user_name=required_text(user.get("name"), field_name="name"),
-                    org_path=normalized_path(user.get("department_path"), delimiter=self.delimiter),
-                    external_ref=required_text(user.get("user_id"), field_name="user_id"),
-                    roles=normalized_roles(user.get("roles")),
-                )
-                for user in cast(list[Mapping[str, Any]], users)
-            ],
-            delimiter=self.delimiter,
+    def _fetch_app_access_token(self, app_id: str, app_secret: str) -> str:
+        body = self._request_json(
+            f"{self._base_url}/auth/v3/app_access_token/internal",
+            method="POST",
+            payload={"app_id": app_id, "app_secret": app_secret},
         )
+        token = body.get("app_access_token")
+        if not isinstance(token, str) or not token.strip():
+            raise ValueError("Feishu access token response did not include app_access_token")
+        return token
 
-    def _extract_users(self, payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-        candidates = (
-            payload.get("users"),
-            payload.get("items"),
-            payload.get("data"),
-        )
-        for candidate in candidates:
-            if isinstance(candidate, list):
-                return cast(list[Mapping[str, Any]], candidate)
-            if isinstance(candidate, Mapping):
-                items = candidate.get("items")
-                if isinstance(items, list):
-                    return cast(list[Mapping[str, Any]], items)
-        raise ValueError("Feishu users payload must include a users/items list")
+    def _fetch_departments(self, token: str, root_department_id: str) -> list[dict[str, Any]]:
+        queue: deque[str] = deque([root_department_id])
+        visited: set[str] = set()
+        departments: dict[str, dict[str, Any]] = {}
+
+        while queue:
+            department_id = queue.popleft()
+            if department_id in visited:
+                continue
+            visited.add(department_id)
+            for item in self._paginate(
+                f"{self._base_url}/contact/v3/departments/{department_id}/children",
+                token,
+                query={"page_size": "50"},
+            ):
+                open_department_id = str(item.get("open_department_id") or "").strip()
+                if not open_department_id or open_department_id in departments:
+                    continue
+                record = dict(item)
+                record.setdefault("parent_department_id", department_id)
+                departments[open_department_id] = record
+                queue.append(open_department_id)
+
+        return list(departments.values())
+
+    def _fetch_users(self, token: str, department_ids: Sequence[str]) -> list[Mapping[str, Any]]:
+        users: dict[str, Mapping[str, Any]] = {}
+        for department_id in department_ids:
+            for item in self._paginate(
+                f"{self._base_url}/contact/v3/users/find_by_department",
+                token,
+                query={"department_id": department_id, "page_size": "100"},
+            ):
+                user_id = str(item.get("user_id") or item.get("open_id") or "").strip()
+                if not user_id:
+                    continue
+                if user_id not in users:
+                    users[user_id] = item
+                    continue
+                merged = dict(users[user_id])
+                existing = list(merged.get("department_ids") or [])
+                candidate_ids = item.get("department_ids")
+                if isinstance(candidate_ids, Sequence) and not isinstance(
+                    candidate_ids,
+                    (str, bytes, bytearray),
+                ):
+                    merged["department_ids"] = list({*existing, *candidate_ids})
+                users[user_id] = merged
+        return list(users.values())
+
+    def _paginate(
+        self,
+        url: str,
+        token: str,
+        *,
+        query: Mapping[str, str],
+    ) -> list[Mapping[str, Any]]:
+        page_token = ""
+        items: list[Mapping[str, Any]] = []
+        while True:
+            params = dict(query)
+            if page_token:
+                params["page_token"] = page_token
+            body = self._request_json(url, token=token, query=params)
+            data = body.get("data")
+            payload = data if isinstance(data, Mapping) else body
+            batch = payload.get("items")
+            if not isinstance(batch, list):
+                raise ValueError("Feishu directory response did not include an items list")
+            items.extend(cast(list[Mapping[str, Any]], batch))
+            if not payload.get("has_more"):
+                return items
+            next_token = payload.get("page_token")
+            if not isinstance(next_token, str) or not next_token:
+                return items
+            page_token = next_token
+
+    def _request_json(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        token: str | None = None,
+        query: Mapping[str, str] | None = None,
+        payload: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any]:
+        full_url = url
+        if query:
+            full_url = f"{url}?{parse.urlencode(query)}"
+        headers = {"Content-Type": "application/json; charset=utf-8"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        data = None if payload is None else json.dumps(payload).encode("utf-8")
+        req = request.Request(full_url, data=data, headers=headers, method=method)
+        try:
+            with request.urlopen(req, timeout=20) as response:
+                return cast(Mapping[str, Any], json.loads(response.read().decode("utf-8")))
+        except error.HTTPError as exc:  # pragma: no cover - exercised by integration only
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise ValueError(f"Feishu API request failed: {detail or exc.reason}") from exc
 
     def _build_department_path_map(self, payload: Any) -> dict[str, str]:
         if not isinstance(payload, Mapping):

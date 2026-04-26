@@ -23,8 +23,9 @@ const routeMap: Record<string, MockResponse> = {
   "/admin/org-nodes": {
     ok: true,
     json: [
-      { id: "org_company", name: "Company", parent_id: null, path: "Company", depth: 0, status: "active" },
-      { id: "org_finance", name: "Finance", parent_id: "org_company", path: "Company/Finance", depth: 1, status: "active" },
+      { id: "org_root", name: "Root", parent_id: null, path: "", depth: 0, status: "active", direct_user_names: [] },
+      { id: "org_company", name: "Company", parent_id: "org_root", path: "Company", depth: 1, status: "active", direct_user_names: [] },
+      { id: "org_finance", name: "Finance", parent_id: "org_company", path: "Company/Finance", depth: 2, status: "active", direct_user_names: ["Alice"] },
     ],
   },
   "/admin/roles": {
@@ -161,7 +162,7 @@ describe("Users console page", () => {
     expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
   });
 
-  it("shows localized field guidance and structured third-party import tabs in the import modal", async () => {
+  it("shows localized field guidance and credential-based third-party import tabs in the import modal", async () => {
     await mountConsoleApp("users");
     fireEvent.click(await screen.findByText("Import user data"));
 
@@ -178,19 +179,32 @@ describe("Users console page", () => {
     fireEvent.click(screen.getByText("Feishu"));
     expect((await screen.findAllByText("App ID")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("App secret").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Departments response").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Users response").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Root department ID").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Departments response")).not.toBeInTheDocument();
+    expect(screen.queryByText("Users response")).not.toBeInTheDocument();
   });
 
-  it("renders the org tree and user detail workspace on the users page", async () => {
+  it("renders the rooted org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
 
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
+    expect(screen.getByText("/")).toBeInTheDocument();
     expect(screen.getAllByText("User directory").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.getByText("Runtime key")).toBeInTheDocument();
     });
+  });
+
+  it("opens context actions from the org tree nodes instead of top toolbar icons", async () => {
+    await mountConsoleApp("users");
+
+    expect(await screen.findByText("/")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByText("/"));
+    expect(await screen.findByText("Create node")).toBeInTheDocument();
+    expect(screen.queryByText("Delete node")).not.toBeInTheDocument();
   });
 
   it("opens a right-side navigation drawer on small screens", async () => {

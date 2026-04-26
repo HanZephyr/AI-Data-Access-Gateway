@@ -42,11 +42,6 @@ export const directoryImportTemplateFields: DirectoryImportFieldDoc[] = [
   },
 ];
 
-export function parseJsonPayloadText(text: string) {
-  const trimmed = text.trim();
-  return trimmed ? JSON.parse(trimmed) : {};
-}
-
 export function normalizeOrgPathDelimiter(value: unknown) {
   const normalized = typeof value === "string" ? value.trim() : "";
   return normalized || "/";
@@ -75,8 +70,7 @@ export function buildDirectoryImporterConfig(
       delimiter,
       app_id: normalizedText(input.feishuAppId),
       app_secret: normalizedText(input.feishuAppSecret),
-      departments_payload: parseJsonPayloadText(String(input.feishuDepartmentsPayload || "")),
-      users_payload: parseJsonPayloadText(String(input.feishuUsersPayload || "")),
+      root_department_id: normalizedText(input.feishuRootDepartmentId) || "0",
     };
   }
 
@@ -85,8 +79,7 @@ export function buildDirectoryImporterConfig(
       delimiter,
       corp_id: normalizedText(input.wecomCorpId),
       corp_secret: normalizedText(input.wecomCorpSecret),
-      departments_payload: parseJsonPayloadText(String(input.wecomDepartmentsPayload || "")),
-      users_payload: parseJsonPayloadText(String(input.wecomUsersPayload || "")),
+      root_department_id: normalizedText(input.wecomRootDepartmentId) || "1",
     };
   }
 
@@ -94,8 +87,7 @@ export function buildDirectoryImporterConfig(
     delimiter,
     app_key: normalizedText(input.dingtalkAppKey),
     app_secret: normalizedText(input.dingtalkAppSecret),
-    departments_payload: parseJsonPayloadText(String(input.dingtalkDepartmentsPayload || "")),
-    users_payload: parseJsonPayloadText(String(input.dingtalkUsersPayload || "")),
+    root_department_id: normalizedText(input.dingtalkRootDepartmentId) || "1",
   };
 }
 

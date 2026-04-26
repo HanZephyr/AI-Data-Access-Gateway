@@ -32,10 +32,18 @@ def build_directory_app() -> tuple[TestClient, sessionmaker[Session]]:
         session.add_all(
             [
                 OrgNode(
+                    id="org_root",
+                    name="Root",
+                    path="",
+                    depth=0,
+                    status="active",
+                ),
+                OrgNode(
                     id="org_company",
                     name="Company",
+                    parent_id="org_root",
                     path="Company",
-                    depth=0,
+                    depth=1,
                     status="active",
                 ),
                 OrgNode(
@@ -187,12 +195,23 @@ def test_admin_can_list_roles_and_org_nodes() -> None:
     assert org_nodes_response.status_code == 200
     assert org_nodes_response.json() == [
         {
+            "id": "org_root",
+            "name": "Root",
+            "code": None,
+            "parent_id": None,
+            "path": "",
+            "depth": 0,
+            "status": "active",
+            "direct_user_count": 0,
+            "direct_user_names": [],
+        },
+        {
             "id": "org_company",
             "name": "Company",
             "code": None,
-            "parent_id": None,
+            "parent_id": "org_root",
             "path": "Company",
-            "depth": 0,
+            "depth": 1,
             "status": "active",
             "direct_user_count": 0,
             "direct_user_names": [],
@@ -312,7 +331,6 @@ def test_admin_can_create_update_and_delete_org_nodes() -> None:
         "/admin/org-nodes",
         json={
             "name": "Platform",
-            "parent_id": "org_company",
         },
         headers=admin_auth(),
     )
@@ -320,8 +338,9 @@ def test_admin_can_create_update_and_delete_org_nodes() -> None:
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["name"] == "Platform"
-    assert created["path"] == "Company/Platform"
+    assert created["path"] == "Platform"
     assert created["depth"] == 1
+    assert created["parent_id"] == "org_root"
 
     update_response = client.patch(
         f"/admin/org-nodes/{created['id']}",
@@ -332,12 +351,12 @@ def test_admin_can_create_update_and_delete_org_nodes() -> None:
     )
 
     assert update_response.status_code == 200
-    assert update_response.json()["path"] == "Company/Core Platform"
+    assert update_response.json()["path"] == "Core Platform"
 
     with session_factory() as session:
         created_node = session.get(OrgNode, created["id"])
         assert created_node is not None
-        assert created_node.path == "Company/Core Platform"
+        assert created_node.path == "Core Platform"
 
     delete_response = client.delete(
         f"/admin/org-nodes/{created['id']}",
@@ -345,6 +364,15 @@ def test_admin_can_create_update_and_delete_org_nodes() -> None:
     )
 
     assert delete_response.status_code == 204
+
+
+def test_admin_cannot_delete_root_org_node() -> None:
+    client, _ = build_directory_app()
+
+    response = client.delete("/admin/org-nodes/org_root", headers=admin_auth())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "The root organization node cannot be deleted"}
 
 
 def test_org_nodes_include_direct_user_names_for_leaf_nodes() -> None:
@@ -355,12 +383,23 @@ def test_org_nodes_include_direct_user_names_for_leaf_nodes() -> None:
     assert response.status_code == 200
     assert response.json() == [
         {
+            "id": "org_root",
+            "name": "Root",
+            "code": None,
+            "parent_id": None,
+            "path": "",
+            "depth": 0,
+            "status": "active",
+            "direct_user_count": 0,
+            "direct_user_names": [],
+        },
+        {
             "id": "org_company",
             "name": "Company",
             "code": None,
-            "parent_id": None,
+            "parent_id": "org_root",
             "path": "Company",
-            "depth": 0,
+            "depth": 1,
             "status": "active",
             "direct_user_count": 0,
             "direct_user_names": [],

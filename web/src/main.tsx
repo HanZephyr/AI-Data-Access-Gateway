@@ -31,6 +31,7 @@ import {
   Collapse,
   ConfigProvider,
   Descriptions,
+  Dropdown,
   Drawer,
   Empty,
   Form,
@@ -106,9 +107,11 @@ type DirectoryUserRecord = {
 };
 type OrgTreeNode = {
   key: string;
-  title: React.ReactNode;
+  title: string;
   path?: string;
   directUserNames?: string[];
+  parentId?: string | null;
+  isRoot?: boolean;
   children?: OrgTreeNode[];
 };
 type CatalogTreeNode = AnyRecord & {
@@ -255,7 +258,7 @@ const translations = {
     "users.usersCreated": "Users created",
     "users.usersUpdated": "Users updated",
     "users.keysCreated": "Runtime keys created",
-    "users.rootMapped": "Empty org paths map to the root organization node.",
+    "users.rootMapped": "Users without an organization path are placed under the / root node.",
     "users.importReady": "Upload a file to preview org changes, new roles, and affected users.",
     "users.downloadTemplate": "Download template",
     "users.templateGuide": "Template fields",
@@ -273,9 +276,9 @@ const translations = {
     "users.templateField.roles.format": "Comma-separated role names, for example Analyst,Reviewer",
     "users.templateField.roles.notes": "Optional. Missing roles are created automatically during import.",
     "users.importPlatform": "Platform import",
-    "users.importPlatformHint": "Choose one platform, fill the structured fields below, then preview before executing the import.",
+    "users.importPlatformHint": "Fill the official app credentials for one platform. The gateway will pull departments and users directly from that platform when you preview or execute the import.",
     "users.platformGuide": "Setup guide",
-    "users.platformGuideSummary": "Expand to see the app setup, required permissions, and the API responses that this importer expects.",
+    "users.platformGuideSummary": "Expand to see the app setup flow, required permissions, and how to obtain the configuration values.",
     "users.platformGuidePermissions": "Required permissions",
     "users.platformGuideManifest": "Feishu permission import example",
     "users.platformAppId": "App ID",
@@ -283,27 +286,27 @@ const translations = {
     "users.platformCorpId": "Corp ID",
     "users.platformCorpSecret": "Contact secret",
     "users.platformAppKey": "App key",
-    "users.platformDepartmentsPayload": "Departments response",
-    "users.platformUsersPayload": "Users response",
-    "users.platformDepartmentsHint": "Paste the department list response body. The importer extracts department ids, names, and parent relationships from it.",
-    "users.platformUsersHint": "Paste the user list response body. The importer extracts user identity, organization mapping, and optional roles from it.",
-    "users.platformFeishuStep1": "Create an internal app in Feishu Open Platform and grant read-only contact permissions before collecting API responses.",
-    "users.platformFeishuStep2": "Call the department list endpoint and paste the response into Departments response. Then call the user list endpoint and paste the response into Users response.",
-    "users.platformFeishuStep3": "Preview the import first. If the department paths look correct, execute the import to create or update users.",
+    "users.platformRootDepartmentId": "Root department ID",
+    "users.platformRootDepartmentHint": "Optional. Limit the import to one branch. Leave the default root department ID when you want the full tree.",
+    "users.platformFeishuStep1": "Create an internal app in Feishu Open Platform and enable read-only contact permissions.",
+    "users.platformFeishuStep2": "Copy the App ID and App Secret from the app credentials page. Keep the default root department ID of 0 when you want the full company tree.",
+    "users.platformFeishuStep3": "Preview the import first. The gateway will call Feishu APIs directly and build the organization tree automatically.",
     "users.platformFeishuPermissions": "Department read, user read, and tenant access token permissions for the app.",
-    "users.platformWecomStep1": "Create or reuse a Contacts Secret in Enterprise WeChat and confirm the app has read-only access to departments and members.",
-    "users.platformWecomStep2": "Paste the department list response into Departments response and the member list response into Users response.",
-    "users.platformWecomStep3": "Preview the generated organization paths before running the import. The importer resolves department ids into full paths automatically.",
+    "users.platformWecomStep1": "Create or reuse a Contacts Secret in Enterprise WeChat and grant read-only access to departments and members.",
+    "users.platformWecomStep2": "Fill in the Corp ID, Contacts Secret, and the root department ID. The default root department ID is 1 for full-tree imports.",
+    "users.platformWecomStep3": "Preview the generated organization paths before running the import. The gateway resolves department ids into full paths automatically.",
     "users.platformWecomPermissions": "Contacts read permission and a Contacts Secret that can call department and member directory APIs.",
-    "users.platformDingtalkStep1": "Configure an internal app in DingTalk, grant read-only directory permissions, and collect the department and user API responses.",
-    "users.platformDingtalkStep2": "Paste the department tree response into Departments response and the member list response into Users response.",
-    "users.platformDingtalkStep3": "Preview first. The importer builds full department paths from the department tree before creating or updating users.",
+    "users.platformDingtalkStep1": "Configure an internal app in DingTalk and grant read-only department and member permissions.",
+    "users.platformDingtalkStep2": "Fill in the App Key, App Secret, and the root department ID. The default root department ID is 1 for full-tree imports.",
+    "users.platformDingtalkStep3": "Preview first. The gateway builds full department paths from DingTalk departments before creating or updating users.",
     "users.platformDingtalkPermissions": "Department read and member read permissions for the internal app.",
-    "users.orgCreateRoot": "New root node",
+    "users.orgCreateRoot": "Create node",
+    "users.orgCreateSibling": "Create sibling node",
     "users.orgCreateChild": "Add child node",
     "users.orgEdit": "Edit node",
     "users.orgDelete": "Delete node",
     "users.orgDeleteConfirm": "Delete this organization node?",
+    "users.orgRootDeleteDisabled": "The / root node cannot be deleted.",
     "users.orgNodeTitle": "Organization node",
     "users.orgNodeMembers": "Direct members",
     "users.orgNodeSelected": "Selected node",
@@ -573,7 +576,7 @@ const translations = {
     "users.usersCreated": "新建用户数",
     "users.usersUpdated": "更新用户数",
     "users.keysCreated": "新建运行时密钥数",
-    "users.rootMapped": "空组织路径会映射到根组织节点。",
+    "users.rootMapped": "组织路径为空的用户会挂载到 / 根节点下。",
     "users.importReady": "上传文件后先预览，再确认组织变更、角色新增和影响用户。",
     "users.downloadTemplate": "下载模板",
     "users.templateGuide": "字段说明",
@@ -591,9 +594,9 @@ const translations = {
     "users.templateField.roles.format": "逗号分隔的角色名，例如 Analyst,Reviewer",
     "users.templateField.roles.notes": "选填。不存在的角色会在导入时自动创建。",
     "users.importPlatform": "平台导入",
-    "users.importPlatformHint": "按平台填写结构化输入项，先预览，再执行导入。",
+    "users.importPlatformHint": "按平台填写官方应用凭据。预览或执行导入时，网关会直接调用对应平台的组织与用户接口，不再要求你手工粘贴返回体。",
     "users.platformGuide": "配置说明",
-    "users.platformGuideSummary": "展开后可查看应用配置步骤、所需权限，以及每个平台需要粘贴的接口返回内容。",
+    "users.platformGuideSummary": "展开后可查看应用配置步骤、所需权限，以及这些配置项应当从哪里获取。",
     "users.platformGuidePermissions": "所需权限",
     "users.platformGuideManifest": "飞书权限导入示例",
     "users.platformAppId": "App ID",
@@ -601,27 +604,27 @@ const translations = {
     "users.platformCorpId": "Corp ID",
     "users.platformCorpSecret": "通讯录 Secret",
     "users.platformAppKey": "App Key",
-    "users.platformDepartmentsPayload": "部门接口返回体",
-    "users.platformUsersPayload": "用户接口返回体",
-    "users.platformDepartmentsHint": "粘贴部门列表接口返回体。导入器会从中提取部门 ID、名称和父子关系。",
-    "users.platformUsersHint": "粘贴用户列表接口返回体。导入器会从中提取用户标识、组织归属以及可选角色。",
-    "users.platformFeishuStep1": "在飞书开放平台创建企业自建应用，并先开通通讯录只读相关权限，再获取接口返回体。",
-    "users.platformFeishuStep2": "先调用部门列表接口，把结果粘贴到部门接口返回体；再调用用户列表接口，把结果粘贴到用户接口返回体。",
-    "users.platformFeishuStep3": "先做预览，确认组织路径正确，再执行导入创建或更新用户。",
+    "users.platformRootDepartmentId": "根部门 ID",
+    "users.platformRootDepartmentHint": "可选。用于把导入范围限制在某个组织分支内；如果要导入整棵组织树，就保留默认根部门 ID。",
+    "users.platformFeishuStep1": "在飞书开放平台创建企业自建应用，并为应用授予通讯录只读权限。",
+    "users.platformFeishuStep2": "从应用凭据页面复制 App ID 和 App Secret。若要导入整棵组织树，根部门 ID 保持默认值 0 即可。",
+    "users.platformFeishuStep3": "先做预览。网关会直接调用飞书接口，并自动构建组织树和用户归属。",
     "users.platformFeishuPermissions": "应用需要具备部门只读、用户只读，以及获取 tenant_access_token 的相关权限。",
     "users.platformWecomStep1": "在企业微信里准备可读通讯录的应用 Secret，并确认该应用具备读取部门和成员的只读权限。",
-    "users.platformWecomStep2": "把部门列表接口返回体粘贴到部门接口返回体，再把成员列表接口返回体粘贴到用户接口返回体。",
-    "users.platformWecomStep3": "先预览导入结果。导入器会自动把部门 ID 解析成完整组织路径。",
+    "users.platformWecomStep2": "填写 Corp ID、通讯录 Secret 和根部门 ID。若要导入整棵树，根部门 ID 默认填 1。",
+    "users.platformWecomStep3": "先预览导入结果。网关会自动把部门 ID 解析成完整组织路径。",
     "users.platformWecomPermissions": "需要通讯录只读权限，以及可调用部门和成员接口的通讯录 Secret。",
-    "users.platformDingtalkStep1": "在钉钉创建企业内部应用，授予组织通讯录只读权限，并准备部门与成员接口返回体。",
-    "users.platformDingtalkStep2": "把部门树接口返回体粘贴到部门接口返回体，再把成员列表接口返回体粘贴到用户接口返回体。",
-    "users.platformDingtalkStep3": "先预览，导入器会根据部门树自动生成完整组织路径，然后再执行导入。",
+    "users.platformDingtalkStep1": "在钉钉创建企业内部应用，并授予部门与成员只读权限。",
+    "users.platformDingtalkStep2": "填写 App Key、App Secret 和根部门 ID。若要导入整棵树，根部门 ID 默认填 1。",
+    "users.platformDingtalkStep3": "先预览。网关会先拉取部门结构，再构建完整部门路径并创建或更新用户。",
     "users.platformDingtalkPermissions": "应用需要具备部门只读和成员只读权限。",
-    "users.orgCreateRoot": "新建根节点",
+    "users.orgCreateRoot": "新建节点",
+    "users.orgCreateSibling": "新增同级节点",
     "users.orgCreateChild": "新增子节点",
     "users.orgEdit": "编辑节点",
     "users.orgDelete": "删除节点",
     "users.orgDeleteConfirm": "确认删除该组织节点？",
+    "users.orgRootDeleteDisabled": "/ 根节点不能删除。",
     "users.orgNodeTitle": "组织节点",
     "users.orgNodeMembers": "直属成员",
     "users.orgNodeSelected": "当前选中节点",
@@ -890,7 +893,7 @@ const translations = {
     "users.usersCreated": "建立使用者數",
     "users.usersUpdated": "更新使用者數",
     "users.keysCreated": "建立執行時金鑰數",
-    "users.rootMapped": "空的組織路徑會映射到根組織節點。",
+    "users.rootMapped": "組織路徑為空的使用者會掛載到 / 根節點下。",
     "users.importReady": "上傳檔案後先預覽，再確認組織變更、角色新增與受影響使用者。",
     "users.downloadTemplate": "下載模板",
     "users.templateGuide": "欄位說明",
@@ -908,9 +911,9 @@ const translations = {
     "users.templateField.roles.format": "逗號分隔的角色名稱，例如 Analyst,Reviewer",
     "users.templateField.roles.notes": "選填。不存在的角色會在匯入時自動建立。",
     "users.importPlatform": "平台匯入",
-    "users.importPlatformHint": "依平台填寫結構化輸入欄位，先預覽，再執行匯入。",
+    "users.importPlatformHint": "依平台填寫官方應用憑據。預覽或執行匯入時，閘道會直接呼叫對應平台的組織與使用者介面，不再要求你手動貼上回傳內容。",
     "users.platformGuide": "設定說明",
-    "users.platformGuideSummary": "展開後可查看應用設定步驟、所需權限，以及每個平台需要貼上的 API 回傳內容。",
+    "users.platformGuideSummary": "展開後可查看應用設定步驟、所需權限，以及這些設定值應當從哪裡取得。",
     "users.platformGuidePermissions": "所需權限",
     "users.platformGuideManifest": "飛書權限匯入範例",
     "users.platformAppId": "App ID",
@@ -918,27 +921,27 @@ const translations = {
     "users.platformCorpId": "Corp ID",
     "users.platformCorpSecret": "通訊錄 Secret",
     "users.platformAppKey": "App Key",
-    "users.platformDepartmentsPayload": "部門介面回傳內容",
-    "users.platformUsersPayload": "使用者介面回傳內容",
-    "users.platformDepartmentsHint": "貼上部門清單介面回傳內容。匯入器會從中擷取部門 ID、名稱與父子關係。",
-    "users.platformUsersHint": "貼上使用者清單介面回傳內容。匯入器會從中擷取使用者識別、組織歸屬與可選角色。",
-    "users.platformFeishuStep1": "在飛書開放平台建立企業自建應用，並先開通通訊錄唯讀相關權限，再取得 API 回傳內容。",
-    "users.platformFeishuStep2": "先呼叫部門清單介面，把結果貼到部門介面回傳內容；再呼叫使用者清單介面，把結果貼到使用者介面回傳內容。",
-    "users.platformFeishuStep3": "先做預覽，確認組織路徑正確，再執行匯入建立或更新使用者。",
+    "users.platformRootDepartmentId": "根部門 ID",
+    "users.platformRootDepartmentHint": "可選。用來把匯入範圍限制在某個組織分支；若要匯入整棵組織樹，就保留預設根部門 ID。",
+    "users.platformFeishuStep1": "在飛書開放平台建立企業自建應用，並為應用授予通訊錄唯讀權限。",
+    "users.platformFeishuStep2": "從應用憑據頁面複製 App ID 和 App Secret。若要匯入整棵組織樹，根部門 ID 保持預設值 0 即可。",
+    "users.platformFeishuStep3": "先做預覽。閘道會直接呼叫飛書介面，並自動建立組織樹與使用者歸屬。",
     "users.platformFeishuPermissions": "應用需要具備部門唯讀、使用者唯讀，以及取得 tenant_access_token 的相關權限。",
     "users.platformWecomStep1": "在企業微信準備可讀通訊錄的應用 Secret，並確認該應用具備讀取部門與成員的唯讀權限。",
-    "users.platformWecomStep2": "把部門清單介面回傳內容貼到部門介面回傳內容，再把成員清單介面回傳內容貼到使用者介面回傳內容。",
-    "users.platformWecomStep3": "先預覽匯入結果。匯入器會自動把部門 ID 解析成完整組織路徑。",
+    "users.platformWecomStep2": "填寫 Corp ID、通訊錄 Secret 和根部門 ID。若要匯入整棵樹，根部門 ID 預設填 1。",
+    "users.platformWecomStep3": "先預覽匯入結果。閘道會自動把部門 ID 解析成完整組織路徑。",
     "users.platformWecomPermissions": "需要通訊錄唯讀權限，以及可呼叫部門與成員介面的通訊錄 Secret。",
-    "users.platformDingtalkStep1": "在釘釘建立企業內部應用，授予組織通訊錄唯讀權限，並準備部門與成員介面回傳內容。",
-    "users.platformDingtalkStep2": "把部門樹介面回傳內容貼到部門介面回傳內容，再把成員清單介面回傳內容貼到使用者介面回傳內容。",
-    "users.platformDingtalkStep3": "先預覽，匯入器會依據部門樹自動生成完整組織路徑，之後再執行匯入。",
+    "users.platformDingtalkStep1": "在釘釘建立企業內部應用，並授予部門與成員唯讀權限。",
+    "users.platformDingtalkStep2": "填寫 App Key、App Secret 和根部門 ID。若要匯入整棵樹，根部門 ID 預設填 1。",
+    "users.platformDingtalkStep3": "先預覽。閘道會先拉取部門結構，再建立完整部門路徑並建立或更新使用者。",
     "users.platformDingtalkPermissions": "應用需要具備部門唯讀與成員唯讀權限。",
-    "users.orgCreateRoot": "新增根節點",
+    "users.orgCreateRoot": "新增節點",
+    "users.orgCreateSibling": "新增同級節點",
     "users.orgCreateChild": "新增子節點",
     "users.orgEdit": "編輯節點",
     "users.orgDelete": "刪除節點",
     "users.orgDeleteConfirm": "確認刪除這個組織節點？",
+    "users.orgRootDeleteDisabled": "/ 根節點不能刪除。",
     "users.orgNodeTitle": "組織節點",
     "users.orgNodeMembers": "直屬成員",
     "users.orgNodeSelected": "目前選取節點",
@@ -1407,21 +1410,23 @@ function ConsoleApp() {
       </Layout.Sider>
       <Layout>
         <Layout.Header className="topbar">
-          <div>
+          <div className="topbar-page">
             <Typography.Text className="page-kicker">{t("topbar.kicker")}</Typography.Text>
-            <Typography.Title level={3} className="page-title">
-              {currentPageTitle}
-            </Typography.Title>
+            <div className="page-title-row">
+              {showCompactNav ? (
+                <Button
+                  className="compact-nav-trigger compact-nav-trigger-inline"
+                  aria-label={t("topbar.openNavigation")}
+                  icon={<MenuOutlined />}
+                  onClick={() => setCompactNavOpen(true)}
+                />
+              ) : null}
+              <Typography.Title level={3} className="page-title">
+                {currentPageTitle}
+              </Typography.Title>
+            </div>
           </div>
           <div className="topbar-actions">
-            {showCompactNav ? (
-              <Button
-                className="compact-nav-trigger"
-                aria-label={t("topbar.openNavigation")}
-                icon={<MenuOutlined />}
-                onClick={() => setCompactNavOpen(true)}
-              />
-            ) : null}
             <LanguageSwitcher
               className="language-select language-select-header"
               label={t("topbar.switchLanguage")}
@@ -1573,6 +1578,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     notes: t(`users.templateField.${field.field}.notes` as TranslationKey),
   }));
   const orgTree = buildOrgTree(orgNodes);
+  const rootOrgNode = orgNodes.find((node) => String(node.path || "") === "") || null;
   const selectedOrgNode = selectedOrgId
     ? orgNodes.find((node) => String(node.id) === selectedOrgId) || null
     : null;
@@ -1598,19 +1604,28 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     usersState.reload();
   };
 
-  const openCreateOrgNode = (mode: "root" | "child" | "edit") => {
-    if (mode !== "root" && !selectedOrgNode) return;
-    if (mode === "edit" && selectedOrgNode) {
-      setEditingOrgNodeId(String(selectedOrgNode.id));
-      setOrgNodeParentId(String(selectedOrgNode.parent_id || "") || null);
+  const openCreateOrgNode = (
+    mode: "root" | "sibling" | "child" | "edit",
+    node: AnyRecord | null = selectedOrgNode,
+  ) => {
+    if (mode !== "root" && !node) return;
+    if (mode === "edit" && node) {
+      setEditingOrgNodeId(String(node.id));
+      setOrgNodeParentId(String(node.parent_id || "") || null);
       orgNodeForm.setFieldsValue({
-        name: selectedOrgNode.name,
-        code: selectedOrgNode.code || "",
-        status: selectedOrgNode.status,
+        name: node.name,
+        code: node.code || "",
+        status: node.status,
       });
     } else {
       setEditingOrgNodeId(null);
-      setOrgNodeParentId(mode === "child" && selectedOrgNode ? String(selectedOrgNode.id) : null);
+      if (mode === "child" && node) {
+        setOrgNodeParentId(String(node.id));
+      } else if (mode === "sibling" && node) {
+        setOrgNodeParentId(node.parent_id ? String(node.parent_id) : (rootOrgNode?.id ? String(rootOrgNode.id) : null));
+      } else {
+        setOrgNodeParentId(rootOrgNode?.id ? String(rootOrgNode.id) : null);
+      }
       orgNodeForm.setFieldsValue({
         name: "",
         code: "",
@@ -1649,13 +1664,26 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     messageApi.success(t("common.saved"));
   };
 
-  const deleteOrgNode = async () => {
-    if (!selectedOrgNode) return;
-    await api.request(`/admin/org-nodes/${selectedOrgNode.id}`, { method: "DELETE" });
-    setSelectedOrgId(null);
+  const deleteOrgNode = async (node: AnyRecord | null = selectedOrgNode) => {
+    if (!node) return;
+    if (String(node.path || "") === "") {
+      messageApi.warning(t("users.orgRootDeleteDisabled"));
+      return;
+    }
+    await api.request(`/admin/org-nodes/${node.id}`, { method: "DELETE" });
+    setSelectedOrgId((current) => (current === String(node.id) ? null : current));
     reloadDirectory();
     messageApi.success(t("common.deleted"));
   };
+
+  const orgTreeData = toOrgTreeData(orgTree, t, {
+    onCreateNode: (node) => openCreateOrgNode("root", node),
+    onCreateSibling: (node) => openCreateOrgNode("sibling", node),
+    onCreateChild: (node) => openCreateOrgNode("child", node),
+    onEditNode: (node) => openCreateOrgNode("edit", node),
+    onDeleteNode: (node) => void deleteOrgNode(node),
+    onSelectNode: (node) => setSelectedOrgId(node.key),
+  });
 
   const saveUser = async () => {
     const values = await createForm.validateFields();
@@ -1756,25 +1784,12 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
       <div className="directory-tree-pane panel">
         <div className="panel-head">
           <Typography.Title level={4}>{t("users.organizationTree")}</Typography.Title>
-          <Space size={4} wrap>
-            <IconAction title={t("users.orgCreateRoot")} icon={<PlusOutlined />} onClick={() => openCreateOrgNode("root")} />
-            <IconAction title={t("users.orgCreateChild")} icon={<PlusOutlined />} onClick={() => openCreateOrgNode("child")} />
-            <IconAction title={t("users.orgEdit")} icon={<EditOutlined />} onClick={() => openCreateOrgNode("edit")} />
-            <Popconfirm title={t("users.orgDeleteConfirm")} onConfirm={() => void deleteOrgNode()}>
-              <Button size="small" icon={<DeleteOutlined />} disabled={!selectedOrgNode} />
-            </Popconfirm>
-            <Button onClick={() => { setSelectedOrgId(null); reloadDirectory(); }}>{t("common.refresh")}</Button>
-          </Space>
         </div>
         <div className="directory-tree-body">
-          {selectedOrgNode ? (
-            <Typography.Paragraph className="directory-tree-summary">
-              {t("users.orgNodeSelected")}: {String(selectedOrgNode.path || selectedOrgNode.name)}
-            </Typography.Paragraph>
-          ) : null}
           <Tree
             blockNode
-            treeData={toOrgTreeData(orgTree)}
+            defaultExpandAll
+            treeData={orgTreeData}
             selectedKeys={selectedOrgId ? [selectedOrgId] : []}
             onSelect={(keys) => setSelectedOrgId(String(keys[0] || ""))}
           />
@@ -1899,7 +1914,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
               placeholder={t("placeholder.orgNodeSearch")}
               options={orgNodes.map((node) => ({
                 value: node.id,
-                label: `${String(node.path || "") || "Root"}${node.path ? "" : " (Root)"}`,
+                label: String(node.path || "") ? String(node.path) : "/",
               }))}
             />
           </Form.Item>
@@ -2270,17 +2285,15 @@ function ImportPlatformPanel({
               {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
             </Form.Item>
           ))}
-          {config.payloadFields.map((field) => (
+          {config.extraFields.map((field) => (
             <Form.Item
               key={field.name}
               name={field.name}
               label={field.label}
-              rules={[{ required: true, message: t("common.required", { label: field.label }) }]}
-              className="span-2"
             >
-              <Input.TextArea
+              <Input
                 aria-label={field.label}
-                autoSize={{ minRows: 8, maxRows: 14 }}
+                autoComplete="off"
                 placeholder={field.hint}
               />
             </Form.Item>
@@ -2337,16 +2350,11 @@ function buildImportPlatformUiConfig(
         { name: "feishuAppId", label: t("users.platformAppId") },
         { name: "feishuAppSecret", label: t("users.platformAppSecret"), secret: true },
       ],
-      payloadFields: [
+      extraFields: [
         {
-          name: "feishuDepartmentsPayload",
-          label: t("users.platformDepartmentsPayload"),
-          hint: t("users.platformDepartmentsHint"),
-        },
-        {
-          name: "feishuUsersPayload",
-          label: t("users.platformUsersPayload"),
-          hint: t("users.platformUsersHint"),
+          name: "feishuRootDepartmentId",
+          label: t("users.platformRootDepartmentId"),
+          hint: t("users.platformRootDepartmentHint"),
         },
       ],
       stepKeys: [
@@ -2364,16 +2372,11 @@ function buildImportPlatformUiConfig(
         { name: "wecomCorpId", label: t("users.platformCorpId") },
         { name: "wecomCorpSecret", label: t("users.platformCorpSecret"), secret: true },
       ],
-      payloadFields: [
+      extraFields: [
         {
-          name: "wecomDepartmentsPayload",
-          label: t("users.platformDepartmentsPayload"),
-          hint: t("users.platformDepartmentsHint"),
-        },
-        {
-          name: "wecomUsersPayload",
-          label: t("users.platformUsersPayload"),
-          hint: t("users.platformUsersHint"),
+          name: "wecomRootDepartmentId",
+          label: t("users.platformRootDepartmentId"),
+          hint: t("users.platformRootDepartmentHint"),
         },
       ],
       stepKeys: [
@@ -2390,16 +2393,11 @@ function buildImportPlatformUiConfig(
       { name: "dingtalkAppKey", label: t("users.platformAppKey") },
       { name: "dingtalkAppSecret", label: t("users.platformAppSecret"), secret: true },
     ],
-    payloadFields: [
+    extraFields: [
       {
-        name: "dingtalkDepartmentsPayload",
-        label: t("users.platformDepartmentsPayload"),
-        hint: t("users.platformDepartmentsHint"),
-      },
-      {
-        name: "dingtalkUsersPayload",
-        label: t("users.platformUsersPayload"),
-        hint: t("users.platformUsersHint"),
+        name: "dingtalkRootDepartmentId",
+        label: t("users.platformRootDepartmentId"),
+        hint: t("users.platformRootDepartmentHint"),
       },
     ],
     stepKeys: [
@@ -4200,54 +4198,115 @@ function ImportPreviewPanel({
 }
 
 function buildOrgTree(orgNodes: AnyRecord[]): OrgTreeNode[] {
-  /** Convert flat org-node rows into Ant Tree-compatible records. */
+  /** Convert flat org-node rows into one rooted tree with a stable / node. */
 
   const nodes = new Map<string, OrgTreeNode>();
-  const roots: OrgTreeNode[] = [];
+  let rootNode: OrgTreeNode | null = null;
   for (const orgNode of orgNodes) {
     const directUserNames = Array.isArray(orgNode.direct_user_names)
       ? orgNode.direct_user_names.map(String)
       : [];
-    nodes.set(String(orgNode.id), {
+    const node = {
       key: String(orgNode.id),
-      title: String(orgNode.name || orgNode.path || "Root"),
+      title: String(orgNode.path || "") ? String(orgNode.name || orgNode.path) : "/",
       path: String(orgNode.path || ""),
+      parentId: orgNode.parent_id ? String(orgNode.parent_id) : null,
+      isRoot: String(orgNode.path || "") === "",
       directUserNames,
       children: [],
-    });
+    };
+    nodes.set(String(orgNode.id), node);
+    if (node.isRoot) {
+      rootNode = node;
+    }
   }
+  if (!rootNode) return [];
   for (const orgNode of orgNodes) {
     const node = nodes.get(String(orgNode.id));
     if (!node) continue;
     const parentId = orgNode.parent_id ? String(orgNode.parent_id) : "";
+    if (node.isRoot) continue;
     if (parentId && nodes.has(parentId)) {
       nodes.get(parentId)?.children?.push(node);
     } else {
-      roots.push(node);
+      rootNode.children?.push(node);
     }
   }
-  return roots;
+  return [rootNode];
 }
 
-function toOrgTreeData(nodes: OrgTreeNode[]): AnyRecord[] {
-  /** Decorate org nodes with direct-member names on leaf nodes. */
+function toOrgTreeData(
+  nodes: OrgTreeNode[],
+  t: I18nContextValue["t"],
+  actions: {
+    onCreateNode: (node: OrgTreeNode) => void;
+    onCreateSibling: (node: OrgTreeNode) => void;
+    onCreateChild: (node: OrgTreeNode) => void;
+    onEditNode: (node: OrgTreeNode) => void;
+    onDeleteNode: (node: OrgTreeNode) => void;
+    onSelectNode: (node: OrgTreeNode) => void;
+  },
+): AnyRecord[] {
+  /** Decorate org nodes with direct-member names and per-node context actions. */
 
   return nodes.map((node) => {
     const isLeaf = !node.children?.length;
     const directUsers = node.directUserNames || [];
+    const menuItems = node.isRoot
+      ? [
+          {
+            key: "create-root-node",
+            label: t("users.orgCreateRoot"),
+            onClick: () => actions.onCreateNode(node),
+          },
+        ]
+      : [
+          {
+            key: "create-sibling-node",
+            label: t("users.orgCreateSibling"),
+            onClick: () => actions.onCreateSibling(node),
+          },
+          {
+            key: "create-child-node",
+            label: t("users.orgCreateChild"),
+            onClick: () => actions.onCreateChild(node),
+          },
+          {
+            key: "edit-node",
+            label: t("users.orgEdit"),
+            onClick: () => actions.onEditNode(node),
+          },
+          {
+            key: "delete-node",
+            label: t("users.orgDelete"),
+            onClick: () => actions.onDeleteNode(node),
+          },
+        ];
     return {
       key: node.key,
       title: (
-        <div className="directory-tree-node">
-          <span className="directory-tree-node-name">{node.title}</span>
-          {isLeaf && directUsers.length ? (
-            <Typography.Text type="secondary" className="directory-tree-node-members">
-              {directUsers.join(", ")}
-            </Typography.Text>
-          ) : null}
-        </div>
+        <Dropdown
+          trigger={["contextMenu"]}
+          menu={{
+            items: menuItems.map((item) => ({ key: item.key, label: item.label })),
+            onClick: ({ key }) => {
+              const item = menuItems.find((entry) => entry.key === key);
+              actions.onSelectNode(node);
+              item?.onClick();
+            },
+          }}
+        >
+          <div className="directory-tree-node" onContextMenu={() => actions.onSelectNode(node)}>
+            <span className="directory-tree-node-name">{node.title}</span>
+            {isLeaf && directUsers.length ? (
+              <Typography.Text type="secondary" className="directory-tree-node-members">
+                {directUsers.join(", ")}
+              </Typography.Text>
+            ) : null}
+          </div>
+        </Dropdown>
       ),
-      children: toOrgTreeData(node.children || []),
+      children: toOrgTreeData(node.children || [], t, actions),
     };
   });
 }
