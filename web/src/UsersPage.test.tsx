@@ -207,11 +207,12 @@ describe("Users console page", () => {
     expect(screen.queryByText("Delete node")).not.toBeInTheDocument();
   });
 
-  it("opens a right-side navigation drawer on small screens", async () => {
+  it("opens a left-side navigation drawer on small screens", async () => {
     await mountConsoleApp("overview");
     await resizeWindow(860);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open navigation" }));
+    expect(document.querySelector(".ant-drawer-left")).not.toBeNull();
     expect((await screen.findAllByText("Policies")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByText("Users")[0]);
     await waitFor(() => {

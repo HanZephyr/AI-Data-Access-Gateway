@@ -178,7 +178,7 @@ const translations = {
     "placeholder.orgNodeSearch": "Select an organization node",
     "apiKey.newTitle": "New API key",
     "apiKey.serviceTitle": "Service and operator keys",
-    "apiKey.serviceDescription": "Runtime user keys are managed from the Users workspace. Create admin or integration keys here only when you need a non-user credential.",
+    "apiKey.serviceDescription": "Runtime user keys are managed from the Users workspace. This page only creates non-user service keys with admin or internal scopes.",
     "apiKey.serviceCreate": "Create service key",
     "field.name": "Name",
     "field.type": "Type",
@@ -496,7 +496,7 @@ const translations = {
     "placeholder.orgNodeSearch": "选择组织节点",
     "apiKey.newTitle": "新 API 密钥",
     "apiKey.serviceTitle": "服务与操作员密钥",
-    "apiKey.serviceDescription": "运行时用户密钥统一在用户工作区里生成和重置。这里只保留管理员或集成场景的非用户密钥。",
+    "apiKey.serviceDescription": "运行时用户密钥统一在用户工作区里生成和重置。这个页面只允许创建 admin 或 internal 作用域的非用户服务密钥。",
     "apiKey.serviceCreate": "新建服务密钥",
     "field.name": "名称",
     "field.type": "类型",
@@ -813,7 +813,7 @@ const translations = {
     "placeholder.orgNodeSearch": "選擇組織節點",
     "apiKey.newTitle": "新 API 金鑰",
     "apiKey.serviceTitle": "服務與操作員金鑰",
-    "apiKey.serviceDescription": "執行時使用者金鑰統一在 Users 工作區裡產生與重置。這裡只保留管理員或整合用途的非使用者金鑰。",
+    "apiKey.serviceDescription": "執行時使用者金鑰統一在 Users 工作區裡產生與重置。這個頁面只允許建立 admin 或 internal 範圍的非使用者服務金鑰。",
     "apiKey.serviceCreate": "建立服務金鑰",
     "field.name": "名稱",
     "field.type": "類型",
@@ -1461,7 +1461,7 @@ function ConsoleApp() {
       </Layout>
       <Drawer
         title={t("topbar.navigation")}
-        placement="right"
+        placement="left"
         width={280}
         className="compact-nav-drawer"
         open={showCompactNav && compactNavOpen}
@@ -2785,6 +2785,7 @@ function AssetDetail({
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
   const [form] = Form.useForm();
+  const statusValue = Form.useWatch("status", form) || selected.status || "active";
 
   useEffect(() => {
     form.setFieldsValue(toCatalogFormValues(selected));
@@ -2827,7 +2828,6 @@ function AssetDetail({
             </Descriptions.Item>
           ) : null}
         </Descriptions>
-        <Alert type="info" showIcon message={t("catalog.disabledHint")} />
         <Form form={form} layout="vertical">
           {selected.type === "resource" ? (
             <>
@@ -2845,6 +2845,9 @@ function AssetDetail({
           <Form.Item name="status" label={t("field.status")}>
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
+          {statusValue === "disabled" ? (
+            <Alert className="catalog-status-hint" type="info" showIcon message={t("catalog.disabledHint")} />
+          ) : null}
         </Form>
         {selected.type === "resource" ? (
           <CatalogTagEditor
@@ -3746,6 +3749,10 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
 
   const { message: messageApi, modal } = AntApp.useApp();
   const { t } = useI18n();
+  const serviceKeyScopeOptions = [
+    { value: "admin", label: "admin" },
+    { value: "internal", label: "internal" },
+  ];
   const state = useData<AnyRecord[]>(() => api.request("/admin/api-keys"), [api.apiKey]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<AnyRecord | null>(null);
@@ -3807,13 +3814,17 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
       <Drawer title={t("common.createTitle", { title: t("nav.apiKeys") })} open={open} onClose={() => setOpen(false)} extra={<Button type="primary" onClick={create}>{t("common.save")}</Button>}>
         <Form form={form} layout="vertical" initialValues={{ scopes: ["admin"] }}>
           <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
-          <Form.Item name="scopes" label={t("field.scopes")}><Select mode="tags" /></Form.Item>
+          <Form.Item name="scopes" label={t("field.scopes")} rules={[{ required: true }]}>
+            <Select mode="multiple" options={serviceKeyScopeOptions} />
+          </Form.Item>
         </Form>
       </Drawer>
       <Drawer title={t("common.editTitle", { title: t("nav.apiKeys") })} open={Boolean(editing)} onClose={() => setEditing(null)} extra={<Button type="primary" onClick={edit}>{t("common.save")}</Button>}>
         <Form form={editForm} layout="vertical">
           <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
-          <Form.Item name="scopes" label={t("field.scopes")}><Select mode="tags" /></Form.Item>
+          <Form.Item name="scopes" label={t("field.scopes")} rules={[{ required: true }]}>
+            <Select mode="multiple" options={serviceKeyScopeOptions} />
+          </Form.Item>
         </Form>
       </Drawer>
     </Space>

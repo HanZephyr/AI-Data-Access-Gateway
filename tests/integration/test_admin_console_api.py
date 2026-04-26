@@ -473,7 +473,7 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
 
     created = client.post(
         "/admin/api-keys",
-        json={"name": "runtime", "scopes": ["runtime"]},
+        json={"name": "service-operator", "scopes": ["admin"]},
         headers=auth(),
     )
     assert created.status_code == 201
@@ -482,12 +482,20 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
 
     updated = client.patch(
         f"/admin/api-keys/{key_id}",
-        json={"name": "runtime readonly", "scopes": ["runtime", "readonly"]},
+        json={"name": "service-internal", "scopes": ["admin", "internal"]},
         headers=auth(),
     )
     assert updated.status_code == 200
-    assert updated.json()["name"] == "runtime readonly"
-    assert updated.json()["scopes"] == ["runtime", "readonly"]
+    assert updated.json()["name"] == "service-internal"
+    assert updated.json()["scopes"] == ["admin", "internal"]
+
+    rejected = client.patch(
+        f"/admin/api-keys/{key_id}",
+        json={"scopes": ["runtime"]},
+        headers=auth(),
+    )
+    assert rejected.status_code == 400
+    assert rejected.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
 
     revoked = client.post(f"/admin/api-keys/{key_id}/revoke", headers=auth())
     assert revoked.status_code == 200

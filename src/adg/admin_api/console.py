@@ -34,6 +34,7 @@ from adg.mcp_api.runtime_tools import serialize_runtime_tool_definitions
 router = APIRouter(prefix="/admin", tags=["admin-console"])
 
 PolicySubjectType = Literal["all", "user", "role"]
+SERVICE_API_KEY_SCOPES = {"admin", "internal"}
 
 
 class TagRequest(BaseModel):
@@ -1106,6 +1107,7 @@ def create_api_key(
 ) -> dict[str, Any]:
     """Create an API key and return the raw value exactly once."""
 
+    _validate_service_api_key_scopes(payload.scopes)
     api_key, plaintext = create_api_key_record(
         session,
         name=payload.name,
@@ -1131,6 +1133,7 @@ def update_api_key(
     scopes = data.pop("scopes", None)
     _apply_updates(api_key, data)
     if scopes is not None:
+        _validate_service_api_key_scopes(scopes)
         api_key.scopes = json.dumps(scopes, separators=(",", ":"))
     session.commit()
     session.refresh(api_key)
@@ -1210,6 +1213,23 @@ def _serialize_resource(
         "scanned_at": resource.scanned_at.isoformat(),
         "tags": list((tags_by_resource_id or {}).get(resource.id, [])),
     }
+
+
+def _validate_service_api_key_scopes(scopes: list[str]) -> None:
+    """Reject runtime scopes on service-key routes and keep the allowed set explicit."""
+
+    normalized = {scope.strip() for scope in scopes if scope and scope.strip()}
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one service API key scope is required",
+        )
+    unsupported = sorted(normalized.difference(SERVICE_API_KEY_SCOPES))
+    if unsupported:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only admin and internal scopes are allowed on this page",
+        )
 
 
 def _serialize_resource_field(field: ResourceField) -> dict[str, Any]:

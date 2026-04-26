@@ -324,6 +324,32 @@ def test_admin_cannot_delete_role_with_linked_users() -> None:
     assert response.json() == {"detail": "Remove users from this role before deleting it"}
 
 
+def test_admin_cannot_create_service_api_key_with_runtime_scope() -> None:
+    client, _ = build_directory_app()
+
+    response = client.post(
+        "/admin/api-keys",
+        json={"name": "invalid-runtime-service-key", "scopes": ["runtime"]},
+        headers=admin_auth(),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
+
+
+def test_admin_cannot_update_service_api_key_to_runtime_scope() -> None:
+    client, _ = build_directory_app()
+
+    response = client.patch(
+        "/admin/api-keys/key_admin",
+        json={"scopes": ["admin", "runtime"]},
+        headers=admin_auth(),
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
+
+
 def test_admin_can_create_update_and_delete_org_nodes() -> None:
     client, session_factory = build_directory_app()
 
