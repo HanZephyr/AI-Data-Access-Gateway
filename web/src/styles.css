@@ -240,8 +240,23 @@ body {
   min-width: 0;
 }
 
-.mobile-page-select {
+.compact-nav-trigger {
   display: none;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-color: var(--mist-300);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink-800);
+}
+
+.compact-nav-drawer .ant-drawer-body {
+  padding: 12px;
+}
+
+.compact-nav-drawer .ant-menu {
+  border-inline-end: 0 !important;
 }
 
 .language-switcher:hover,
@@ -799,6 +814,52 @@ body {
   background: #fff;
 }
 
+.platform-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.platform-form-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.directory-import-guide {
+  margin-top: 4px;
+  border-top: 1px solid var(--mist-300);
+}
+
+.directory-guide-copy {
+  display: grid;
+  gap: 12px;
+}
+
+.directory-guide-copy .ant-typography {
+  margin: 0;
+}
+
+.directory-guide-copy ol {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-800);
+}
+
+.directory-guide-copy li + li {
+  margin-top: 8px;
+}
+
+.directory-guide-snippet {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--mist-300);
+  background: var(--mist-50);
+  color: var(--ink-800);
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .directory-import-preview {
   display: flex;
   flex-direction: column;
@@ -1049,14 +1110,15 @@ body {
   }
 
   .topbar-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
     gap: 10px;
   }
 
   .topbar-actions > * {
     min-width: 0;
-    width: 100%;
   }
 
   .language-select,
@@ -1070,9 +1132,15 @@ body {
     justify-content: space-between;
   }
 
-  .mobile-page-select {
-    display: block;
+  .compact-nav-trigger {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
+  .language-select-header,
+  .key-input {
     width: 100%;
+    flex: 1 1 100%;
   }
 
   .content {
@@ -1117,6 +1185,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .platform-form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .config-form-grid {
     grid-template-columns: 1fr;
   }
@@ -1137,11 +1209,6 @@ body {
 }
 
 @media (max-width: 1280px) {
-  .mobile-page-select {
-    display: block;
-    width: 100%;
-  }
-
   .directory-workspace,
   .directory-main,
   .directory-import-layout {

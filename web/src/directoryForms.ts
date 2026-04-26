@@ -16,37 +16,29 @@ export type DirectoryUserFormInput = {
   roleIds?: unknown;
 };
 
+export type DirectoryImporterPlatform = "feishu" | "wecom" | "dingtalk";
+
 export type DirectoryImportFieldDoc = {
   field: DirectoryImportRow extends infer T ? keyof T & string : string;
   required: boolean;
-  format: string;
-  notes: string;
 };
 
 export const directoryImportTemplateFields: DirectoryImportFieldDoc[] = [
   {
     field: "user_name",
     required: true,
-    format: "Plain text",
-    notes: "Display name of the user inside ADG.",
   },
   {
     field: "org_path",
     required: false,
-    format: "Organization path such as Company/Finance/BI",
-    notes: "Missing paths attach the user to the root organization node. Unknown nodes are created automatically.",
   },
   {
     field: "external_ref",
     required: true,
-    format: "Stable external unique identifier",
-    notes: "Used for upsert. Re-importing the same external_ref updates the user without rotating the runtime key.",
   },
   {
     field: "roles",
     required: false,
-    format: "Comma-separated role names",
-    notes: "Unknown roles are created automatically.",
   },
 ];
 
@@ -69,6 +61,41 @@ export function buildDirectoryImportPayload(rows: DirectoryImportRow[], delimite
       roles: String(row.roles || "").trim(),
     })),
     delimiter: normalizeOrgPathDelimiter(delimiter),
+  };
+}
+
+export function buildDirectoryImporterConfig(
+  platform: DirectoryImporterPlatform,
+  input: Record<string, unknown>,
+) {
+  const delimiter = normalizeOrgPathDelimiter(input.delimiter);
+
+  if (platform === "feishu") {
+    return {
+      delimiter,
+      app_id: normalizedText(input.feishuAppId),
+      app_secret: normalizedText(input.feishuAppSecret),
+      departments_payload: parseJsonPayloadText(String(input.feishuDepartmentsPayload || "")),
+      users_payload: parseJsonPayloadText(String(input.feishuUsersPayload || "")),
+    };
+  }
+
+  if (platform === "wecom") {
+    return {
+      delimiter,
+      corp_id: normalizedText(input.wecomCorpId),
+      corp_secret: normalizedText(input.wecomCorpSecret),
+      departments_payload: parseJsonPayloadText(String(input.wecomDepartmentsPayload || "")),
+      users_payload: parseJsonPayloadText(String(input.wecomUsersPayload || "")),
+    };
+  }
+
+  return {
+    delimiter,
+    app_key: normalizedText(input.dingtalkAppKey),
+    app_secret: normalizedText(input.dingtalkAppSecret),
+    departments_payload: parseJsonPayloadText(String(input.dingtalkDepartmentsPayload || "")),
+    users_payload: parseJsonPayloadText(String(input.dingtalkUsersPayload || "")),
   };
 }
 
@@ -196,4 +223,9 @@ function normalizeRoleCell(value: unknown) {
     return value.map((item) => String(item || "").trim()).filter(Boolean).join(",");
   }
   return String(value || "").trim();
+}
+
+function normalizedText(value: unknown) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
 }

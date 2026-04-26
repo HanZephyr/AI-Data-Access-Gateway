@@ -15,6 +15,26 @@ class WeComImporter(PullOnlyDirectoryImporter):
 
     platform = "wecom"
 
+    def fetch(self, config: Mapping[str, Any]) -> DirectoryImportBatch:
+        payload = config.get("payload")
+        if isinstance(payload, Mapping):
+            return self.normalize(cast(Mapping[str, Any], payload))
+
+        self.delimiter = str(config.get("delimiter") or "/").strip() or "/"
+        departments_payload = config.get("departments_payload")
+        users_payload = config.get("users_payload")
+        if not isinstance(users_payload, Mapping):
+            raise ValueError("WeCom config must include users_payload")
+
+        department_names = self._extract_department_names(departments_payload)
+        users = self._extract_users(users_payload)
+        return self.normalize(
+            {
+                "department_names": department_names,
+                "users": users,
+            }
+        )
+
     def normalize(self, payload: Mapping[str, Any]) -> DirectoryImportBatch:
         department_names = payload.get("department_names")
         users = payload.get("users")
@@ -58,3 +78,44 @@ class WeComImporter(PullOnlyDirectoryImporter):
             )
 
         return DirectoryImportBatch(users=normalized_users, delimiter=self.delimiter)
+
+    def _extract_users(self, payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+        candidates = (
+            payload.get("users"),
+            payload.get("userlist"),
+            payload.get("data"),
+        )
+        for candidate in candidates:
+            if isinstance(candidate, list):
+                return cast(list[Mapping[str, Any]], candidate)
+            if isinstance(candidate, Mapping):
+                userlist = candidate.get("userlist")
+                if isinstance(userlist, list):
+                    return cast(list[Mapping[str, Any]], userlist)
+        raise ValueError("WeCom users payload must include a users/userlist list")
+
+    def _extract_department_names(self, payload: Any) -> dict[str, str]:
+        if isinstance(payload, Mapping):
+            raw_map = payload.get("department_names")
+            if isinstance(raw_map, Mapping):
+                return {
+                    str(key): required_text(value, field_name=f"department_names[{key}]")
+                    for key, value in raw_map.items()
+                }
+
+            departments = payload.get("department")
+            if not isinstance(departments, list):
+                data = payload.get("data")
+                if isinstance(data, Mapping):
+                    departments = data.get("department")
+            if isinstance(departments, list):
+                return {
+                    str(department.get("id")): required_text(
+                        department.get("name"),
+                        field_name="department.name",
+                    )
+                    for department in cast(list[Mapping[str, Any]], departments)
+                    if department.get("id") is not None
+                }
+
+        raise ValueError("WeCom departments payload must include department_names or department")

@@ -15,6 +15,7 @@ import {
   LinkOutlined,
   KeyOutlined,
   LockOutlined,
+  MenuOutlined,
   PlusOutlined,
   RightCircleOutlined,
   SafetyOutlined,
@@ -27,6 +28,7 @@ import {
   Alert,
   App as AntApp,
   Button,
+  Collapse,
   ConfigProvider,
   Descriptions,
   Drawer,
@@ -62,11 +64,11 @@ import {
   maskingFormValuesFromConfig,
 } from "./configForms";
 import {
+  buildDirectoryImporterConfig,
   buildDirectoryImportPayload,
   buildUserCreatePayload,
   directoryImportTemplateFields,
   parseDirectoryRowsFromFile,
-  parseJsonPayloadText,
 } from "./directoryForms";
 import { AdminOnboarding } from "./AdminOnboarding";
 import { validateAdminApiKey } from "./adminAuth";
@@ -132,6 +134,8 @@ const translations = {
     "topbar.hideApiKey": "Hide API key",
     "topbar.language": "Language",
     "topbar.switchLanguage": "Switch page language",
+    "topbar.openNavigation": "Open navigation",
+    "topbar.navigation": "Navigation",
     "nav.overview": "Overview",
     "nav.users": "Users",
     "nav.roles": "Roles",
@@ -163,6 +167,8 @@ const translations = {
     "common.revokeConfirm": "Revoke this key?",
     "common.required": "{label} is required",
     "common.validJson": "{label} must be valid JSON",
+    "common.yes": "Yes",
+    "common.no": "No",
     "placeholder.resourceSearch": "Search and select a resource",
     "placeholder.tagSearch": "Search and select a tag",
     "placeholder.roleSearch": "Select one or more roles",
@@ -226,7 +232,7 @@ const translations = {
     "catalog.addTag": "Add tag",
     "catalog.jump": "Open in Data Sources",
     "users.new": "New user",
-    "users.importExcel": "Import Excel",
+    "users.importExcel": "Import user data",
     "users.organizationTree": "Organization tree",
     "users.directory": "User directory",
     "users.details": "User details",
@@ -237,7 +243,7 @@ const translations = {
     "users.generateKey": "Generated from user operations",
     "users.resetKey": "Reset runtime key",
     "users.latestKey": "Latest plaintext key",
-    "users.importTitle": "Excel import",
+    "users.importTitle": "User data import",
     "users.uploadFile": "Upload file",
     "users.dragFileHere": "Drag file here",
     "users.importHint": "Use the approved template columns: user_name, org_path, external_ref, roles.",
@@ -258,10 +264,41 @@ const translations = {
     "users.required": "Required",
     "users.format": "Format",
     "users.requirement": "Requirement",
+    "users.templateField.user_name.format": "Plain text, one user name per row",
+    "users.templateField.user_name.notes": "Required. Use the display name that admins should see in the console.",
+    "users.templateField.org_path.format": "Delimited path, for example Company/Finance/BI",
+    "users.templateField.org_path.notes": "Optional. Empty values place the user under the root organization node. Missing nodes are created automatically.",
+    "users.templateField.external_ref.format": "Stable unique identifier, for example EMP001 or ext_user_123",
+    "users.templateField.external_ref.notes": "Required. The import pipeline uses this field to decide whether to create or update a user.",
+    "users.templateField.roles.format": "Comma-separated role names, for example Analyst,Reviewer",
+    "users.templateField.roles.notes": "Optional. Missing roles are created automatically during import.",
     "users.importPlatform": "Platform import",
-    "users.importPlatformHint": "Use a pull-only connector payload for Feishu, WeCom, or DingTalk.",
-    "users.platformPayload": "Connector payload",
-    "users.platformPayloadHint": "Paste the normalized directory payload or captured platform response JSON here.",
+    "users.importPlatformHint": "Choose one platform, fill the structured fields below, then preview before executing the import.",
+    "users.platformGuide": "Setup guide",
+    "users.platformGuideSummary": "Expand to see the app setup, required permissions, and the API responses that this importer expects.",
+    "users.platformGuidePermissions": "Required permissions",
+    "users.platformGuideManifest": "Feishu permission import example",
+    "users.platformAppId": "App ID",
+    "users.platformAppSecret": "App secret",
+    "users.platformCorpId": "Corp ID",
+    "users.platformCorpSecret": "Contact secret",
+    "users.platformAppKey": "App key",
+    "users.platformDepartmentsPayload": "Departments response",
+    "users.platformUsersPayload": "Users response",
+    "users.platformDepartmentsHint": "Paste the department list response body. The importer extracts department ids, names, and parent relationships from it.",
+    "users.platformUsersHint": "Paste the user list response body. The importer extracts user identity, organization mapping, and optional roles from it.",
+    "users.platformFeishuStep1": "Create an internal app in Feishu Open Platform and grant read-only contact permissions before collecting API responses.",
+    "users.platformFeishuStep2": "Call the department list endpoint and paste the response into Departments response. Then call the user list endpoint and paste the response into Users response.",
+    "users.platformFeishuStep3": "Preview the import first. If the department paths look correct, execute the import to create or update users.",
+    "users.platformFeishuPermissions": "Department read, user read, and tenant access token permissions for the app.",
+    "users.platformWecomStep1": "Create or reuse a Contacts Secret in Enterprise WeChat and confirm the app has read-only access to departments and members.",
+    "users.platformWecomStep2": "Paste the department list response into Departments response and the member list response into Users response.",
+    "users.platformWecomStep3": "Preview the generated organization paths before running the import. The importer resolves department ids into full paths automatically.",
+    "users.platformWecomPermissions": "Contacts read permission and a Contacts Secret that can call department and member directory APIs.",
+    "users.platformDingtalkStep1": "Configure an internal app in DingTalk, grant read-only directory permissions, and collect the department and user API responses.",
+    "users.platformDingtalkStep2": "Paste the department tree response into Departments response and the member list response into Users response.",
+    "users.platformDingtalkStep3": "Preview first. The importer builds full department paths from the department tree before creating or updating users.",
+    "users.platformDingtalkPermissions": "Department read and member read permissions for the internal app.",
     "users.orgCreateRoot": "New root node",
     "users.orgCreateChild": "Add child node",
     "users.orgEdit": "Edit node",
@@ -278,6 +315,10 @@ const translations = {
     "roles.summary": "Independent directory roles used by runtime authorization.",
     "roles.activeCount": "Active roles",
     "roles.emptyDescription": "No description provided.",
+    "roles.new": "Create",
+    "roles.userCount": "Linked users",
+    "roles.linkedUsers": "View linked users",
+    "roles.linkedUsersTitle": "{name} linked users",
     "masking.fixedHint": "Fixed masking always returns the same replacement text.",
     "masking.partialHint": "Partial masking keeps the start and end of the value visible.",
     "masking.noConfig": "This masking strategy does not require extra configuration.",
@@ -399,7 +440,8 @@ const translations = {
     "column.metadata": "Metadata",
     "column.external_ref": "External reference",
     "column.org_path": "Organization path",
-    "column.role_names": "Roles"
+    "column.role_names": "Roles",
+    "column.actions": "Actions"
   },
   "zh-CN": {
     "brand.productName": "AI 数据库连接网关",
@@ -410,6 +452,8 @@ const translations = {
     "topbar.hideApiKey": "隐藏 API 密钥",
     "topbar.language": "语言",
     "topbar.switchLanguage": "切换页面语言",
+    "topbar.openNavigation": "打开导航",
+    "topbar.navigation": "导航",
     "nav.overview": "概览",
     "nav.users": "用户",
     "nav.roles": "角色",
@@ -441,6 +485,8 @@ const translations = {
     "common.revokeConfirm": "确认撤销该密钥？",
     "common.required": "请输入{label}",
     "common.validJson": "{label}必须是有效 JSON",
+    "common.yes": "是",
+    "common.no": "否",
     "placeholder.resourceSearch": "搜索并选择资源",
     "placeholder.tagSearch": "搜索并选择标签",
     "placeholder.roleSearch": "选择一个或多个角色",
@@ -504,7 +550,7 @@ const translations = {
     "catalog.addTag": "添加标签",
     "catalog.jump": "打开数据源页",
     "users.new": "新建用户",
-    "users.importExcel": "导入 Excel",
+    "users.importExcel": "用户数据导入",
     "users.organizationTree": "组织树",
     "users.directory": "用户目录",
     "users.details": "用户详情",
@@ -515,7 +561,7 @@ const translations = {
     "users.generateKey": "仅通过用户操作生成",
     "users.resetKey": "重置运行时密钥",
     "users.latestKey": "最近一次明文密钥",
-    "users.importTitle": "Excel 导入",
+    "users.importTitle": "用户数据导入",
     "users.uploadFile": "上传文件",
     "users.dragFileHere": "拖拽文件到这里",
     "users.importHint": "使用统一模板列：user_name、org_path、external_ref、roles。",
@@ -536,10 +582,41 @@ const translations = {
     "users.required": "是否必填",
     "users.format": "格式",
     "users.requirement": "要求说明",
+    "users.templateField.user_name.format": "纯文本，每行一个用户姓名",
+    "users.templateField.user_name.notes": "必填。这里填写管理员在控制台里应当看到的姓名。",
+    "users.templateField.org_path.format": "分层路径，例如 Company/Finance/BI",
+    "users.templateField.org_path.notes": "选填。留空时会放到根组织节点；缺失的层级会自动创建。",
+    "users.templateField.external_ref.format": "稳定唯一标识，例如 EMP001 或 ext_user_123",
+    "users.templateField.external_ref.notes": "必填。导入时会用它判断是新建用户还是更新已有用户。",
+    "users.templateField.roles.format": "逗号分隔的角色名，例如 Analyst,Reviewer",
+    "users.templateField.roles.notes": "选填。不存在的角色会在导入时自动创建。",
     "users.importPlatform": "平台导入",
-    "users.importPlatformHint": "使用飞书、企业微信、钉钉的 pull-only connector 载荷执行导入。",
-    "users.platformPayload": "连接器载荷",
-    "users.platformPayloadHint": "在这里粘贴标准化后的目录载荷，或平台接口返回的 JSON 响应。",
+    "users.importPlatformHint": "按平台填写结构化输入项，先预览，再执行导入。",
+    "users.platformGuide": "配置说明",
+    "users.platformGuideSummary": "展开后可查看应用配置步骤、所需权限，以及每个平台需要粘贴的接口返回内容。",
+    "users.platformGuidePermissions": "所需权限",
+    "users.platformGuideManifest": "飞书权限导入示例",
+    "users.platformAppId": "App ID",
+    "users.platformAppSecret": "App Secret",
+    "users.platformCorpId": "Corp ID",
+    "users.platformCorpSecret": "通讯录 Secret",
+    "users.platformAppKey": "App Key",
+    "users.platformDepartmentsPayload": "部门接口返回体",
+    "users.platformUsersPayload": "用户接口返回体",
+    "users.platformDepartmentsHint": "粘贴部门列表接口返回体。导入器会从中提取部门 ID、名称和父子关系。",
+    "users.platformUsersHint": "粘贴用户列表接口返回体。导入器会从中提取用户标识、组织归属以及可选角色。",
+    "users.platformFeishuStep1": "在飞书开放平台创建企业自建应用，并先开通通讯录只读相关权限，再获取接口返回体。",
+    "users.platformFeishuStep2": "先调用部门列表接口，把结果粘贴到部门接口返回体；再调用用户列表接口，把结果粘贴到用户接口返回体。",
+    "users.platformFeishuStep3": "先做预览，确认组织路径正确，再执行导入创建或更新用户。",
+    "users.platformFeishuPermissions": "应用需要具备部门只读、用户只读，以及获取 tenant_access_token 的相关权限。",
+    "users.platformWecomStep1": "在企业微信里准备可读通讯录的应用 Secret，并确认该应用具备读取部门和成员的只读权限。",
+    "users.platformWecomStep2": "把部门列表接口返回体粘贴到部门接口返回体，再把成员列表接口返回体粘贴到用户接口返回体。",
+    "users.platformWecomStep3": "先预览导入结果。导入器会自动把部门 ID 解析成完整组织路径。",
+    "users.platformWecomPermissions": "需要通讯录只读权限，以及可调用部门和成员接口的通讯录 Secret。",
+    "users.platformDingtalkStep1": "在钉钉创建企业内部应用，授予组织通讯录只读权限，并准备部门与成员接口返回体。",
+    "users.platformDingtalkStep2": "把部门树接口返回体粘贴到部门接口返回体，再把成员列表接口返回体粘贴到用户接口返回体。",
+    "users.platformDingtalkStep3": "先预览，导入器会根据部门树自动生成完整组织路径，然后再执行导入。",
+    "users.platformDingtalkPermissions": "应用需要具备部门只读和成员只读权限。",
     "users.orgCreateRoot": "新建根节点",
     "users.orgCreateChild": "新增子节点",
     "users.orgEdit": "编辑节点",
@@ -556,6 +633,10 @@ const translations = {
     "roles.summary": "运行时授权使用的独立目录角色。",
     "roles.activeCount": "启用角色数",
     "roles.emptyDescription": "暂无描述。",
+    "roles.new": "新建",
+    "roles.userCount": "关联用户数",
+    "roles.linkedUsers": "查看关联用户",
+    "roles.linkedUsersTitle": "{name} 的关联用户",
     "masking.fixedHint": "固定脱敏会始终返回同一段替换文本。",
     "masking.partialHint": "局部脱敏会保留值的开头和结尾可见部分。",
     "masking.noConfig": "当前脱敏策略不需要额外配置。",
@@ -676,7 +757,8 @@ const translations = {
     "column.metadata": "元数据",
     "column.external_ref": "外部标识",
     "column.org_path": "组织路径",
-    "column.role_names": "角色"
+    "column.role_names": "角色",
+    "column.actions": "操作"
   },
   "zh-TW": {
     "brand.productName": "AI 資料庫連接閘道",
@@ -687,6 +769,8 @@ const translations = {
     "topbar.hideApiKey": "隱藏 API 金鑰",
     "topbar.language": "語言",
     "topbar.switchLanguage": "切換頁面語言",
+    "topbar.openNavigation": "打開導覽",
+    "topbar.navigation": "導覽",
     "nav.overview": "總覽",
     "nav.users": "使用者",
     "nav.roles": "角色",
@@ -718,6 +802,8 @@ const translations = {
     "common.revokeConfirm": "確認撤銷此金鑰？",
     "common.required": "請輸入{label}",
     "common.validJson": "{label}必須是有效 JSON",
+    "common.yes": "是",
+    "common.no": "否",
     "placeholder.resourceSearch": "搜尋並選擇資源",
     "placeholder.tagSearch": "搜尋並選擇標籤",
     "placeholder.roleSearch": "選擇一個或多個角色",
@@ -781,7 +867,7 @@ const translations = {
     "catalog.addTag": "新增標籤",
     "catalog.jump": "打開資料源頁",
     "users.new": "新增使用者",
-    "users.importExcel": "匯入 Excel",
+    "users.importExcel": "使用者資料匯入",
     "users.organizationTree": "組織樹",
     "users.directory": "使用者目錄",
     "users.details": "使用者詳情",
@@ -792,7 +878,7 @@ const translations = {
     "users.generateKey": "僅透過使用者操作產生",
     "users.resetKey": "重置執行時金鑰",
     "users.latestKey": "最近一次明文金鑰",
-    "users.importTitle": "Excel 匯入",
+    "users.importTitle": "使用者資料匯入",
     "users.uploadFile": "上傳檔案",
     "users.dragFileHere": "將檔案拖曳到這裡",
     "users.importHint": "使用統一模板欄位：user_name、org_path、external_ref、roles。",
@@ -813,10 +899,41 @@ const translations = {
     "users.required": "是否必填",
     "users.format": "格式",
     "users.requirement": "要求說明",
+    "users.templateField.user_name.format": "純文字，每列一個使用者姓名",
+    "users.templateField.user_name.notes": "必填。這裡填寫管理員在控制台中應看到的姓名。",
+    "users.templateField.org_path.format": "分層路徑，例如 Company/Finance/BI",
+    "users.templateField.org_path.notes": "選填。留空時會放到根組織節點；缺少的層級會自動建立。",
+    "users.templateField.external_ref.format": "穩定唯一識別，例如 EMP001 或 ext_user_123",
+    "users.templateField.external_ref.notes": "必填。匯入流程會用它判斷是建立新使用者還是更新既有使用者。",
+    "users.templateField.roles.format": "逗號分隔的角色名稱，例如 Analyst,Reviewer",
+    "users.templateField.roles.notes": "選填。不存在的角色會在匯入時自動建立。",
     "users.importPlatform": "平台匯入",
-    "users.importPlatformHint": "使用飛書、企業微信、釘釘的 pull-only connector 載荷執行匯入。",
-    "users.platformPayload": "連接器載荷",
-    "users.platformPayloadHint": "在這裡貼上標準化後的目錄載荷，或平台介面回傳的 JSON 回應。",
+    "users.importPlatformHint": "依平台填寫結構化輸入欄位，先預覽，再執行匯入。",
+    "users.platformGuide": "設定說明",
+    "users.platformGuideSummary": "展開後可查看應用設定步驟、所需權限，以及每個平台需要貼上的 API 回傳內容。",
+    "users.platformGuidePermissions": "所需權限",
+    "users.platformGuideManifest": "飛書權限匯入範例",
+    "users.platformAppId": "App ID",
+    "users.platformAppSecret": "App Secret",
+    "users.platformCorpId": "Corp ID",
+    "users.platformCorpSecret": "通訊錄 Secret",
+    "users.platformAppKey": "App Key",
+    "users.platformDepartmentsPayload": "部門介面回傳內容",
+    "users.platformUsersPayload": "使用者介面回傳內容",
+    "users.platformDepartmentsHint": "貼上部門清單介面回傳內容。匯入器會從中擷取部門 ID、名稱與父子關係。",
+    "users.platformUsersHint": "貼上使用者清單介面回傳內容。匯入器會從中擷取使用者識別、組織歸屬與可選角色。",
+    "users.platformFeishuStep1": "在飛書開放平台建立企業自建應用，並先開通通訊錄唯讀相關權限，再取得 API 回傳內容。",
+    "users.platformFeishuStep2": "先呼叫部門清單介面，把結果貼到部門介面回傳內容；再呼叫使用者清單介面，把結果貼到使用者介面回傳內容。",
+    "users.platformFeishuStep3": "先做預覽，確認組織路徑正確，再執行匯入建立或更新使用者。",
+    "users.platformFeishuPermissions": "應用需要具備部門唯讀、使用者唯讀，以及取得 tenant_access_token 的相關權限。",
+    "users.platformWecomStep1": "在企業微信準備可讀通訊錄的應用 Secret，並確認該應用具備讀取部門與成員的唯讀權限。",
+    "users.platformWecomStep2": "把部門清單介面回傳內容貼到部門介面回傳內容，再把成員清單介面回傳內容貼到使用者介面回傳內容。",
+    "users.platformWecomStep3": "先預覽匯入結果。匯入器會自動把部門 ID 解析成完整組織路徑。",
+    "users.platformWecomPermissions": "需要通訊錄唯讀權限，以及可呼叫部門與成員介面的通訊錄 Secret。",
+    "users.platformDingtalkStep1": "在釘釘建立企業內部應用，授予組織通訊錄唯讀權限，並準備部門與成員介面回傳內容。",
+    "users.platformDingtalkStep2": "把部門樹介面回傳內容貼到部門介面回傳內容，再把成員清單介面回傳內容貼到使用者介面回傳內容。",
+    "users.platformDingtalkStep3": "先預覽，匯入器會依據部門樹自動生成完整組織路徑，之後再執行匯入。",
+    "users.platformDingtalkPermissions": "應用需要具備部門唯讀與成員唯讀權限。",
     "users.orgCreateRoot": "新增根節點",
     "users.orgCreateChild": "新增子節點",
     "users.orgEdit": "編輯節點",
@@ -833,6 +950,10 @@ const translations = {
     "roles.summary": "供執行時授權使用的獨立目錄角色。",
     "roles.activeCount": "啟用角色數",
     "roles.emptyDescription": "尚未提供描述。",
+    "roles.new": "新增",
+    "roles.userCount": "關聯使用者數",
+    "roles.linkedUsers": "查看關聯使用者",
+    "roles.linkedUsersTitle": "{name} 的關聯使用者",
     "masking.fixedHint": "固定脫敏會固定回傳同一段替換文字。",
     "masking.partialHint": "局部脫敏會保留值的開頭和結尾可見部分。",
     "masking.noConfig": "目前的脫敏策略不需要額外設定。",
@@ -953,7 +1074,8 @@ const translations = {
     "column.metadata": "中繼資料",
     "column.external_ref": "外部識別",
     "column.org_path": "組織路徑",
-    "column.role_names": "角色"
+    "column.role_names": "角色",
+    "column.actions": "操作"
   }
 } as const;
 
@@ -1191,7 +1313,8 @@ function ConsoleApp() {
   const [page, setPage] = useState<PageKey>(getStoredPage);
   const [catalogJumpTarget, setCatalogJumpTarget] = useState<CatalogJumpTarget | null>(null);
   const [draftApiKey, setDraftApiKey] = useState("");
-  const showCompactPageSelect = useViewportBreakpoint(1280);
+  const [compactNavOpen, setCompactNavOpen] = useState(false);
+  const showCompactNav = useViewportBreakpoint(920);
   const api = useApi();
   const showOnboarding = !api.apiKey || Boolean(api.authError);
   const navigationItems = pages.map((item) => ({
@@ -1290,16 +1413,15 @@ function ConsoleApp() {
               {currentPageTitle}
             </Typography.Title>
           </div>
-          {showCompactPageSelect ? (
-            <Select
-              className="mobile-page-select"
-              aria-label={currentPageTitle}
-              value={page}
-              options={navigationItems.map((item) => ({ key: item.key, value: item.key, label: item.label }))}
-              onChange={(key) => setPage(key as PageKey)}
-            />
-          ) : null}
           <div className="topbar-actions">
+            {showCompactNav ? (
+              <Button
+                className="compact-nav-trigger"
+                aria-label={t("topbar.openNavigation")}
+                icon={<MenuOutlined />}
+                onClick={() => setCompactNavOpen(true)}
+              />
+            ) : null}
             <LanguageSwitcher
               className="language-select language-select-header"
               label={t("topbar.switchLanguage")}
@@ -1332,6 +1454,24 @@ function ConsoleApp() {
           />
         </Layout.Content>
       </Layout>
+      <Drawer
+        title={t("topbar.navigation")}
+        placement="right"
+        width={280}
+        className="compact-nav-drawer"
+        open={showCompactNav && compactNavOpen}
+        onClose={() => setCompactNavOpen(false)}
+      >
+        <Menu
+          mode="inline"
+          selectedKeys={[page]}
+          items={navigationItems}
+          onClick={({ key }) => {
+            setPage(key as PageKey);
+            setCompactNavOpen(false);
+          }}
+        />
+      </Drawer>
     </Layout>
   );
 }
@@ -1426,6 +1566,12 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
   const orgNodes = orgNodesState.data || [];
   const roles = rolesState.data || [];
   const users = mergeDirectoryUsers(usersState.data || [], sessionUsers, orgNodes, roles);
+  const importTemplateRows = directoryImportTemplateFields.map((field) => ({
+    field: field.field,
+    required: field.required,
+    format: t(`users.templateField.${field.field}.format` as TranslationKey),
+    notes: t(`users.templateField.${field.field}.notes` as TranslationKey),
+  }));
   const orgTree = buildOrgTree(orgNodes);
   const selectedOrgNode = selectedOrgId
     ? orgNodes.find((node) => String(node.id) === selectedOrgId) || null
@@ -1571,12 +1717,11 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
           body: JSON.stringify(payload),
         });
       } else {
-        const resultPayload = parseJsonPayloadText(String(values[`${importSource}Payload`] || ""));
         result = await api.request<AnyRecord>(`/admin/users/importers/${importSource}/pull`, {
           method: "POST",
           body: JSON.stringify({
             mode,
-            config: { payload: resultPayload },
+            config: buildDirectoryImporterConfig(importSource, values),
           }),
         });
       }
@@ -1783,6 +1928,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
         width={880}
       >
         <Tabs
+          destroyOnHidden
           activeKey={importSource}
           onChange={(value) => {
             setImportSource(value as "excel" | ImportPlatformKey);
@@ -1811,10 +1957,10 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                       size="small"
                       pagination={false}
                       rowKey="field"
-                      dataSource={directoryImportTemplateFields}
+                      dataSource={importTemplateRows}
                       columns={[
                         { title: t("users.field"), dataIndex: "field", key: "field", width: 120 },
-                        { title: t("users.required"), dataIndex: "required", key: "required", width: 96, render: (value: boolean) => (value ? "Yes" : "No") },
+                        { title: t("users.required"), dataIndex: "required", key: "required", width: 96, render: (value: boolean) => (value ? t("common.yes") : t("common.no")) },
                         { title: t("users.format"), dataIndex: "format", key: "format", width: 200 },
                         { title: t("users.requirement"), dataIndex: "notes", key: "notes" },
                       ]}
@@ -1852,19 +1998,11 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
               label: t(`users.importTab${platform.charAt(0).toUpperCase()}${platform.slice(1)}` as TranslationKey),
               children: (
                 <div className={`directory-import-layout${compactDirectoryLayout ? " directory-import-layout-compact" : ""}`}>
-                  <div className="directory-import-uploader">
-                    <Typography.Text strong>{t("users.importPlatform")}</Typography.Text>
-                    <Typography.Paragraph>{t("users.importPlatformHint")}</Typography.Paragraph>
-                    <Form form={importForm} layout="vertical">
-                      <Form.Item
-                        name={`${platform}Payload`}
-                        label={t("users.platformPayload")}
-                        rules={[{ required: true, message: t("common.required", { label: t("users.platformPayload") }) }]}
-                      >
-                        <Input.TextArea aria-label={t("users.platformPayload")} autoSize={{ minRows: 14, maxRows: 22 }} placeholder={t("users.platformPayloadHint")} />
-                      </Form.Item>
-                    </Form>
-                  </div>
+                  <ImportPlatformPanel
+                    platform={platform}
+                    form={importForm}
+                    t={t}
+                  />
                   <ImportPreviewPanel importPreview={importPreview} importFileName={t(`users.importTab${platform.charAt(0).toUpperCase()}${platform.slice(1)}` as TranslationKey)} t={t} />
                 </div>
               ),
@@ -1900,11 +2038,83 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
-  /** Dedicated role workspace separate from user and org browsing concerns. */
+  /** Editable role workspace with CRUD and linked-user inspection. */
 
+  const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
   const state = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<AnyRecord | null>(null);
+  const [linkedUsersRole, setLinkedUsersRole] = useState<AnyRecord | null>(null);
+  const [linkedUsers, setLinkedUsers] = useState<DirectoryUserRecord[]>([]);
+  const [linkedUsersLoading, setLinkedUsersLoading] = useState(false);
+  const [form] = Form.useForm();
   const activeRoles = (state.data || []).filter((role) => role.status === "active").length;
+
+  const openCreate = () => {
+    setEditingRole(null);
+    form.setFieldsValue({ name: "", description: "", status: "active" });
+    setEditorOpen(true);
+  };
+
+  const openEdit = (role: AnyRecord) => {
+    setEditingRole(role);
+    form.setFieldsValue({
+      name: role.name,
+      description: role.description || "",
+      status: role.status || "active",
+    });
+    setEditorOpen(true);
+  };
+
+  const saveRole = async () => {
+    const values = await form.validateFields();
+    const payload = {
+      name: String(values.name || "").trim(),
+      description: String(values.description || "").trim() || null,
+      status: String(values.status || "active"),
+    };
+    if (editingRole?.id) {
+      await api.request(`/admin/roles/${editingRole.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await api.request("/admin/roles", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    }
+    setEditorOpen(false);
+    setEditingRole(null);
+    form.resetFields();
+    state.reload();
+    messageApi.success(t("common.saved"));
+  };
+
+  const deleteRole = async (roleId: string) => {
+    try {
+      await api.request(`/admin/roles/${roleId}`, { method: "DELETE" });
+      state.reload();
+      messageApi.success(t("common.deleted"));
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const openLinkedUsers = async (role: AnyRecord) => {
+    setLinkedUsersRole(role);
+    setLinkedUsersLoading(true);
+    try {
+      const users = await api.request<DirectoryUserRecord[]>(`/admin/roles/${role.id}/users`);
+      setLinkedUsers(users);
+    } catch (error) {
+      messageApi.error(error instanceof Error ? error.message : String(error));
+      setLinkedUsers([]);
+    } finally {
+      setLinkedUsersLoading(false);
+    }
+  };
 
   return (
     <section className="roles-workspace">
@@ -1914,8 +2124,13 @@ function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
       </div>
       <section className="panel">
         <div className="panel-head">
-          <Typography.Title level={4}>{t("roles.directory")}</Typography.Title>
-          <Typography.Text type="secondary">{t("roles.summary")}</Typography.Text>
+          <div>
+            <Typography.Title level={4}>{t("roles.directory")}</Typography.Title>
+            <Typography.Text type="secondary">{t("roles.summary")}</Typography.Text>
+          </div>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+            {t("roles.new")}
+          </Button>
         </div>
         {state.error ? <Alert type="error" message={state.error} /> : (
           <Table
@@ -1924,26 +2139,276 @@ function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
             loading={state.loading}
             dataSource={state.data || []}
             pagination={false}
+            scroll={{ x: 860 }}
             columns={[
-              { title: columnLabel("name", t), dataIndex: "name", key: "name" },
+              { title: columnLabel("name", t), dataIndex: "name", key: "name", width: 180 },
               {
                 title: columnLabel("description", t),
                 dataIndex: "description",
                 key: "description",
+                width: 260,
                 render: (value: string | null) => value || t("roles.emptyDescription"),
+              },
+              {
+                title: t("roles.userCount"),
+                dataIndex: "user_count",
+                key: "user_count",
+                width: 132,
+                render: (value: number) => <Tag>{value || 0}</Tag>,
               },
               {
                 title: columnLabel("status", t),
                 dataIndex: "status",
                 key: "status",
+                width: 120,
                 render: (value: string) => <Tag>{optionLabel(value, t)}</Tag>,
+              },
+              {
+                title: columnLabel("actions", t),
+                key: "actions",
+                width: 180,
+                render: (_, row) => (
+                  <Space size={6} wrap>
+                    <Button size="small" onClick={() => void openLinkedUsers(row)}>
+                      {t("roles.linkedUsers")}
+                    </Button>
+                    <IconAction title={t("common.edit")} icon={<EditOutlined />} onClick={() => openEdit(row)} />
+                    <Popconfirm title={t("common.deleteConfirm", { title: row.name || t("roles.directory") })} onConfirm={() => void deleteRole(String(row.id))}>
+                      <Button size="small" icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </Space>
+                ),
               },
             ]}
           />
         )}
       </section>
+
+      <Drawer
+        title={editingRole ? t("common.editTitle", { title: t("nav.roles") }) : t("common.createTitle", { title: t("nav.roles") })}
+        open={editorOpen}
+        width={420}
+        onClose={() => {
+          setEditorOpen(false);
+          setEditingRole(null);
+        }}
+        extra={<Button type="primary" onClick={() => void saveRole()}>{t("common.save")}</Button>}
+      >
+        <Form form={form} layout="vertical" initialValues={{ status: "active" }}>
+          <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="description" label={t("field.description")}>
+            <Input.TextArea autoSize={{ minRows: 4, maxRows: 8 }} />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+        </Form>
+      </Drawer>
+
+      <Modal
+        title={t("roles.linkedUsersTitle", { name: String(linkedUsersRole?.name || "") })}
+        open={Boolean(linkedUsersRole)}
+        footer={null}
+        onCancel={() => {
+          setLinkedUsersRole(null);
+          setLinkedUsers([]);
+        }}
+        width={760}
+      >
+        <Table
+          size="small"
+          rowKey={(row) => row.id || row.user_id || row.external_ref}
+          loading={linkedUsersLoading}
+          dataSource={linkedUsers}
+          pagination={false}
+          columns={[
+            { title: columnLabel("name", t), dataIndex: "name", key: "name" },
+            { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
+            { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+            {
+              title: columnLabel("role_names", t),
+              dataIndex: "role_names",
+              key: "role_names",
+              render: (value: string[]) => (
+                <Space size={[6, 6]} wrap>
+                  {(value || []).map((role) => <Tag key={role}>{role}</Tag>)}
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </Modal>
     </section>
   );
+}
+
+function ImportPlatformPanel({
+  platform,
+  form,
+  t,
+}: {
+  platform: ImportPlatformKey;
+  form: FormInstance<AnyRecord>;
+  t: (key: TranslationKey, params?: TranslationParams) => string;
+}) {
+  const config = buildImportPlatformUiConfig(platform, t);
+
+  return (
+    <div className="directory-import-uploader">
+      <Typography.Text strong>{t("users.importPlatform")}</Typography.Text>
+      <Typography.Paragraph>{t("users.importPlatformHint")}</Typography.Paragraph>
+      <Form form={form} layout="vertical" initialValues={{ delimiter: "/" }}>
+        <div className="platform-form-grid">
+          {config.credentialFields.map((field) => (
+            <Form.Item
+              key={field.name}
+              name={field.name}
+              label={field.label}
+            >
+              {field.secret ? <Input.Password autoComplete="new-password" /> : <Input autoComplete="off" />}
+            </Form.Item>
+          ))}
+          {config.payloadFields.map((field) => (
+            <Form.Item
+              key={field.name}
+              name={field.name}
+              label={field.label}
+              rules={[{ required: true, message: t("common.required", { label: field.label }) }]}
+              className="span-2"
+            >
+              <Input.TextArea
+                aria-label={field.label}
+                autoSize={{ minRows: 8, maxRows: 14 }}
+                placeholder={field.hint}
+              />
+            </Form.Item>
+          ))}
+        </div>
+      </Form>
+      <Collapse
+        ghost
+        className="directory-import-guide"
+        items={[
+          {
+            key: `${platform}-guide`,
+            label: t("users.platformGuide"),
+            children: (
+              <div className="directory-guide-copy">
+                <Typography.Paragraph>{t("users.platformGuideSummary")}</Typography.Paragraph>
+                <ol>
+                  {config.stepKeys.map((key) => (
+                    <li key={key}>{t(key)}</li>
+                  ))}
+                </ol>
+                <Typography.Text strong>{t("users.platformGuidePermissions")}</Typography.Text>
+                <Typography.Paragraph>{t(config.permissionsKey)}</Typography.Paragraph>
+                {platform === "feishu" ? (
+                  <>
+                    <Typography.Text strong>{t("users.platformGuideManifest")}</Typography.Text>
+                    <pre className="directory-guide-snippet">
+{`{
+  "scopes": [
+    "contact:department.base:readonly",
+    "contact:user.base:readonly",
+    "contact:user.department:readonly"
+  ]
+}`}
+                    </pre>
+                  </>
+                ) : null}
+              </div>
+            ),
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+function buildImportPlatformUiConfig(
+  platform: ImportPlatformKey,
+  t: (key: TranslationKey, params?: TranslationParams) => string,
+) {
+  if (platform === "feishu") {
+    return {
+      credentialFields: [
+        { name: "feishuAppId", label: t("users.platformAppId") },
+        { name: "feishuAppSecret", label: t("users.platformAppSecret"), secret: true },
+      ],
+      payloadFields: [
+        {
+          name: "feishuDepartmentsPayload",
+          label: t("users.platformDepartmentsPayload"),
+          hint: t("users.platformDepartmentsHint"),
+        },
+        {
+          name: "feishuUsersPayload",
+          label: t("users.platformUsersPayload"),
+          hint: t("users.platformUsersHint"),
+        },
+      ],
+      stepKeys: [
+        "users.platformFeishuStep1",
+        "users.platformFeishuStep2",
+        "users.platformFeishuStep3",
+      ] as TranslationKey[],
+      permissionsKey: "users.platformFeishuPermissions" as TranslationKey,
+    };
+  }
+
+  if (platform === "wecom") {
+    return {
+      credentialFields: [
+        { name: "wecomCorpId", label: t("users.platformCorpId") },
+        { name: "wecomCorpSecret", label: t("users.platformCorpSecret"), secret: true },
+      ],
+      payloadFields: [
+        {
+          name: "wecomDepartmentsPayload",
+          label: t("users.platformDepartmentsPayload"),
+          hint: t("users.platformDepartmentsHint"),
+        },
+        {
+          name: "wecomUsersPayload",
+          label: t("users.platformUsersPayload"),
+          hint: t("users.platformUsersHint"),
+        },
+      ],
+      stepKeys: [
+        "users.platformWecomStep1",
+        "users.platformWecomStep2",
+        "users.platformWecomStep3",
+      ] as TranslationKey[],
+      permissionsKey: "users.platformWecomPermissions" as TranslationKey,
+    };
+  }
+
+  return {
+    credentialFields: [
+      { name: "dingtalkAppKey", label: t("users.platformAppKey") },
+      { name: "dingtalkAppSecret", label: t("users.platformAppSecret"), secret: true },
+    ],
+    payloadFields: [
+      {
+        name: "dingtalkDepartmentsPayload",
+        label: t("users.platformDepartmentsPayload"),
+        hint: t("users.platformDepartmentsHint"),
+      },
+      {
+        name: "dingtalkUsersPayload",
+        label: t("users.platformUsersPayload"),
+        hint: t("users.platformUsersHint"),
+      },
+    ],
+    stepKeys: [
+      "users.platformDingtalkStep1",
+      "users.platformDingtalkStep2",
+      "users.platformDingtalkStep3",
+    ] as TranslationKey[],
+    permissionsKey: "users.platformDingtalkPermissions" as TranslationKey,
+  };
 }
 
 function EndpointTable({ api, title, path }: { api: ReturnType<typeof useApi>; title: TranslationKey; path: string }) {

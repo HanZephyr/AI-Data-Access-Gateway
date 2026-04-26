@@ -167,6 +167,30 @@ class DirectoryService:
             for user in users
         ]
 
+    def list_role_users(self, role_id: str) -> list[DirectoryUserSummary]:
+        """Return hydrated users currently assigned to one directory role."""
+
+        user_ids = self._session.execute(
+            select(UserRole.user_id).where(UserRole.role_id == role_id)
+        ).scalars().all()
+        if not user_ids:
+            return []
+        summaries = self.list_users()
+        summary_by_id = {summary.id: summary for summary in summaries}
+        return [summary_by_id[user_id] for user_id in user_ids if user_id in summary_by_id]
+
+    def delete_role(self, role_id: str) -> None:
+        """Delete one role only after all user assignments are removed."""
+
+        role = self._session.execute(select(Role).where(Role.id == role_id)).scalar_one()
+        linked_user_id = self._session.execute(
+            select(UserRole.user_id).where(UserRole.role_id == role_id)
+        ).scalar_one_or_none()
+        if linked_user_id is not None:
+            raise ValueError("Remove users from this role before deleting it")
+        self._session.delete(role)
+        self._session.flush()
+
     def create_org_node(
         self,
         *,

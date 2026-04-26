@@ -938,7 +938,7 @@ def list_roles(
     """List directory roles for admin assignment UIs."""
 
     roles = session.execute(select(Role).order_by(Role.name)).scalars()
-    return [_serialize_role(role) for role in roles]
+    return [_serialize_role(role, session=session) for role in roles]
 
 
 @router.post("/roles", status_code=status.HTTP_201_CREATED)
@@ -953,7 +953,7 @@ def create_role(
     session.add(role)
     session.commit()
     session.refresh(role)
-    return _serialize_role(role)
+    return _serialize_role(role, session=session)
 
 
 @router.patch("/roles/{role_id}")
@@ -969,7 +969,37 @@ def update_role(
     _apply_updates(role, payload.model_dump(exclude_unset=True))
     session.commit()
     session.refresh(role)
-    return _serialize_role(role)
+    return _serialize_role(role, session=session)
+
+
+@router.get("/roles/{role_id}/users")
+def list_role_users(
+    role_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, Any]]:
+    """List all users currently assigned to one directory role."""
+
+    _get_by_id(session, Role, role_id, "Role not found")
+    return [summary.to_dict() for summary in DirectoryService(session).list_role_users(role_id)]
+
+
+@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_role(
+    role_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Delete a role only after all linked users have been reassigned."""
+
+    try:
+        DirectoryService(session).delete_role(role_id)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/org-nodes")
@@ -1198,14 +1228,18 @@ def _serialize_resource_field(field: ResourceField) -> dict[str, Any]:
     }
 
 
-def _serialize_role(role: Role) -> dict[str, Any]:
+def _serialize_role(role: Role, *, session: Session | None = None) -> dict[str, Any]:
     """Convert a directory role into a JSON-ready admin payload."""
 
+    user_count = 0
+    if session is not None:
+        user_count = len(DirectoryService(session).list_role_users(role.id))
     return {
         "id": role.id,
         "name": role.name,
         "description": role.description,
         "status": role.status,
+        "user_count": user_count,
     }
 
 

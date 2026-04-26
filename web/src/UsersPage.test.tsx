@@ -154,16 +154,16 @@ describe("Users console page", () => {
 
   it("opens the excel import modal with click and drag upload affordances", async () => {
     await mountConsoleApp("users");
-    fireEvent.click(await screen.findByText("Import Excel"));
+    fireEvent.click(await screen.findByText("Import user data"));
 
     expect((await screen.findAllByText("Upload file")).length).toBeGreaterThan(0);
     expect(screen.getByText("Drag file here")).toBeInTheDocument();
     expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
   });
 
-  it("shows template download, field guidance, and third-party import tabs in the import modal", async () => {
+  it("shows localized field guidance and structured third-party import tabs in the import modal", async () => {
     await mountConsoleApp("users");
-    fireEvent.click(await screen.findByText("Import Excel"));
+    fireEvent.click(await screen.findByText("Import user data"));
 
     expect(await screen.findByText("Download template")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Download template/i })).toHaveAttribute(
@@ -175,6 +175,11 @@ describe("Users console page", () => {
     expect(screen.getByText("Feishu")).toBeInTheDocument();
     expect(screen.getByText("WeCom")).toBeInTheDocument();
     expect(screen.getByText("DingTalk")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Feishu"));
+    expect((await screen.findAllByText("App ID")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("App secret").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Departments response").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Users response").length).toBeGreaterThan(0);
   });
 
   it("renders the org tree and user detail workspace on the users page", async () => {
@@ -188,10 +193,15 @@ describe("Users console page", () => {
     });
   });
 
-  it("shows a compact page switcher before the narrowest layout so navigation remains reachable", async () => {
+  it("opens a right-side navigation drawer on small screens", async () => {
     await mountConsoleApp("overview");
-    await resizeWindow(1180);
+    await resizeWindow(860);
 
-    expect(await screen.findByRole("combobox", { name: "Overview" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Open navigation" }));
+    expect((await screen.findAllByText("Policies")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByText("Users")[0]);
+    await waitFor(() => {
+      expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
+    });
   });
 });

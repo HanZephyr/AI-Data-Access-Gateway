@@ -29,6 +29,40 @@ def sample_feishu_response() -> dict[str, object]:
     }
 
 
+def sample_feishu_departments_response() -> dict[str, object]:
+    return {
+        "data": {
+            "items": [
+                {
+                    "open_department_id": "od_company",
+                    "name": "Company",
+                    "parent_department_id": "0",
+                },
+                {
+                    "open_department_id": "od_finance",
+                    "name": "Finance",
+                    "parent_department_id": "od_company",
+                },
+            ]
+        }
+    }
+
+
+def sample_feishu_users_response() -> dict[str, object]:
+    return {
+        "data": {
+            "items": [
+                {
+                    "user_id": "ou_123",
+                    "name": "Alice",
+                    "department_ids": ["od_finance"],
+                    "roles": ["Analyst"],
+                }
+            ]
+        }
+    }
+
+
 def sample_wecom_response() -> dict[str, object]:
     return {
         "department_names": {"1": "Company", "2": "Finance"},
@@ -43,6 +77,28 @@ def sample_wecom_response() -> dict[str, object]:
     }
 
 
+def sample_wecom_departments_response() -> dict[str, object]:
+    return {
+        "department": [
+            {"id": 1, "name": "Company", "parentid": 0},
+            {"id": 2, "name": "Finance", "parentid": 1},
+        ]
+    }
+
+
+def sample_wecom_users_response() -> dict[str, object]:
+    return {
+        "userlist": [
+            {
+                "userid": "wx_123",
+                "name": "Bob",
+                "department": [1, 2],
+                "extattr": {"roles": ["Reviewer", "Reviewer"]},
+            }
+        ]
+    }
+
+
 def sample_dingtalk_response() -> dict[str, object]:
     return {
         "result": {
@@ -51,6 +107,30 @@ def sample_dingtalk_response() -> dict[str, object]:
                     "userid": "dt_123",
                     "name": "Carol",
                     "dept_path": "Company/People Ops",
+                    "role_list": [{"name": "HRBP"}],
+                }
+            ]
+        }
+    }
+
+
+def sample_dingtalk_departments_response() -> dict[str, object]:
+    return {
+        "result": [
+            {"dept_id": 1, "name": "Company", "parent_id": 0},
+            {"dept_id": 2, "name": "People Ops", "parent_id": 1},
+        ]
+    }
+
+
+def sample_dingtalk_users_response() -> dict[str, object]:
+    return {
+        "result": {
+            "list": [
+                {
+                    "userid": "dt_123",
+                    "name": "Carol",
+                    "dept_id_list": [2],
                     "role_list": [{"name": "HRBP"}],
                 }
             ]
@@ -106,6 +186,29 @@ def test_feishu_connector_normalizes_users_and_org_paths() -> None:
     )
 
 
+def test_feishu_connector_fetch_accepts_structured_platform_config() -> None:
+    connector = FeishuImporter()
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "departments_payload": sample_feishu_departments_response(),
+            "users_payload": sample_feishu_users_response(),
+        }
+    )
+
+    assert batch == DirectoryImportBatch(
+        users=[
+            ImportedUserRow(
+                user_name="Alice",
+                org_path="Company/Finance",
+                external_ref="ou_123",
+                roles=["Analyst"],
+            )
+        ]
+    )
+
+
 def test_wecom_connector_fetch_returns_unified_batch() -> None:
     connector = WeComImporter()
 
@@ -123,10 +226,56 @@ def test_wecom_connector_fetch_returns_unified_batch() -> None:
     )
 
 
+def test_wecom_connector_fetch_accepts_structured_platform_config() -> None:
+    connector = WeComImporter()
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "departments_payload": sample_wecom_departments_response(),
+            "users_payload": sample_wecom_users_response(),
+        }
+    )
+
+    assert batch == DirectoryImportBatch(
+        users=[
+            ImportedUserRow(
+                user_name="Bob",
+                org_path="Company/Finance",
+                external_ref="wx_123",
+                roles=["Reviewer"],
+            )
+        ]
+    )
+
+
 def test_dingtalk_connector_fetch_returns_unified_batch() -> None:
     connector = DingTalkImporter()
 
     batch = connector.fetch({"payload": sample_dingtalk_response()})
+
+    assert batch == DirectoryImportBatch(
+        users=[
+            ImportedUserRow(
+                user_name="Carol",
+                org_path="Company/People Ops",
+                external_ref="dt_123",
+                roles=["HRBP"],
+            )
+        ]
+    )
+
+
+def test_dingtalk_connector_fetch_accepts_structured_platform_config() -> None:
+    connector = DingTalkImporter()
+
+    batch = connector.fetch(
+        {
+            "delimiter": "/",
+            "departments_payload": sample_dingtalk_departments_response(),
+            "users_payload": sample_dingtalk_users_response(),
+        }
+    )
 
     assert batch == DirectoryImportBatch(
         users=[
@@ -169,6 +318,40 @@ def test_admin_can_pull_from_connector_and_preview_batch() -> None:
         ],
         "org_nodes_to_create": ["Company", "Company/Finance"],
         "roles_to_create": ["Analyst"],
+        "root_org_node_required": False,
+        "summary": {"create_count": 1, "update_count": 0},
+    }
+
+
+def test_admin_can_pull_from_structured_connector_config_and_preview_batch() -> None:
+    client = _build_importer_app()
+
+    response = client.post(
+        "/admin/users/importers/wecom/pull",
+        json={
+            "mode": "preview",
+            "config": {
+                "delimiter": "/",
+                "departments_payload": sample_wecom_departments_response(),
+                "users_payload": sample_wecom_users_response(),
+            },
+        },
+        headers=_admin_auth(),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "users": [
+            {
+                "user_name": "Bob",
+                "external_ref": "wx_123",
+                "org_path": "Company/Finance",
+                "roles": ["Reviewer"],
+                "action": "create",
+            }
+        ],
+        "org_nodes_to_create": ["Company", "Company/Finance"],
+        "roles_to_create": ["Reviewer"],
         "root_org_node_required": False,
         "summary": {"create_count": 1, "update_count": 0},
     }

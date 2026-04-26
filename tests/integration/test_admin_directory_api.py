@@ -174,12 +174,14 @@ def test_admin_can_list_roles_and_org_nodes() -> None:
             "name": "Admin",
             "description": None,
             "status": "active",
+            "user_count": 0,
         },
         {
             "id": "role_finance",
             "name": "Finance",
             "description": None,
             "status": "active",
+            "user_count": 1,
         },
     ]
     assert org_nodes_response.status_code == 200
@@ -242,6 +244,7 @@ def test_admin_can_create_and_update_roles() -> None:
         "name": "Analyst",
         "description": "Can review finance and audit datasets",
         "status": "disabled",
+        "user_count": 0,
     }
 
     list_response = client.get("/admin/roles", headers=admin_auth())
@@ -253,20 +256,53 @@ def test_admin_can_create_and_update_roles() -> None:
             "name": "Admin",
             "description": None,
             "status": "active",
+            "user_count": 0,
         },
         {
             "id": created["id"],
             "name": "Analyst",
             "description": "Can review finance and audit datasets",
             "status": "disabled",
+            "user_count": 0,
         },
         {
             "id": "role_finance",
             "name": "Finance",
             "description": None,
             "status": "active",
+            "user_count": 1,
         },
     ]
+
+
+def test_admin_can_list_linked_role_users() -> None:
+    client, _ = build_directory_app()
+
+    response = client.get("/admin/roles/role_finance/users", headers=admin_auth())
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": "user_1",
+            "name": "Existing User",
+            "external_ref": "u-existing",
+            "org_node_id": "org_finance",
+            "org_path": "Company/Finance",
+            "role_ids": ["role_finance"],
+            "role_names": ["Finance"],
+            "status": "active",
+            "runtime_key_status": "active",
+        }
+    ]
+
+
+def test_admin_cannot_delete_role_with_linked_users() -> None:
+    client, _ = build_directory_app()
+
+    response = client.delete("/admin/roles/role_finance", headers=admin_auth())
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Remove users from this role before deleting it"}
 
 
 def test_admin_can_create_update_and_delete_org_nodes() -> None:
