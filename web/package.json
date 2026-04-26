@@ -7,24 +7,26 @@
     "dev": "vite --host 127.0.0.1",
     "test": "vitest run",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "audit": "npm audit --registry=https://registry.npmjs.org",
+    "audit:prod": "npm audit --omit=dev --registry=https://registry.npmjs.org"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",
-    "@vitejs/plugin-react": "^4.3.1",
     "antd": "^5.20.6",
+    "read-excel-file": "^6.0.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "xlsx": "^0.18.5"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "jsdom": "^29.0.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
     "vitest": "^4.1.5"
   }
 }

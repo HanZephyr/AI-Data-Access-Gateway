@@ -1,4 +1,4 @@
-import { read, utils } from "xlsx";
+import readXlsxFile from "read-excel-file";
 
 type LooseRecord = Record<string, unknown>;
 
@@ -125,10 +125,16 @@ export function parseDirectoryRowsFromText(text: string) {
 export async function parseDirectoryRowsFromFile(file: File) {
   const lowerName = file.name.toLowerCase();
   if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
-    const workbook = read(await file.arrayBuffer(), { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
-    const rows = sheet ? (utils.sheet_to_json(sheet, { defval: "" }) as LooseRecord[]) : [];
+    const workbookRows = await readXlsxFile(file);
+    const [headerRow, ...dataRows] = workbookRows;
+    const headers = Array.isArray(headerRow)
+      ? headerRow.map((cell) => String(cell ?? "").trim())
+      : [];
+    const rows = dataRows
+      .filter((row) => Array.isArray(row))
+      .map((row) =>
+        Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])),
+      );
     return rows.map((row) => ({
       user_name: String(row.user_name || "").trim(),
       org_path: String(row.org_path || "").trim(),

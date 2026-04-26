@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
@@ -32,3 +33,35 @@ def test_backend_dockerfile_runs_as_non_root_user() -> None:
     dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 
     assert "USER adg" in dockerfile
+
+
+def test_backend_dockerfile_uses_uv_lock_for_frozen_installs() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY pyproject.toml uv.lock" in dockerfile
+    assert "uv sync --frozen --no-dev --extra all" in dockerfile
+
+
+def test_web_dockerfile_uses_npm_ci() -> None:
+    dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
+
+    assert "RUN npm ci" in dockerfile
+    assert "RUN npm install" not in dockerfile
+
+
+def test_web_package_declares_auditable_dependency_scripts() -> None:
+    package_json = json.loads(Path("web/package.json").read_text(encoding="utf-8"))
+
+    scripts = package_json["scripts"]
+    assert scripts["audit"] == "npm audit --registry=https://registry.npmjs.org"
+    assert scripts["audit:prod"] == "npm audit --omit=dev --registry=https://registry.npmjs.org"
+    dependencies = package_json["dependencies"]
+    dev_dependencies = package_json["devDependencies"]
+    assert "xlsx" not in dependencies
+    assert "read-excel-file" in dependencies
+    assert "@vitejs/plugin-react" not in dependencies
+    assert "typescript" not in dependencies
+    assert "vite" not in dependencies
+    assert "@vitejs/plugin-react" in dev_dependencies
+    assert "typescript" in dev_dependencies
+    assert "vite" in dev_dependencies

@@ -30,7 +30,7 @@ Run the web console:
 
 ```bash
 cd web
-npm install
+npm ci
 npm run dev
 ```
 
@@ -54,6 +54,15 @@ Run frontend verification:
 ```bash
 cd web
 npm run build
+npm run audit:prod
+```
+
+Run dependency audits:
+
+```bash
+uv tool run pip-audit
+cd web
+npm run audit:prod
 ```
 
 Call MCP-style HTTP tools:
@@ -82,10 +91,9 @@ docker exec -it ai-data-access-gateway-backend-1 init-admin
 
 The production-style Compose stack starts:
 
-- backend API on `http://127.0.0.1:8000`
 - web console on `http://127.0.0.1:8080`
 
-The web container serves the built Vite bundle through Nginx and proxies `/admin`, `/mcp`, `/internal`, and `/health` requests to the backend service. It no longer runs `npm run dev` or bind-mounts the repository.
+The backend service is only exposed on the internal Compose network. The web container serves the built Vite bundle through Nginx and proxies `/admin`, `/mcp`, `/runtime`, and `/health` requests to the backend service. It no longer runs `npm run dev` or bind-mounts the repository.
 
 Milestone 1 includes the backend package skeleton, settings, FastAPI health endpoints, SQLite control-plane database setup, initial Alembic migration, API key validation, and audit event persistence.
 
