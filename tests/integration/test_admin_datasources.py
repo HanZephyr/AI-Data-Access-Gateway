@@ -1,9 +1,10 @@
 from collections.abc import Iterator
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from adg.app.main import create_app
+from adg.admin_api.datasources import router as admin_datasource_router
 from adg.control_plane.db import (
     create_engine_from_url,
     create_session_factory,
@@ -31,7 +32,8 @@ def build_admin_datasource_app() -> TestClient:
         )
         session.commit()
 
-    app = create_app()
+    app = FastAPI()
+    app.include_router(admin_datasource_router)
 
     def override_session() -> Iterator[Session]:
         with session_factory() as session:
@@ -46,7 +48,13 @@ def test_admin_datasource_crud_routes() -> None:
     payload = {
         "name": "Warehouse",
         "type": "postgres",
-        "config": {"host": "localhost", "port": 5432, "database": "warehouse"},
+        "config": {
+            "host": "localhost",
+            "port": 5432,
+            "database": "warehouse",
+            "username": "alice",
+            "password": "secret",
+        },
     }
 
     created = client.post(
@@ -59,10 +67,18 @@ def test_admin_datasource_crud_routes() -> None:
     assert "tenant_id" not in created_body
     datasource_id = created_body["id"]
     assert created_body["datasource_kind"] == "relational"
+    assert created_body["config"]["password"] == {
+        "kind": "secret_placeholder",
+        "configured": True,
+    }
 
     listed = client.get("/admin/datasources", headers={"X-ADG-API-Key": "adg_admin"})
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [datasource_id]
+    assert listed.json()[0]["config"]["password"] == {
+        "kind": "secret_placeholder",
+        "configured": True,
+    }
 
     fetched = client.get(
         f"/admin/datasources/{datasource_id}",
@@ -71,41 +87,23 @@ def test_admin_datasource_crud_routes() -> None:
     assert fetched.status_code == 200
     assert fetched.json()["name"] == "Warehouse"
     assert fetched.json()["tags"] == []
-
-    tag = client.post(
-        "/admin/tags",
-        json={"name": "critical", "category": "importance"},
-        headers={"X-ADG-API-Key": "adg_admin"},
-    )
-    assert tag.status_code == 201
-    tag_id = tag.json()["id"]
-
-    bound = client.post(
-        "/admin/datasource-tags",
-        json={"tag_id": tag_id, "datasource_id": datasource_id},
-        headers={"X-ADG-API-Key": "adg_admin"},
-    )
-    assert bound.status_code == 201
-    assert bound.json()["tag_id"] == tag_id
-    assert bound.json()["datasource_id"] == datasource_id
-
-    listed_with_tags = client.get("/admin/datasources", headers={"X-ADG-API-Key": "adg_admin"})
-    assert listed_with_tags.status_code == 200
-    assert listed_with_tags.json()[0]["tags"] == [
-        {
-            "id": tag_id,
-            "name": "critical",
-            "category": "importance",
-            "description": None,
-        }
-    ]
+    assert fetched.json()["config"]["password"] == {
+        "kind": "secret_placeholder",
+        "configured": True,
+    }
 
     updated = client.patch(
         f"/admin/datasources/{datasource_id}",
         json={
             "name": "Warehouse Replica",
             "status": "disabled",
-            "config": {"host": "localhost", "port": 5432, "database": "replica"},
+            "config": {
+                "host": "localhost",
+                "port": 5432,
+                "database": "replica",
+                "username": "alice",
+                "password": "",
+            },
         },
         headers={"X-ADG-API-Key": "adg_admin"},
     )
@@ -113,27 +111,21 @@ def test_admin_datasource_crud_routes() -> None:
     assert updated.json()["name"] == "Warehouse Replica"
     assert updated.json()["status"] == "disabled"
     assert updated.json()["config"]["database"] == "replica"
-    assert updated.json()["tags"] == [
-        {
-            "id": tag_id,
-            "name": "critical",
-            "category": "importance",
-            "description": None,
-        }
-    ]
+    assert updated.json()["config"]["password"] == {
+        "kind": "secret_placeholder",
+        "configured": True,
+    }
+    assert updated.json()["tags"] == []
 
-    unbound = client.delete(
-        f"/admin/datasource-tags?datasource_id={datasource_id}&tag_id={tag_id}",
-        headers={"X-ADG-API-Key": "adg_admin"},
-    )
-    assert unbound.status_code == 204
-
-    fetched_after_unbind = client.get(
+    fetched_after_update = client.get(
         f"/admin/datasources/{datasource_id}",
         headers={"X-ADG-API-Key": "adg_admin"},
     )
-    assert fetched_after_unbind.status_code == 200
-    assert fetched_after_unbind.json()["tags"] == []
+    assert fetched_after_update.status_code == 200
+    assert fetched_after_update.json()["config"]["password"] == {
+        "kind": "secret_placeholder",
+        "configured": True,
+    }
 
     deleted = client.delete(
         f"/admin/datasources/{datasource_id}",

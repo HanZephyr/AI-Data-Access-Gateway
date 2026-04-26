@@ -102,7 +102,6 @@ async function mountConsoleApp(initialPage?: string) {
     value: createMatchMedia(),
   });
   localStorage.setItem("adg.language", "en-US");
-  localStorage.setItem("adg.apiKey", "adg_admin");
   if (initialPage) {
     localStorage.setItem("adg.page", initialPage);
   }
@@ -129,6 +128,15 @@ async function mountConsoleApp(initialPage?: string) {
   await import("./main");
 }
 
+async function signInWithValidAdminKey() {
+  const input = await screen.findByPlaceholderText("Paste the key printed by init-admin");
+  fireEvent.change(input, {
+    target: { value: "adg_admin" },
+  });
+  expect(input).toHaveValue("adg_admin");
+  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+}
+
 async function resizeWindow(width: number) {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
   fireEvent(window, new Event("resize"));
@@ -145,8 +153,18 @@ afterEach(() => {
 });
 
 describe("Users console page", () => {
+  it("does not write the admin key to localStorage after sign-in", async () => {
+    await mountConsoleApp("users");
+
+    expect(localStorage.getItem("adg.apiKey")).toBeNull();
+    await signInWithValidAdminKey();
+    expect(localStorage.getItem("adg.apiKey")).toBeNull();
+    expect(await screen.findByText("Organization tree")).toBeInTheDocument();
+  }, 10000);
+
   it("shows a users navigation item and no standalone organization page", async () => {
     await mountConsoleApp("users");
+    await signInWithValidAdminKey();
 
     expect((await screen.findAllByText("Users")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
@@ -155,6 +173,7 @@ describe("Users console page", () => {
 
   it("opens the excel import modal with click and drag upload affordances", async () => {
     await mountConsoleApp("users");
+    await signInWithValidAdminKey();
     fireEvent.click(await screen.findByText("Import user data"));
 
     expect((await screen.findAllByText("Upload file")).length).toBeGreaterThan(0);
@@ -164,6 +183,7 @@ describe("Users console page", () => {
 
   it("shows localized field guidance and credential-based third-party import tabs in the import modal", async () => {
     await mountConsoleApp("users");
+    await signInWithValidAdminKey();
     fireEvent.click(await screen.findByText("Import user data"));
 
     expect(await screen.findByText("Download template")).toBeInTheDocument();
@@ -186,6 +206,7 @@ describe("Users console page", () => {
 
   it("renders the rooted org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
+    await signInWithValidAdminKey();
 
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
     expect(screen.getByText("/")).toBeInTheDocument();
@@ -198,6 +219,7 @@ describe("Users console page", () => {
 
   it("opens context actions from the org tree nodes instead of top toolbar icons", async () => {
     await mountConsoleApp("users");
+    await signInWithValidAdminKey();
 
     expect(await screen.findByText("/")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
@@ -209,6 +231,7 @@ describe("Users console page", () => {
 
   it("opens a left-side navigation drawer on small screens", async () => {
     await mountConsoleApp("overview");
+    await signInWithValidAdminKey();
     await resizeWindow(860);
 
     fireEvent.click(await screen.findByRole("button", { name: "Open navigation" }));

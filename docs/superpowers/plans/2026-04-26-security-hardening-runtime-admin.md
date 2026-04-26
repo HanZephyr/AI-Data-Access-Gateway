@@ -327,7 +327,6 @@ git commit -m "fix: harden admin console auth and secret editing"
 - Modify: `tests/unit/policy/test_runtime_policy.py`
 - Modify: `tests/integration/test_admin_console_api.py`
 - Modify: `web/src/main.tsx`
-- Modify: `src/adg/control_plane/migrations/versions/202604260001_directory_runtime_baseline.py`
 - Create: `src/adg/control_plane/migrations/versions/202604260002_security_hardening_runtime_admin.py`
 
 - [ ] **Step 1: Add failing tests that assert policy payloads no longer expose `priority`.**

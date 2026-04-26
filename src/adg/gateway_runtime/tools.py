@@ -213,12 +213,53 @@ class GatewayRuntimeService:
 
         self._session.flush()
         resource = self._get_resource(resource_id)
+        disabled_reason = self._disabled_resource_reason(resource)
+        if disabled_reason is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                resource.datasource_id,
+                [resource.id],
+                None,
+                disabled_reason,
+            )
+            return {"status": "rejected", "reason": disabled_reason}
+        decision = self._policy.check_resource_access(
+            identity=identity,
+            resource=resource,
+            action="read",
+        )
+        if not decision.allowed:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                resource.datasource_id,
+                [resource.id],
+                None,
+                decision.reason,
+            )
+            return {"status": "rejected", "reason": decision.reason}
+        preview_columns = self._preview_select_columns(identity=identity, resource=resource)
+        if preview_columns is None:
+            reason = "no_readable_fields"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                resource.datasource_id,
+                [resource.id],
+                None,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
         return self.execute_query(
             identity=identity,
             api_key_id=api_key_id,
             datasource_id=resource.datasource_id,
             resource_ids=[resource.id],
-            query=f"select * from {resource.path}",
+            query=f"select {preview_columns} from {resource.path}",
             limit=limit,
             event_type="resource_preview",
         )
@@ -305,6 +346,23 @@ class GatewayRuntimeService:
         disabled_field = self._first_disabled_field(actual_resources, guard_result.accessed_fields)
         if disabled_field is not None:
             reason = f"field_disabled:{disabled_field}"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
+        inaccessible_field = self._first_inaccessible_field(
+            identity=identity,
+            resources=actual_resources,
+            accessed_fields=guard_result.accessed_fields,
+        )
+        if inaccessible_field is not None:
+            reason = f"field_access_denied:{inaccessible_field}"
             self._record_rejection(
                 identity,
                 api_key_id,
@@ -509,6 +567,57 @@ class GatewayRuntimeService:
         ).scalars()
         field = next(disabled_fields, None)
         return None if field is None else field.name
+
+    def _first_inaccessible_field(
+        self,
+        *,
+        identity: IdentityContext,
+        resources: list[Resource],
+        accessed_fields: list[str],
+    ) -> str | None:
+        """Find the first referenced field denied by active runtime field policy."""
+
+        for resource in resources:
+            for field_name in accessed_fields:
+                decision = self._policy.check_field_access(
+                    identity=identity,
+                    resource=resource,
+                    field_name=field_name,
+                    action="read",
+                )
+                if not decision.allowed:
+                    return field_name
+        return None
+
+    def _preview_select_columns(
+        self,
+        *,
+        identity: IdentityContext,
+        resource: Resource,
+    ) -> str | None:
+        """Build an explicit preview projection from active, readable fields."""
+
+        fields = self._session.execute(
+            select(ResourceField)
+            .where(
+                ResourceField.resource_id == resource.id,
+                ResourceField.status == "active",
+            )
+            .order_by(ResourceField.ordinal_position)
+        ).scalars()
+        readable_fields = [
+            field.name
+            for field in fields
+            if self._policy.check_field_access(
+                identity=identity,
+                resource=resource,
+                field_name=field.name,
+                action="read",
+            ).allowed
+        ]
+        if not readable_fields:
+            return None
+        return ", ".join(readable_fields)
 
     def _record_discovery(
         self,

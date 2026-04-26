@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type MockResponse = {
@@ -14,13 +14,52 @@ type MockResponse = {
 
 const routeMap: Record<string, MockResponse> = {
   "/admin/system": { ok: true, json: { service_name: "AI Data Access Gateway" } },
-  "/admin/datasources": { ok: true, json: [] },
+  "/admin/datasources": {
+    ok: true,
+    json: [
+      {
+        id: "ds_1",
+        name: "Warehouse",
+        type: "postgres",
+        datasource_kind: "relational",
+        status: "active",
+        config: {
+          host: "db.internal",
+          port: 5432,
+          database: "warehouse",
+          username: "analyst",
+          password: { kind: "secret_placeholder", configured: true },
+        },
+        tags: [],
+      },
+    ],
+  },
   "/admin/resources": { ok: true, json: [] },
+  "/admin/resource-tree": { ok: true, json: [] },
   "/admin/tags": { ok: true, json: [] },
   "/admin/resource-policies": { ok: true, json: [] },
   "/admin/field-policies": { ok: true, json: [] },
   "/admin/masking-policies": { ok: true, json: [] },
-  "/admin/audit-events": { ok: true, json: [] },
+  "/admin/audit-events": {
+    ok: true,
+    json: [
+      {
+        id: "event_1",
+        event_type: "query_allowed",
+        decision: "allowed",
+        datasource_id: "ds_1",
+        query_id: "query_1",
+        created_at: "2026-04-26T10:00:00Z",
+      },
+    ],
+  },
+  "/admin/audit-events/event_1/sql": {
+    ok: true,
+    json: {
+      id: "event_1",
+      sql_text: "select id from public.customers limit 1",
+    },
+  },
   "/admin/org-nodes": { ok: true, json: [] },
   "/admin/users": { ok: true, json: [] },
   "/admin/api-keys": { ok: true, json: [] },
@@ -68,6 +107,8 @@ const routeMap: Record<string, MockResponse> = {
   },
 };
 
+let lastDatasourcePatchBody: Record<string, unknown> | null = null;
+
 function createStorage() {
   const store = new Map<string, string>();
   return {
@@ -108,10 +149,19 @@ async function mountConsoleApp(initialPage: string) {
     value: createMatchMedia(),
   });
   localStorage.setItem("adg.language", "en-US");
-  localStorage.setItem("adg.apiKey", "adg_admin");
   localStorage.setItem("adg.page", initialPage);
-  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+    if (url === "/admin/datasources/ds_1" && init?.method === "PATCH") {
+      lastDatasourcePatchBody = JSON.parse(String(init.body || "{}")) as Record<string, unknown>;
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({}),
+        text: async () => "{}",
+      } as Response;
+    }
     const match = routeMap[url];
     if (!match) {
       return {
@@ -133,8 +183,18 @@ async function mountConsoleApp(initialPage: string) {
   await import("./main");
 }
 
+async function signInWithValidAdminKey() {
+  const input = await screen.findByPlaceholderText("Paste the key printed by init-admin");
+  fireEvent.change(input, {
+    target: { value: "adg_admin" },
+  });
+  expect(input).toHaveValue("adg_admin");
+  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+}
+
 beforeEach(() => {
   vi.unstubAllGlobals();
+  lastDatasourcePatchBody = null;
 });
 
 afterEach(() => {
@@ -146,6 +206,7 @@ afterEach(() => {
 describe("Roles page", () => {
   it("supports role CRUD entry points and linked user details", async () => {
     await mountConsoleApp("roles");
+    await signInWithValidAdminKey();
 
     expect(await screen.findByText("Role directory")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Create/ })).toBeInTheDocument();
@@ -156,4 +217,31 @@ describe("Roles page", () => {
     expect(await screen.findByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
   }, 20000);
+
+  it("shows datasource secret placeholders and omits unchanged passwords from update payloads", async () => {
+    await mountConsoleApp("datasources");
+    await signInWithValidAdminKey();
+
+    fireEvent.click(await screen.findByText("Warehouse"));
+
+    const passwordInput = await screen.findByLabelText("Password");
+    expect(passwordInput).toHaveAttribute("placeholder", "••••••••");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(lastDatasourcePatchBody).not.toBeNull();
+    });
+    expect(lastDatasourcePatchBody).not.toHaveProperty("config.password");
+  });
+
+  it("keeps audit rows summary-only and loads raw SQL on demand", async () => {
+    await mountConsoleApp("audit");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("query_1")).toBeInTheDocument();
+    expect(screen.queryByText("select id from public.customers limit 1")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View SQL" }));
+    expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
+  });
 });

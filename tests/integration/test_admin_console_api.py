@@ -71,7 +71,7 @@ def build_console_app() -> TestClient:
             datasource_id="ds_1",
             resource_ids=[resource.id],
             query_id=None,
-            sql_text=None,
+            sql_text="select id from public.customers limit 1",
             reason=None,
             metadata={"tool": "test"},
         )
@@ -295,6 +295,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
     assert resource_policy.status_code == 201
     assert resource_policy.json()["resource_label"] == "customers / warehouse.public.customers"
     assert resource_policy.json()["allow_decrypt"] is True
+    assert "priority" not in resource_policy.json()
     resource_policy_id = resource_policy.json()["id"]
 
     field_policy = client.post(
@@ -311,6 +312,7 @@ def test_admin_policy_and_masking_policy_management() -> None:
     )
     assert field_policy.status_code == 201
     assert field_policy.json()["resource_label"] == "customers / warehouse.public.customers"
+    assert "priority" not in field_policy.json()
     field_policy_id = field_policy.json()["id"]
 
     masking = client.post(
@@ -329,22 +331,22 @@ def test_admin_policy_and_masking_policy_management() -> None:
 
     updated_resource_policy = client.patch(
         f"/admin/resource-policies/{resource_policy_id}",
-        json={"priority": 10, "status": "disabled", "allow_decrypt": False},
+        json={"status": "disabled", "allow_decrypt": False},
         headers=auth(),
     )
     assert updated_resource_policy.status_code == 200
-    assert updated_resource_policy.json()["priority"] == 10
     assert updated_resource_policy.json()["status"] == "disabled"
     assert updated_resource_policy.json()["allow_decrypt"] is False
+    assert "priority" not in updated_resource_policy.json()
 
     updated_field_policy = client.patch(
         f"/admin/field-policies/{field_policy_id}",
-        json={"effect": "allow", "priority": 7},
+        json={"effect": "allow"},
         headers=auth(),
     )
     assert updated_field_policy.status_code == 200
     assert updated_field_policy.json()["effect"] == "allow"
-    assert updated_field_policy.json()["priority"] == 7
+    assert "priority" not in updated_field_policy.json()
 
     updated_masking = client.patch(
         f"/admin/masking-policies/{masking_policy_id}",
@@ -359,12 +361,14 @@ def test_admin_policy_and_masking_policy_management() -> None:
         len(client.get("/admin/resource-policies", headers=auth()).json())
         == 1
     )
+    assert "priority" not in client.get("/admin/resource-policies", headers=auth()).json()[0]
     field_policies = client.get("/admin/field-policies", headers=auth()).json()
     masking_policies = client.get("/admin/masking-policies", headers=auth()).json()
     assert len(field_policies) == 1
     assert len(masking_policies) == 1
     assert "tenant_id" not in field_policies[0]
     assert "tenant_id" not in masking_policies[0]
+    assert "priority" not in field_policies[0]
 
     assert (
         client.delete(f"/admin/resource-policies/{resource_policy_id}", headers=auth()).status_code
@@ -508,6 +512,24 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert audit.status_code == 200
     assert audit.json()[0]["event_type"] == "metadata_discovery"
     assert "tenant_id" not in audit.json()[0]
+    assert "sql_text" not in audit.json()[0]
+
+    audit_sql = client.get(f"/admin/audit-events/{audit.json()[0]['id']}/sql", headers=auth())
+    assert audit_sql.status_code == 200
+    assert audit_sql.json() == {
+        "id": audit.json()[0]["id"],
+        "sql_text": "select id from public.customers limit 1",
+    }
+
+    audit_after_sql_view = client.get("/admin/audit-events", headers=auth())
+    assert audit_after_sql_view.status_code == 200
+    assert any(
+        event["event_type"] == "audit_sql_view"
+        and event["api_key_id"] == "key_admin"
+        and event["metadata"] == {"target_event_id": audit.json()[0]["id"]}
+        and "sql_text" not in event
+        for event in audit_after_sql_view.json()
+    )
 
     setup = client.get("/admin/mcp/setup", headers=auth())
     assert setup.status_code == 200

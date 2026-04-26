@@ -1,3 +1,4 @@
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
 from alembic import command
@@ -126,7 +127,7 @@ def test_migration_uses_database_url_from_environment(
     assert not default_db_path.exists()
 
 
-def test_migrations_use_a_single_directory_runtime_baseline() -> None:
+def test_migrations_follow_the_expected_directory_runtime_chain() -> None:
     versions_path = (
         Path(__file__).resolve().parents[2]
         / "src"
@@ -140,4 +141,29 @@ def test_migrations_use_a_single_directory_runtime_baseline() -> None:
         for path in versions_path.glob("*.py")
         if path.name != "__init__.py"
     )
-    assert revision_files == ["202604260001_directory_runtime_baseline.py"]
+    assert revision_files == [
+        "202604260001_directory_runtime_baseline.py",
+        "202604260002_security_hardening_runtime_admin.py",
+    ]
+
+    revisions: dict[str, tuple[str, str | None]] = {}
+    for path in sorted(
+        versions_path.glob("*.py"),
+        key=lambda item: item.name,
+    ):
+        if path.name == "__init__.py":
+            continue
+        spec = spec_from_file_location(path.stem, path)
+        assert spec is not None
+        assert spec.loader is not None
+        module = module_from_spec(spec)
+        spec.loader.exec_module(module)
+        revisions[path.name] = (module.revision, module.down_revision)
+
+    assert revisions == {
+        "202604260001_directory_runtime_baseline.py": ("202604260001", None),
+        "202604260002_security_hardening_runtime_admin.py": (
+            "202604260002",
+            "202604260001",
+        ),
+    }

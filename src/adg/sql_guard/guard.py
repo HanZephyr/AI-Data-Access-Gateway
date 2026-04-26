@@ -76,6 +76,8 @@ class SqlGuard:
             for function_name in used_functions
             if function_name not in self.allowed_functions
         ]
+        if self._has_wildcard_projection(statement):
+            rejection_reasons.append("wildcard_projection_not_allowed")
         normalized_sql, warnings = self._with_effective_limit(statement)
 
         return SqlGuardResult(
@@ -141,3 +143,15 @@ class SqlGuard:
             if sql_name:
                 names.add(sql_name)
         return sorted(names)
+
+    def _has_wildcard_projection(self, statement: exp.Select) -> bool:
+        """Reject wildcard projections so runtime callers must name fields explicitly."""
+
+        return any(
+            isinstance(projection, exp.Star)
+            or (
+                isinstance(projection, exp.Column)
+                and isinstance(projection.this, exp.Star)
+            )
+            for projection in statement.expressions
+        )

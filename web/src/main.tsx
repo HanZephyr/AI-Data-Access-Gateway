@@ -60,7 +60,9 @@ import enUS from "antd/locale/en_US";
 import zhCN from "antd/locale/zh_CN";
 import zhTW from "antd/locale/zh_TW";
 import {
+  SECRET_PLACEHOLDER_BULLETS,
   datasourceConfigFromFormValues,
+  datasourceHasConfiguredPassword,
   datasourceFormValuesFromConfig,
   maskingConfigFromFormValues,
   maskingFormValuesFromConfig,
@@ -225,6 +227,7 @@ const translations = {
     "datasource.scanned": "Metadata synced",
     "datasource.deleteConfirm": "Delete this data source and scanned metadata?",
     "datasource.configHint": "Use explicit connection fields instead of pasting JSON.",
+    "datasource.passwordPlaceholder": "Leave blank to keep the stored password",
     "catalog.search": "Search data sources, databases, tables, or fields",
     "catalog.selectPrompt": "Select a data source, database, table, or field to edit details.",
     "catalog.treeTitle": "Data Sources",
@@ -249,6 +252,9 @@ const translations = {
     "users.resetKey": "Reset runtime key",
     "users.latestKey": "Latest plaintext key",
     "users.importTitle": "User data import",
+    "audit.viewSql": "View SQL",
+    "audit.sqlTitle": "Audit SQL",
+    "audit.emptySql": "No SQL text available for this event.",
     "users.uploadFile": "Upload file",
     "users.dragFileHere": "Drag file here",
     "users.importHint": "Use the approved template columns: user_name, org_path, external_ref, roles.",
@@ -544,6 +550,7 @@ const translations = {
     "datasource.scanned": "元数据已同步",
     "datasource.deleteConfirm": "确认删除该数据源及其扫描元数据？",
     "datasource.configHint": "使用明确的连接字段填写配置，不需要手写 JSON。",
+    "datasource.passwordPlaceholder": "留空即可保留当前已保存的密码",
     "catalog.search": "搜索数据源、库、表或字段",
     "catalog.selectPrompt": "选择一个数据源、数据库、数据表或字段来维护详情。",
     "catalog.treeTitle": "数据源",
@@ -568,6 +575,9 @@ const translations = {
     "users.resetKey": "重置运行时密钥",
     "users.latestKey": "最近一次明文密钥",
     "users.importTitle": "用户数据导入",
+    "audit.viewSql": "查看 SQL",
+    "audit.sqlTitle": "审计 SQL",
+    "audit.emptySql": "该事件没有可查看的 SQL 文本。",
     "users.uploadFile": "上传文件",
     "users.dragFileHere": "拖拽文件到这里",
     "users.importHint": "使用统一模板列：user_name、org_path、external_ref、roles。",
@@ -862,6 +872,7 @@ const translations = {
     "datasource.scanned": "中繼資料已同步",
     "datasource.deleteConfirm": "確認刪除此資料來源及其掃描中繼資料？",
     "datasource.configHint": "使用明確的連線欄位填寫設定，不需要手寫 JSON。",
+    "datasource.passwordPlaceholder": "留空即可保留目前已儲存的密碼",
     "catalog.search": "搜尋資料來源、資料庫、資料表或欄位",
     "catalog.selectPrompt": "選擇一個資料來源、資料庫、資料表或欄位來維護詳情。",
     "catalog.treeTitle": "資料來源",
@@ -886,6 +897,9 @@ const translations = {
     "users.resetKey": "重置執行時金鑰",
     "users.latestKey": "最近一次明文金鑰",
     "users.importTitle": "使用者資料匯入",
+    "audit.viewSql": "檢視 SQL",
+    "audit.sqlTitle": "稽核 SQL",
+    "audit.emptySql": "此事件沒有可檢視的 SQL 文字。",
     "users.uploadFile": "上傳檔案",
     "users.dragFileHere": "將檔案拖曳到這裡",
     "users.importHint": "使用統一模板欄位：user_name、org_path、external_ref、roles。",
@@ -1181,17 +1195,12 @@ function columnLabel(key: string, t: I18nContextValue["t"]) {
 }
 
 function useApi() {
-  /** Keep the API key in local storage and attach it to every console request. */
+  /** Keep the admin API key in component state only and attach it to every console request. */
 
-  const [apiKey, setApiKey] = useState(localStorage.getItem("adg.apiKey") || "");
+  const [apiKey, setApiKey] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
   const saveApiKey = (value: string) => {
-    if (value) {
-      localStorage.setItem("adg.apiKey", value);
-    } else {
-      localStorage.removeItem("adg.apiKey");
-    }
     setApiKey(value);
     setAuthError(null);
   };
@@ -1206,7 +1215,6 @@ function useApi() {
       await validateAdminApiKey(fetch, candidate);
       saveApiKey(candidate);
     } catch (error) {
-      localStorage.removeItem("adg.apiKey");
       setApiKey("");
       setAuthError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1516,7 +1524,7 @@ function Page({
   if (page === "policies") return <Policies api={api} />;
   if (page === "masking") return <Masking api={api} />;
   if (page === "apiKeys") return <ApiKeys api={api} />;
-  if (page === "audit") return <EndpointTable api={api} title="nav.audit" path="/admin/audit-events" />;
+  if (page === "audit") return <AuditEventsPage api={api} />;
   return <McpSetup api={api} />;
 }
 
@@ -2581,10 +2589,13 @@ function CatalogDetail({
   return <AssetDetail api={api} tags={tags} selected={selected} onSaved={onSaved} />;
 }
 
-function DatasourceConnectionFields() {
+function DatasourceConnectionFields({ passwordConfigured = false }: { passwordConfigured?: boolean }) {
   /** Render explicit relational connection inputs instead of raw JSON config. */
 
   const { t } = useI18n();
+  const passwordPlaceholder = passwordConfigured
+    ? SECRET_PLACEHOLDER_BULLETS
+    : t("datasource.passwordPlaceholder");
   return (
     <>
       <Alert type="info" showIcon message={t("datasource.configHint")} />
@@ -2615,7 +2626,7 @@ function DatasourceConnectionFields() {
           <Input autoComplete="off" />
         </Form.Item>
         <Form.Item name="password" label={t("field.password")}>
-          <Input.Password autoComplete="new-password" />
+          <Input.Password autoComplete="new-password" placeholder={passwordPlaceholder} />
         </Form.Item>
       </div>
     </>
@@ -2758,7 +2769,7 @@ function DatasourceDetail({
           <Form.Item name="status" label={t("field.status")}>
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
-          <DatasourceConnectionFields />
+          <DatasourceConnectionFields passwordConfigured={datasourceHasConfiguredPassword(selected.config || {})} />
         </Form>
         <CatalogTagEditor
           api={api}
@@ -3413,7 +3424,6 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
       effect: "allow",
       action: "read",
       allow_decrypt: false,
-      priority: 0,
       status: "active",
     });
     setOpen(true);
@@ -3561,9 +3571,6 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
           </div>
         ) : null}
         <div className="config-form-grid">
-          <Form.Item name="priority" label={t("field.priority")}>
-            <InputNumber className="full" />
-          </Form.Item>
           <Form.Item name="status" label={t("field.status")}>
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
@@ -4431,7 +4438,7 @@ function IconAction({ title, icon, onClick }: { title: string; icon: React.React
 
   return (
     <Tooltip title={title}>
-      <Button size="small" icon={icon} onClick={onClick} />
+      <Button size="small" aria-label={title} icon={icon} onClick={onClick} />
     </Tooltip>
   );
 }
@@ -4595,7 +4602,6 @@ function normalizePolicyValues(
     subject_id: values.subject_type === "all" ? "all" : values.subject_id,
     effect: values.effect,
     action: values.action,
-    priority: Number(values.priority || 0),
     status: values.status || "active",
   };
 
@@ -4648,6 +4654,73 @@ function normalizeValues(values: AnyRecord, fields: FieldConfig[], t?: I18nConte
   void fields;
   void t;
   return { ...values };
+}
+
+function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
+  /** Keep the audit list summary-only and fetch raw SQL through the dedicated endpoint. */
+
+  const { t } = useI18n();
+  const state = useData<AnyRecord[]>(() => api.request("/admin/audit-events"), [api.apiKey]);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const [sqlRecord, setSqlRecord] = useState<AnyRecord | null>(null);
+  const [sqlError, setSqlError] = useState<string | null>(null);
+  const [sqlLoading, setSqlLoading] = useState(false);
+  const titleText = t("nav.audit");
+  const columns = columnsFromRows(state.data || [], t);
+
+  const viewSql = async (row: AnyRecord) => {
+    setSqlLoading(true);
+    setSqlError(null);
+    try {
+      setSqlRecord(await api.request<AnyRecord>(`/admin/audit-events/${row.id}/sql`));
+      state.reload();
+    } catch (error) {
+      setSqlRecord(null);
+      setSqlError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSqlLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <DataPanel
+        title={titleText}
+        state={state}
+        columns={columns}
+        actions={(row) => (
+          <Space size={6}>
+            <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
+            <Button size="small" onClick={() => void viewSql(row)}>
+              {t("audit.viewSql")}
+            </Button>
+          </Space>
+        )}
+      />
+      <RecordDetails record={selected} title={titleText} onClose={() => setSelected(null)} />
+      <Drawer
+        title={t("audit.sqlTitle")}
+        open={Boolean(sqlRecord) || Boolean(sqlError) || sqlLoading}
+        width={720}
+        onClose={() => {
+          setSqlRecord(null);
+          setSqlError(null);
+          setSqlLoading(false);
+        }}
+      >
+        {sqlError ? <Alert type="error" message={sqlError} /> : null}
+        {sqlLoading ? <Typography.Paragraph>{t("common.refresh")}</Typography.Paragraph> : null}
+        {!sqlLoading && !sqlError && sqlRecord?.sql_text ? (
+          <Typography.Paragraph copyable>
+            <pre>{String(sqlRecord.sql_text)}</pre>
+          </Typography.Paragraph>
+        ) : null}
+        {!sqlLoading && !sqlError && !sqlRecord?.sql_text ? (
+          <Empty description={t("audit.emptySql")} />
+        ) : null}
+      </Drawer>
+    </>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);

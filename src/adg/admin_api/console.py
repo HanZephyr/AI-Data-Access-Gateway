@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from adg.app.dependencies import AuthenticatedApiKey, require_admin_api_key
 from adg.app.settings import get_settings
 from adg.audit.models import AuditEvent
+from adg.audit.service import AuditService
 from adg.control_plane.db import get_session
 from adg.control_plane.imports.connectors.registry import get_directory_importer
 from adg.control_plane.imports.models import ExcelImportExecution, ExcelImportPreview
@@ -93,7 +94,6 @@ class ResourcePolicyRequest(BaseModel):
     resource_id: str | None = None
     tag_id: str | None = None
     allow_decrypt: bool = False
-    priority: int = 0
     status: str = "active"
 
 
@@ -107,7 +107,6 @@ class ResourcePolicyUpdateRequest(BaseModel):
     resource_id: str | None = None
     tag_id: str | None = None
     allow_decrypt: bool | None = None
-    priority: int | None = None
     status: str | None = None
 
 
@@ -120,7 +119,6 @@ class FieldPolicyRequest(BaseModel):
     resource_id: str
     field_name: str
     action: str
-    priority: int = 0
     status: str = "active"
 
 
@@ -133,7 +131,6 @@ class FieldPolicyUpdateRequest(BaseModel):
     resource_id: str | None = None
     field_name: str | None = None
     action: str | None = None
-    priority: int | None = None
     status: str | None = None
 
 
@@ -1170,7 +1167,28 @@ def list_audit_events(
         select(AuditEvent)
         .order_by(AuditEvent.created_at.desc())
     ).scalars()
-    return [_serialize_audit_event(event) for event in events]
+    return [_serialize_audit_event_summary(event) for event in events]
+
+
+@router.get("/audit-events/{event_id}/sql")
+def get_audit_event_sql(
+    event_id: str,
+    api_key: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, Any]:
+    """Return raw SQL for one audit event and audit the detail view separately."""
+
+    event = _get_by_id(session, AuditEvent, event_id, "Audit event not found")
+    AuditService(session).record_sql_view(
+        api_key_id=api_key.id,
+        user_id=api_key.user_id,
+        target_event=event,
+    )
+    session.commit()
+    return {
+        "id": event.id,
+        "sql_text": event.sql_text,
+    }
 
 
 @router.get("/mcp/setup")
@@ -1490,7 +1508,6 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
         "tag_id": policy.tag_id,
         "tag_name": _tag_name(session, policy.tag_id),
         "allow_decrypt": policy.allow_decrypt,
-        "priority": policy.priority,
         "status": policy.status,
     }
 
@@ -1508,7 +1525,6 @@ def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, 
         "resource_id": policy.resource_id,
         "field_name": policy.field_name,
         "action": policy.action,
-        "priority": policy.priority,
         "status": policy.status,
     }
 
@@ -1542,8 +1558,8 @@ def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
     }
 
 
-def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
-    """Decode audit JSON fields for admin-console display."""
+def _serialize_audit_event_summary(event: AuditEvent) -> dict[str, Any]:
+    """Decode audit JSON fields for the summary list without raw SQL text."""
 
     return {
         "id": event.id,
@@ -1551,12 +1567,11 @@ def _serialize_audit_event(event: AuditEvent) -> dict[str, Any]:
         "api_key_id": event.api_key_id,
         "event_type": event.event_type,
         "datasource_id": event.datasource_id,
-        "resource_ids": json.loads(event.resource_ids_json),
+        "resource_ids": event.resource_ids,
         "query_id": event.query_id,
-        "sql_text": event.sql_text,
         "decision": event.decision,
         "reason": event.reason,
-        "metadata": json.loads(event.metadata_json),
+        "metadata": event.audit_metadata,
         "created_at": event.created_at.isoformat(),
     }
 
