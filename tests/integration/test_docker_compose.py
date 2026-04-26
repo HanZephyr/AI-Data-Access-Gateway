@@ -18,3 +18,17 @@ def test_backend_compose_requires_both_production_secrets() -> None:
 
     assert "ADG_SECRET_KEY" in environment
     assert "ADG_CREDENTIAL_ENCRYPTION_KEY" in environment
+
+
+def test_production_compose_does_not_publish_backend_directly() -> None:
+    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+
+    backend = compose["services"]["backend"]
+
+    assert "ports" not in backend
+
+
+def test_backend_dockerfile_runs_as_non_root_user() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert "USER adg" in dockerfile
