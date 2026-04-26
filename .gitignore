@@ -31,6 +31,7 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+.tmp
 
 # Frontend dependencies and build outputs
 web/node_modules/
