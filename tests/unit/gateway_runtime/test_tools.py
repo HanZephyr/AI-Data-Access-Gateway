@@ -317,6 +317,69 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     assert event.decision == "allowed"
 
 
+def test_execute_query_rejects_denied_field_and_skips_connector(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        FieldPolicy(
+            subject_type="all",
+            subject_id="*",
+            effect="deny",
+            resource_id=resource.id,
+            field_name="email",
+            action="read",
+            status="active",
+        )
+    )
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id, email from public.customers",
+        limit=10,
+    )
+
+    assert response["status"] == "rejected"
+    assert response["reason"] == "field_access_denied:email"
+    assert FakeConnector.last_sql is None
+
+
+def test_execute_query_rejects_disabled_field_and_skips_connector(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.flush()
+    email = db_session.execute(
+        select(ResourceField).where(
+            ResourceField.resource_id == resource.id,
+            ResourceField.name == "email",
+        )
+    ).scalar_one()
+    email.status = "disabled"
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id, email from public.customers",
+        limit=10,
+    )
+
+    assert response["status"] == "rejected"
+    assert response["reason"] == "field_disabled:email"
+    assert FakeConnector.last_sql is None
+
+
 def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
@@ -380,6 +443,18 @@ def test_preview_resource_runs_bounded_preview(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
     allow_resource_read(db_session, resource.id)
+    db_session.add(
+        FieldPolicy(
+            subject_type="all",
+            subject_id="*",
+            effect="deny",
+            resource_id=resource.id,
+            field_name="email",
+            action="read",
+            status="active",
+        )
+    )
+    FakeConnector.last_sql = None
 
     response = runtime(db_session).preview_resource(
         identity=identity(),
@@ -390,3 +465,45 @@ def test_preview_resource_runs_bounded_preview(db_session: Session) -> None:
 
     assert response["status"] == "success"
     assert response["rows"] == [{"id": 1}]
+    assert FakeConnector.last_sql == "SELECT id FROM warehouse.public.customers LIMIT 1"
+
+
+def test_preview_resource_rejects_when_no_fields_are_readable(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add_all(
+        [
+            FieldPolicy(
+                subject_type="all",
+                subject_id="*",
+                effect="deny",
+                resource_id=resource.id,
+                field_name="id",
+                action="read",
+                status="active",
+            ),
+            FieldPolicy(
+                subject_type="all",
+                subject_id="*",
+                effect="deny",
+                resource_id=resource.id,
+                field_name="email",
+                action="read",
+                status="active",
+            ),
+        ]
+    )
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).preview_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=resource.id,
+        limit=1,
+    )
+
+    assert response == {"status": "rejected", "reason": "no_readable_fields"}
+    assert FakeConnector.last_sql is None

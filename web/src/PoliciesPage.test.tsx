@@ -107,7 +107,6 @@ async function mountConsoleApp(initialPage: string) {
     value: createMatchMedia(),
   });
   localStorage.setItem("adg.language", "en-US");
-  localStorage.setItem("adg.apiKey", "adg_admin");
   localStorage.setItem("adg.page", initialPage);
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -132,6 +131,15 @@ async function mountConsoleApp(initialPage: string) {
   await import("./main");
 }
 
+async function signInWithValidAdminKey() {
+  const input = await screen.findByPlaceholderText("Paste the key printed by init-admin");
+  fireEvent.change(input, {
+    target: { value: "adg_admin" },
+  });
+  expect(input).toHaveValue("adg_admin");
+  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+}
+
 beforeEach(() => {
   vi.unstubAllGlobals();
 });
@@ -145,10 +153,8 @@ afterEach(() => {
 describe("Policies page", () => {
   it("lets admins target a tag and pick a user or role instead of typing raw ids", async () => {
     await mountConsoleApp("policies");
+    await signInWithValidAdminKey();
 
-    await waitFor(() => {
-      expect(screen.getAllByText("Policies").length).toBeGreaterThan(0);
-    });
     fireEvent.click(await screen.findByRole("button", { name: "Create" }));
 
     await waitFor(() => {
@@ -157,5 +163,6 @@ describe("Policies page", () => {
       expect(screen.getAllByText("Tag").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
+    expect(screen.queryByText("Priority")).not.toBeInTheDocument();
   }, 10000);
 });

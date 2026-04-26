@@ -5,6 +5,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_SECRET_KEY = "change-me-to-a-long-random-secret"
+DEFAULT_CREDENTIAL_ENCRYPTION_KEY = "change-me-to-a-long-random-credential-key"
 
 
 class Settings(BaseSettings):
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     control_plane_database_url: str = "sqlite:///./data/adg-control-plane.db"
     api_key_header: str = "X-ADG-API-Key"
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
+    credential_encryption_key: str = Field(
+        default=DEFAULT_CREDENTIAL_ENCRYPTION_KEY,
+        min_length=16,
+    )
     log_level: str = "INFO"
 
     @model_validator(mode="after")
@@ -30,6 +35,13 @@ class Settings(BaseSettings):
 
         if self.env == "production" and self.secret_key == DEFAULT_SECRET_KEY:
             raise ValueError("ADG_SECRET_KEY must be set to a unique random value in production.")
+        if (
+            self.env == "production"
+            and self.credential_encryption_key == DEFAULT_CREDENTIAL_ENCRYPTION_KEY
+        ):
+            raise ValueError(
+                "ADG_CREDENTIAL_ENCRYPTION_KEY must be set to a unique random value in production."
+            )
         return self
 
 

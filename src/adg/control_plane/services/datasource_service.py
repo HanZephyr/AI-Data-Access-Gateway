@@ -14,6 +14,7 @@ from adg.control_plane.models.governance import (
 from adg.control_plane.models.masking import MaskingPolicy
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.errors import NotFoundError
+from adg.shared.secret_config import SecretConfigService
 
 
 class DatasourceService:
@@ -21,6 +22,7 @@ class DatasourceService:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+        self._secret_config = SecretConfigService.from_settings()
 
     def list_datasources(self) -> list[Datasource]:
         """Return datasources in creation order for stable admin-console tables."""
@@ -43,7 +45,10 @@ class DatasourceService:
             name=name,
             type=connector_type,
             datasource_kind="relational",
-            config_json=json.dumps(config, separators=(",", ":")),
+            config_json=json.dumps(
+                self._secret_config.protect_persisted_config(config),
+                separators=(",", ":"),
+            ),
             status=status,
         )
         self._session.add(datasource)
@@ -73,7 +78,13 @@ class DatasourceService:
         if status is not None:
             datasource.status = status
         if config is not None:
-            datasource.config_json = json.dumps(config, separators=(",", ":"))
+            datasource.config_json = json.dumps(
+                self._secret_config.protect_persisted_config(
+                    config,
+                    previous=datasource.persisted_config(),
+                ),
+                separators=(",", ":"),
+            )
         datasource.updated_at = datetime.now(UTC)
         return datasource
 

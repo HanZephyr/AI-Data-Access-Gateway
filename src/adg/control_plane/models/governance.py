@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Integer, String, Text
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from adg.control_plane.models.base import Base
@@ -49,7 +49,6 @@ class ResourcePolicy(Base):
     resource_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     tag_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     allow_decrypt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
 
 
@@ -65,5 +64,4 @@ class FieldPolicy(Base):
     resource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     field_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)

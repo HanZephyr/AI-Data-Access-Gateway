@@ -1,4 +1,6 @@
+import json
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -29,3 +31,23 @@ class AuditEvent(Base):
         default=lambda: datetime.now(UTC),
         index=True,
     )
+
+    @property
+    def resource_ids(self) -> list[str]:
+        """Decode stored resource ids for summary/detail serializers."""
+
+        decoded = json.loads(self.resource_ids_json)
+        if not isinstance(decoded, list) or not all(isinstance(item, str) for item in decoded):
+            raise ValueError("AuditEvent.resource_ids_json must decode to list[str]")
+        return decoded
+
+    @property
+    def audit_metadata(self) -> dict[str, Any]:
+        """Decode stored metadata for summary/detail serializers."""
+
+        decoded = json.loads(self.metadata_json)
+        if not isinstance(decoded, dict) or not all(
+            isinstance(key, str) for key in decoded
+        ):
+            raise ValueError("AuditEvent.metadata_json must decode to dict[str, Any]")
+        return cast(dict[str, Any], decoded)

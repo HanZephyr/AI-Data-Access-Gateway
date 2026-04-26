@@ -42,3 +42,25 @@ class AuditService:
         )
         self._session.add(event)
         return event
+
+    def record_sql_view(
+        self,
+        *,
+        api_key_id: str | None,
+        user_id: str | None,
+        target_event: AuditEvent,
+    ) -> AuditEvent:
+        """Record that an operator opened the raw SQL detail for one audit event."""
+
+        return self.record_event(
+            user_id=user_id,
+            api_key_id=api_key_id,
+            event_type="audit_sql_view",
+            decision="allowed",
+            datasource_id=target_event.datasource_id,
+            resource_ids=target_event.resource_ids,
+            query_id=target_event.query_id,
+            sql_text=None,
+            reason=None,
+            metadata={"target_event_id": target_event.id},
+        )

@@ -1,4 +1,16 @@
 type LooseRecord = Record<string, unknown>;
+export const SECRET_PLACEHOLDER_BULLETS = "••••••••";
+
+function isSecretPlaceholder(value: unknown) {
+  /** Detect redacted secret envelopes returned by the admin datasource API. */
+
+  return Boolean(
+    value
+      && typeof value === "object"
+      && (value as LooseRecord).kind === "secret_placeholder"
+      && (value as LooseRecord).configured === true,
+  );
+}
 
 function readString(value: unknown) {
   /** Normalize string-like values while trimming accidental whitespace. */
@@ -21,6 +33,16 @@ function readNumber(value: unknown) {
   return undefined;
 }
 
+function normalizePasswordValue(value: unknown) {
+  /** Treat placeholder bullets and placeholder objects as unchanged secrets. */
+
+  if (isSecretPlaceholder(value)) {
+    return "";
+  }
+  const normalized = readString(value);
+  return normalized === SECRET_PLACEHOLDER_BULLETS ? "" : normalized;
+}
+
 export function datasourceFormValuesFromConfig(config: LooseRecord | null | undefined) {
   /** Map persisted datasource config into explicit connection form fields. */
 
@@ -30,7 +52,7 @@ export function datasourceFormValuesFromConfig(config: LooseRecord | null | unde
     port: readNumber(source.port),
     database: readString(source.database),
     username: readString(source.username),
-    password: readString(source.password),
+    password: normalizePasswordValue(source.password),
   };
 }
 
@@ -43,13 +65,20 @@ export function datasourceConfigFromFormValues(values: LooseRecord | null | unde
   const port = readNumber(source.port);
   const database = readString(source.database);
   const username = readString(source.username);
-  const password = readString(source.password);
+  const password = normalizePasswordValue(source.password);
   if (host) config.host = host;
   if (port !== undefined) config.port = port;
   if (database) config.database = database;
   if (username) config.username = username;
   if (password) config.password = password;
   return config;
+}
+
+export function datasourceHasConfiguredPassword(config: LooseRecord | null | undefined) {
+  /** Report whether the datasource already has a stored password hidden behind a placeholder. */
+
+  const source = config || {};
+  return isSecretPlaceholder(source.password);
 }
 
 export function maskingFormValuesFromConfig(strategy: string, config: LooseRecord | null | undefined) {

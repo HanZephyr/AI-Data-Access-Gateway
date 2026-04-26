@@ -124,3 +124,74 @@ def test_metadata_scan_service_replaces_prior_snapshots(db_session: Session) -> 
     ]
     assert resources[-1].kind == "relational_view"
     assert [field.name for field in fields] == ["total"]
+
+
+def test_datasource_service_encrypts_password_before_persisting(db_session: Session) -> None:
+    service = DatasourceService(db_session)
+
+    datasource = service.create_datasource(
+        name="Warehouse",
+        connector_type="postgres",
+        config={
+            "host": "db",
+            "database": "warehouse",
+            "username": "alice",
+            "password": "secret",
+        },
+    )
+    db_session.commit()
+
+    stored = json.loads(datasource.config_json)
+
+    assert stored["password"] != "secret"
+    assert stored["password"]["kind"] == "encrypted_secret"
+    assert datasource.config()["password"] == "secret"
+
+
+def test_datasource_service_preserves_existing_secret_when_password_is_omitted_or_blank(
+    db_session: Session,
+) -> None:
+    service = DatasourceService(db_session)
+    datasource = service.create_datasource(
+        name="Warehouse",
+        connector_type="postgres",
+        config={
+            "host": "db",
+            "database": "warehouse",
+            "username": "alice",
+            "password": "secret",
+        },
+    )
+    db_session.commit()
+    original_password = json.loads(datasource.config_json)["password"]
+
+    omitted = service.update_datasource(
+        datasource_id=datasource.id,
+        name=None,
+        status=None,
+        config={
+            "host": "db-replica",
+            "database": "warehouse",
+            "username": "alice",
+        },
+    )
+    db_session.commit()
+    omitted_password = json.loads(omitted.config_json)["password"]
+
+    blank = service.update_datasource(
+        datasource_id=datasource.id,
+        name=None,
+        status=None,
+        config={
+            "host": "db-replica",
+            "database": "warehouse",
+            "username": "alice",
+            "password": "   ",
+        },
+    )
+    db_session.commit()
+    blank_password = json.loads(blank.config_json)["password"]
+
+    assert omitted_password == original_password
+    assert blank_password == original_password
+    assert blank.config()["password"] == "secret"

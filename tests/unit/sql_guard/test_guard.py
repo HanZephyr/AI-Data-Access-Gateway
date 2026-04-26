@@ -39,6 +39,22 @@ def test_guard_rejects_multiple_statements() -> None:
     assert "multiple_statements" in result.rejection_reasons
 
 
+def test_guard_rejects_select_star() -> None:
+    result = SqlGuard().check("select * from public.customers")
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert "wildcard_projection_not_allowed" in result.rejection_reasons
+
+
+def test_guard_rejects_qualified_wildcard() -> None:
+    result = SqlGuard().check("select c.*, c.id from public.customers c")
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert "wildcard_projection_not_allowed" in result.rejection_reasons
+
+
 def test_guard_rejects_non_whitelisted_functions() -> None:
     result = SqlGuard().check("select md5(email) from public.customers")
 

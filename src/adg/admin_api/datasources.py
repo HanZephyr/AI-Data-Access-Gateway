@@ -1,4 +1,3 @@
-import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -47,7 +46,7 @@ def _serialize_datasource(
         "name": datasource.name,
         "type": datasource.type,
         "datasource_kind": datasource.datasource_kind,
-        "config": json.loads(datasource.config_json),
+        "config": datasource.admin_config(),
         "status": datasource.status,
         "created_at": datasource.created_at.isoformat(),
         "updated_at": datasource.updated_at.isoformat(),

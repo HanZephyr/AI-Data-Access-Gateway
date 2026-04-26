@@ -15,14 +15,14 @@ describe("datasource config helpers", () => {
         port: 15432,
         database: "warehouse",
         username: "analyst",
-        password: "secret",
+        password: { kind: "secret_placeholder", configured: true },
       }),
     ).toEqual({
       host: "db.internal",
       port: 15432,
       database: "warehouse",
       username: "analyst",
-      password: "secret",
+      password: "",
     });
   });
 
@@ -34,6 +34,23 @@ describe("datasource config helpers", () => {
         database: "warehouse",
         username: "analyst",
         password: "",
+      }),
+    ).toEqual({
+      host: "db.internal",
+      port: 15432,
+      database: "warehouse",
+      username: "analyst",
+    });
+  });
+
+  it("treats secret placeholder bullets as an unchanged password", () => {
+    expect(
+      datasourceConfigFromFormValues({
+        host: "db.internal",
+        port: 15432,
+        database: "warehouse",
+        username: "analyst",
+        password: "••••••••",
       }),
     ).toEqual({
       host: "db.internal",
