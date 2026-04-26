@@ -42,10 +42,16 @@ class GatewayRuntimeService:
         """Return active datasources visible to runtime callers."""
 
         self._session.flush()
+        visible_datasource_ids = {
+            resource.datasource_id for resource in self._visible_resources(identity=identity)
+        }
         datasources = self._session.execute(
-            select(Datasource).where(
+            select(Datasource)
+            .where(
                 Datasource.status == "active",
+                Datasource.id.in_(visible_datasource_ids),
             )
+            .order_by(Datasource.name)
         ).scalars()
         response = {
             "datasources": [
@@ -180,16 +186,17 @@ class GatewayRuntimeService:
                 field_name=field.name,
                 action="read",
             )
-            columns.append(
-                {
-                    "name": field.name,
-                    "data_type": field.data_type,
-                    "nullable": field.nullable,
-                    "description": field.description,
-                    "access": "allowed" if field_access.allowed else "denied",
-                    "masking_strategy": None,
-                }
-            )
+            if field_access.allowed:
+                columns.append(
+                    {
+                        "name": field.name,
+                        "data_type": field.data_type,
+                        "nullable": field.nullable,
+                        "description": field.description,
+                        "access": "allowed",
+                        "masking_strategy": None,
+                    }
+                )
         self._record_discovery(
             identity, api_key_id, "describe_resource", resource.datasource_id, [resource.id]
         )

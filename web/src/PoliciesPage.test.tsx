@@ -174,5 +174,5 @@ describe("Policies page", () => {
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 });

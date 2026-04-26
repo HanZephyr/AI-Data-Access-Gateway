@@ -130,13 +130,39 @@ def allow_resource_read(
     )
 
 
-def test_list_datasources_returns_active_only(db_session: Session) -> None:
-    add_datasource(db_session, datasource_id="ds_active")
+def test_list_datasources_only_returns_datasources_with_visible_resources(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session, datasource_id="ds_visible")
+    add_datasource(db_session, datasource_id="ds_hidden")
     add_datasource(db_session, datasource_id="ds_disabled", status="disabled")
+    visible = add_resource(
+        db_session,
+        resource_id="res_visible",
+        datasource_id="ds_visible",
+        path="warehouse.public.visible_customers",
+    )
+    hidden = add_resource(
+        db_session,
+        resource_id="res_hidden",
+        datasource_id="ds_hidden",
+        path="warehouse.public.hidden_customers",
+    )
+    allow_resource_read(db_session, visible.id)
+    db_session.add(
+        ResourcePolicy(
+            subject_type="all",
+            subject_id="*",
+            effect="deny",
+            action="read",
+            resource_id=hidden.id,
+            status="active",
+        )
+    )
 
     response = runtime(db_session).list_datasources(identity=identity(), api_key_id="key_1")
 
-    assert [item["id"] for item in response["datasources"]] == ["ds_active"]
+    assert [item["id"] for item in response["datasources"]] == ["ds_visible"]
 
 
 def test_tags_only_include_accessible_resources(db_session: Session) -> None:
@@ -222,7 +248,7 @@ def test_runtime_discovery_hides_disabled_resources_and_fields(
     assert disabled_description == {"status": "rejected", "reason": "resource_disabled"}
 
 
-def test_describe_resource_marks_denied_fields(db_session: Session) -> None:
+def test_describe_resource_hides_denied_fields(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
     allow_resource_read(db_session, resource.id)
@@ -244,9 +270,16 @@ def test_describe_resource_marks_denied_fields(db_session: Session) -> None:
         resource_id=resource.id,
     )
 
-    fields_by_name = {field["name"]: field for field in response["columns"]}
-    assert fields_by_name["id"]["access"] == "allowed"
-    assert fields_by_name["email"]["access"] == "denied"
+    assert response["columns"] == [
+        {
+            "name": "id",
+            "data_type": "integer",
+            "nullable": False,
+            "description": None,
+            "access": "allowed",
+            "masking_strategy": None,
+        }
+    ]
 
 
 def test_execute_query_rejects_actual_resources_outside_declared_scope(

@@ -11,6 +11,8 @@ from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.directory import Role, User, UserRole
+from adg.control_plane.models.governance import ResourcePolicy
+from adg.control_plane.models.resource import Resource
 from adg.mcp_server.server import runtime_mcp_server
 from adg.shared.security import hash_api_key
 
@@ -49,6 +51,30 @@ def build_streamable_mcp_app() -> tuple[FastAPI, sessionmaker[Session]]:
                 type="postgres",
                 datasource_kind="relational",
                 config_json="{}",
+                status="active",
+            )
+        )
+        session.add(
+            Resource(
+                id="res_customers",
+                datasource_id="ds_1",
+                parent_id=None,
+                kind="relational_table",
+                name="customers",
+                path="warehouse.public.customers",
+                display_name="customers",
+                query_language="sql",
+                status="active",
+                metadata_json="{}",
+            )
+        )
+        session.add(
+            ResourcePolicy(
+                subject_type="user",
+                subject_id="user_1",
+                effect="allow",
+                action="read",
+                resource_id="res_customers",
                 status="active",
             )
         )

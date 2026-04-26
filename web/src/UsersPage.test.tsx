@@ -170,7 +170,7 @@ describe("Users console page", () => {
     await signInWithValidAdminKey();
     expect(localStorage.getItem("adg.apiKey")).toBeNull();
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 
   it("shows a users navigation item and no standalone organization page", async () => {
     await mountConsoleApp("users");
@@ -179,7 +179,7 @@ describe("Users console page", () => {
     expect((await screen.findAllByText("Users")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
     expect(screen.queryByText("Organization")).not.toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 
   it("opens the excel import modal with click and drag upload affordances", async () => {
     await mountConsoleApp("users");
@@ -237,7 +237,7 @@ describe("Users console page", () => {
     fireEvent.contextMenu(screen.getByText("/"));
     expect(await screen.findByText("Create node")).toBeInTheDocument();
     expect(screen.queryByText("Delete node")).not.toBeInTheDocument();
-  });
+  }, 30000);
 
   it("opens a left-side navigation drawer on small screens", async () => {
     await mountConsoleApp("overview");

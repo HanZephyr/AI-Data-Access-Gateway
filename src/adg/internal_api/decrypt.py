@@ -46,6 +46,29 @@ def decrypt_values(
         resources = list(
             session.execute(select(Resource).where(Resource.id.in_(resource_ids))).scalars()
         )
+        if len(resources) != len(resource_ids):
+            context_datasource_ids = {context.datasource_id for context in contexts}
+            AuditService(session).record_event(
+                user_id=user_id,
+                api_key_id=api_key.id,
+                event_type="decryption",
+                decision="denied",
+                datasource_id=(
+                    next(iter(context_datasource_ids))
+                    if len(context_datasource_ids) == 1
+                    else None
+                ),
+                resource_ids=resource_ids,
+                query_id=None,
+                sql_text=None,
+                reason="decrypt_context_resource_unavailable",
+                metadata={"value_count": len(values)},
+            )
+            session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Decrypt context references unavailable resource",
+            )
         for resource in resources:
             decision = policy.check_decrypt_access(
                 identity=api_key.runtime_identity,

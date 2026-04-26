@@ -143,3 +143,27 @@ def test_runtime_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Decrypt not allowed for this resource"
+
+
+def test_runtime_decrypt_rejects_when_context_resource_no_longer_exists() -> None:
+    client, marker, session_factory = build_internal_app()
+
+    with session_factory() as session:
+        resource = session.get(Resource, "res_customers")
+        assert resource is not None
+        session.delete(resource)
+        session.commit()
+
+    response = client.post(
+        "/runtime/decrypt",
+        json={"values": [marker]},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Decrypt context references unavailable resource"
+    with session_factory() as session:
+        events = session.execute(select(AuditEvent).order_by(AuditEvent.created_at)).scalars().all()
+    assert events[-1].event_type == "decryption"
+    assert events[-1].decision == "denied"
+    assert events[-1].resource_ids == ["res_customers"]

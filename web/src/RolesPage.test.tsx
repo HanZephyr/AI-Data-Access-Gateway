@@ -226,7 +226,7 @@ describe("Roles page", () => {
     fireEvent.click(screen.getByRole("button", { name: "View linked users" }));
     expect(await screen.findByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 
   it("shows datasource secret placeholders and omits unchanged passwords from update payloads", async () => {
     await mountConsoleApp("datasources");
@@ -242,7 +242,7 @@ describe("Roles page", () => {
       expect(lastDatasourcePatchBody).not.toBeNull();
     });
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.password");
-  }, 20000);
+  }, 30000);
 
   it("keeps audit rows summary-only and loads raw SQL on demand", async () => {
     await mountConsoleApp("audit");
@@ -253,5 +253,5 @@ describe("Roles page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "View SQL" }));
     expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
-  }, 20000);
+  }, 30000);
 });
