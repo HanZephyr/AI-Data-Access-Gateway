@@ -31,6 +31,7 @@ class DecryptContext(Base):
     query_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     user_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     datasource_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    resource_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     key_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     allowed_fields_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     expires_at: Mapped[datetime] = mapped_column(

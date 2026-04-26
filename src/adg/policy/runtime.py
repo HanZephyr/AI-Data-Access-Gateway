@@ -91,7 +91,7 @@ class RuntimePolicyService:
         self._session.flush()
         policies = self._resource_policies(identity=identity, action=action)
         if not policies:
-            return PolicyDecision(allowed=True, reason="no_policy")
+            return PolicyDecision(allowed=False, reason="no_policy_default_deny")
 
         # Once policies exist for an action, at least one subject/resource match must allow it.
         matching = [
@@ -105,6 +105,31 @@ class RuntimePolicyService:
         if any(policy.effect == "allow" for policy in matching):
             return PolicyDecision(allowed=True, reason="allowed_by_policy")
         return PolicyDecision(allowed=False, reason="no_matching_allow")
+
+    def check_decrypt_access(
+        self,
+        *,
+        identity: IdentityContext,
+        resource: Resource,
+    ) -> PolicyDecision:
+        """Decide whether an identity may decrypt masked values for a resource."""
+
+        self._session.flush()
+        policies = self._resource_policies(identity=identity, action="read")
+        if not policies:
+            return PolicyDecision(allowed=False, reason="no_policy_default_deny")
+
+        matching = [
+            policy
+            for policy in policies
+            if self._subject_matches(policy, identity)
+            and self._resource_policy_matches(policy, resource)
+        ]
+        if any(policy.effect == "deny" for policy in matching):
+            return PolicyDecision(allowed=False, reason="denied_by_policy")
+        if any(policy.effect == "allow" and policy.allow_decrypt for policy in matching):
+            return PolicyDecision(allowed=True, reason="allowed_by_policy")
+        return PolicyDecision(allowed=False, reason="decrypt_not_allowed")
 
     def check_field_access(
         self,

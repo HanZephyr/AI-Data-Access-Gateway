@@ -105,7 +105,7 @@ def test_runtime_identity_rejects_unbound_runtime_key(db_session: Session) -> No
     assert exc_info.value.detail == "Runtime key must be bound to a user"
 
 
-def test_resource_access_defaults_to_allow_when_no_policies_exist(
+def test_resource_access_defaults_to_deny_when_no_policies_exist(
     db_session: Session,
 ) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
@@ -116,8 +116,8 @@ def test_resource_access_defaults_to_allow_when_no_policies_exist(
         action="read",
     )
 
-    assert decision.allowed is True
-    assert decision.reason == "no_policy"
+    assert decision.allowed is False
+    assert decision.reason == "no_policy_default_deny"
 
 
 def test_resource_access_requires_matching_allow_when_policies_exist(
@@ -216,6 +216,16 @@ def test_legacy_group_tag_policy_does_not_match_runtime_identity(
 def test_field_policy_can_narrow_resource_access(db_session: Session) -> None:
     resource = add_resource(db_session=db_session, resource_id="res_customers")
     db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            resource_id=resource.id,
+            status="active",
+        )
+    )
+    db_session.add(
         FieldPolicy(
             subject_type="all",
             subject_id="*",
@@ -247,3 +257,46 @@ def test_field_policy_can_narrow_resource_access(db_session: Session) -> None:
         ).allowed
         is True
     )
+
+
+def test_decrypt_access_requires_explicit_allow_decrypt_flag(db_session: Session) -> None:
+    resource = add_resource(db_session=db_session, resource_id="res_customers")
+    db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            resource_id=resource.id,
+            allow_decrypt=False,
+            status="active",
+        )
+    )
+
+    denied = RuntimePolicyService(db_session).check_decrypt_access(
+        identity=identity(),
+        resource=resource,
+    )
+
+    assert denied.allowed is False
+    assert denied.reason == "decrypt_not_allowed"
+
+    db_session.add(
+        ResourcePolicy(
+            subject_type="user",
+            subject_id="user-1",
+            effect="allow",
+            action="read",
+            resource_id=resource.id,
+            allow_decrypt=True,
+            status="active",
+        )
+    )
+
+    allowed = RuntimePolicyService(db_session).check_decrypt_access(
+        identity=identity(),
+        resource=resource,
+    )
+
+    assert allowed.allowed is True
+    assert allowed.reason == "allowed_by_policy"

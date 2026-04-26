@@ -109,6 +109,27 @@ def runtime(db_session: Session) -> GatewayRuntimeService:
     )
 
 
+def allow_resource_read(
+    db_session: Session,
+    resource_id: str | None = None,
+    *,
+    subject_type: str = "role",
+    subject_id: str = "analyst",
+    allow_decrypt: bool = False,
+) -> None:
+    db_session.add(
+        ResourcePolicy(
+            subject_type=subject_type,
+            subject_id=subject_id,
+            effect="allow",
+            action="read",
+            resource_id=resource_id,
+            allow_decrypt=allow_decrypt,
+            status="active",
+        )
+    )
+
+
 def test_list_datasources_returns_active_only(db_session: Session) -> None:
     add_datasource(db_session, datasource_id="ds_active")
     add_datasource(db_session, datasource_id="ds_disabled", status="disabled")
@@ -204,6 +225,7 @@ def test_runtime_discovery_hides_disabled_resources_and_fields(
 def test_describe_resource_marks_denied_fields(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
     db_session.add(
         FieldPolicy(
             subject_type="all",
@@ -231,8 +253,9 @@ def test_execute_query_rejects_actual_resources_outside_declared_scope(
     db_session: Session,
 ) -> None:
     add_datasource(db_session)
-    add_resource(db_session, resource_id="res_customers")
+    resource = add_resource(db_session, resource_id="res_customers")
     add_resource(db_session, resource_id="res_orders", path="warehouse.public.orders")
+    allow_resource_read(db_session, resource.id)
 
     response = runtime(db_session).execute_query(
         identity=identity(),
@@ -252,6 +275,7 @@ def test_execute_query_rejects_actual_resources_outside_declared_scope(
 def test_execute_query_rejects_unknown_sql_resources(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
 
     response = runtime(db_session).execute_query(
         identity=identity(),
@@ -271,6 +295,7 @@ def test_execute_query_rejects_unknown_sql_resources(db_session: Session) -> Non
 def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
 
     response = runtime(db_session).execute_query(
         identity=identity(),
@@ -295,6 +320,7 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
 def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
     db_session.add(
         MaskingPolicy(
             resource_id=resource.id,
@@ -323,6 +349,7 @@ def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None
 def test_execute_query_applies_reversible_masking_policy(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id, allow_decrypt=True)
     db_session.add(
         MaskingPolicy(
             resource_id=resource.id,
@@ -352,6 +379,7 @@ def test_execute_query_applies_reversible_masking_policy(db_session: Session) ->
 def test_preview_resource_runs_bounded_preview(db_session: Session) -> None:
     add_datasource(db_session)
     resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
 
     response = runtime(db_session).preview_resource(
         identity=identity(),

@@ -51,6 +51,7 @@ class MaskingService:
                     masked_row[policy.field_name] = self.mask_reversible_value(
                         user_id=identity.user_id,
                         datasource_id=datasource_id,
+                        resource_ids=[resource.id for resource in resources],
                         query_id=query_id,
                         field_name=policy.field_name,
                         value=masked_row[policy.field_name],
@@ -99,6 +100,7 @@ class MaskingService:
         *,
         user_id: str | None,
         datasource_id: str,
+        resource_ids: list[str] | None = None,
         query_id: str,
         field_name: str,
         value: object,
@@ -116,6 +118,7 @@ class MaskingService:
             query_id=query_id,
             user_id=user_id,
             datasource_id=datasource_id,
+            resource_ids_json=json.dumps(resource_ids or [], separators=(",", ":")),
             key_ciphertext=self._service_fernet.encrypt(temporary_key).decode(),
             allowed_fields_json=json.dumps([field_name], separators=(",", ":")),
             expires_at=expires_at or datetime.now(UTC) + timedelta(minutes=15),
@@ -137,17 +140,21 @@ class MaskingService:
             for value in values
         ]
 
+    def get_decrypt_contexts(
+        self,
+        *,
+        user_id: str | None,
+        values: list[str],
+    ) -> list[DecryptContext]:
+        """Resolve reversible markers into validated decrypt contexts."""
+
+        return [self._get_decrypt_context(user_id=user_id, marker=value) for value in values]
+
     def _decrypt_marker(self, *, user_id: str | None, marker: str) -> str:
         """Validate marker ownership and TTL before decrypting the value payload."""
 
-        context_id, ciphertext = self._parse_marker(marker)
-        context = self._session.get(DecryptContext, context_id)
-        if context is None:
-            raise ValidationError("Decrypt context not found")
-        if context.user_id != user_id:
-            raise ValidationError("Decrypt context does not match identity")
-        if self._normalize_time(context.expires_at) <= datetime.now(UTC):
-            raise ValidationError("Decrypt context expired")
+        _, ciphertext = self._parse_marker(marker)
+        context = self._get_decrypt_context(user_id=user_id, marker=marker)
 
         try:
             temporary_key = self._service_fernet.decrypt(context.key_ciphertext.encode())
@@ -155,6 +162,19 @@ class MaskingService:
         except InvalidToken as error:
             raise ValidationError("Decrypt value is invalid") from error
         return plaintext
+
+    def _get_decrypt_context(self, *, user_id: str | None, marker: str) -> DecryptContext:
+        """Load one decrypt context and enforce identity and TTL validation."""
+
+        context_id, _ = self._parse_marker(marker)
+        context = self._session.get(DecryptContext, context_id)
+        if context is None:
+            raise ValidationError("Decrypt context not found")
+        if context.user_id != user_id:
+            raise ValidationError("Decrypt context does not match identity")
+        if self._normalize_time(context.expires_at) <= datetime.now(UTC):
+            raise ValidationError("Decrypt context expired")
+        return context
 
     def _parse_marker(self, marker: str) -> tuple[str, str]:
         """Parse the reversible marker format into context id and ciphertext."""

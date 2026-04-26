@@ -34,7 +34,7 @@ from adg.mcp_api.runtime_tools import serialize_runtime_tool_definitions
 router = APIRouter(prefix="/admin", tags=["admin-console"])
 
 PolicySubjectType = Literal["all", "user", "role"]
-SERVICE_API_KEY_SCOPES = {"admin", "internal"}
+SERVICE_API_KEY_SCOPES = {"admin"}
 
 
 class TagRequest(BaseModel):
@@ -92,6 +92,7 @@ class ResourcePolicyRequest(BaseModel):
     action: str
     resource_id: str | None = None
     tag_id: str | None = None
+    allow_decrypt: bool = False
     priority: int = 0
     status: str = "active"
 
@@ -105,6 +106,7 @@ class ResourcePolicyUpdateRequest(BaseModel):
     action: str | None = None
     resource_id: str | None = None
     tag_id: str | None = None
+    allow_decrypt: bool | None = None
     priority: int | None = None
     status: str | None = None
 
@@ -1228,7 +1230,7 @@ def _validate_service_api_key_scopes(scopes: list[str]) -> None:
     if unsupported:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only admin and internal scopes are allowed on this page",
+            detail="Only admin scope is allowed on this page",
         )
 
 
@@ -1487,6 +1489,7 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
         "resource_id": policy.resource_id,
         "tag_id": policy.tag_id,
         "tag_name": _tag_name(session, policy.tag_id),
+        "allow_decrypt": policy.allow_decrypt,
         "priority": policy.priority,
         "status": policy.status,
     }

@@ -11,6 +11,9 @@ from adg.audit.models import AuditEvent
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
+from adg.control_plane.models.directory import Role, User, UserRole
+from adg.control_plane.models.governance import ResourcePolicy
+from adg.control_plane.models.resource import Resource
 from adg.masking.service import MaskingService
 from adg.shared.security import hash_api_key
 
@@ -26,17 +29,47 @@ def build_internal_app(
     with session_factory() as session:
         session.add(
             ApiKey(
-                id="key_internal",
-                name="internal",
-                key_hash=hash_api_key("adg_internal"),
+                id="key_runtime",
+                name="runtime",
+                key_hash=hash_api_key("adg_runtime"),
+                user_id="user-1",
                 status="active",
-                scopes='["internal"]',
+                scopes='["runtime"]',
+            )
+        )
+        session.add(User(id="user-1", name="Alice", external_ref="u001", status="active"))
+        session.add(Role(id="role_analyst", name="Analyst", status="active"))
+        session.add(UserRole(user_id="user-1", role_id="role_analyst"))
+        session.add(
+            Resource(
+                id="res_customers",
+                datasource_id="ds_1",
+                parent_id=None,
+                kind="relational_table",
+                name="customers",
+                path="warehouse.public.customers",
+                display_name="customers",
+                query_language="sql",
+                status="active",
+                metadata_json="{}",
+            )
+        )
+        session.add(
+            ResourcePolicy(
+                subject_type="user",
+                subject_id="user-1",
+                effect="allow",
+                action="read",
+                resource_id="res_customers",
+                allow_decrypt=True,
+                status="active",
             )
         )
         service = MaskingService(session, secret_key=get_settings().secret_key)
         marker = service.mask_reversible_value(
             user_id="user-1",
             datasource_id="ds_1",
+            resource_ids=["res_customers"],
             query_id="qry_1",
             field_name="email",
             value="alice@example.com",
@@ -63,8 +96,8 @@ def test_internal_decrypt_returns_plaintext_and_audits() -> None:
 
     response = client.post(
         "/internal/decrypt",
-        json={"user_id": "user-1", "values": [marker]},
-        headers={"X-ADG-API-Key": "adg_internal"},
+        json={"values": [marker]},
+        headers={"X-ADG-API-Key": "adg_runtime"},
     )
 
     assert response.status_code == 200
@@ -80,9 +113,31 @@ def test_internal_decrypt_rejects_expired_context() -> None:
 
     response = client.post(
         "/internal/decrypt",
-        json={"user_id": "user-1", "values": [marker]},
-        headers={"X-ADG-API-Key": "adg_internal"},
+        json={"values": [marker]},
+        headers={"X-ADG-API-Key": "adg_runtime"},
     )
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Decrypt context expired"
+
+
+def test_internal_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
+    client, marker, session_factory = build_internal_app()
+
+    with session_factory() as session:
+        policy = (
+            session.query(ResourcePolicy)
+            .filter(ResourcePolicy.resource_id == "res_customers")
+            .one()
+        )
+        policy.allow_decrypt = False
+        session.commit()
+
+    response = client.post(
+        "/internal/decrypt",
+        json={"values": [marker]},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Decrypt not allowed for this resource"

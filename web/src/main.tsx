@@ -44,6 +44,7 @@ import {
   Select,
   Space,
   Statistic,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -178,7 +179,7 @@ const translations = {
     "placeholder.orgNodeSearch": "Select an organization node",
     "apiKey.newTitle": "New API key",
     "apiKey.serviceTitle": "Service and operator keys",
-    "apiKey.serviceDescription": "Runtime user keys are managed from the Users workspace. This page only creates non-user service keys with admin or internal scopes.",
+    "apiKey.serviceDescription": "Runtime user keys are managed from the Users workspace. This page only creates admin control-plane keys.",
     "apiKey.serviceCreate": "Create service key",
     "field.name": "Name",
     "field.type": "Type",
@@ -197,6 +198,7 @@ const translations = {
     "field.subject": "Subject",
     "field.effect": "Effect",
     "field.action": "Action",
+    "field.allowDecrypt": "Allow decrypt",
     "field.resourceId": "Resource",
     "field.field": "Field",
     "field.tagId": "Tag ID",
@@ -496,7 +498,7 @@ const translations = {
     "placeholder.orgNodeSearch": "选择组织节点",
     "apiKey.newTitle": "新 API 密钥",
     "apiKey.serviceTitle": "服务与操作员密钥",
-    "apiKey.serviceDescription": "运行时用户密钥统一在用户工作区里生成和重置。这个页面只允许创建 admin 或 internal 作用域的非用户服务密钥。",
+    "apiKey.serviceDescription": "运行时用户密钥统一在用户工作区里生成和重置。这个页面只用于创建 admin 管理密钥。",
     "apiKey.serviceCreate": "新建服务密钥",
     "field.name": "名称",
     "field.type": "类型",
@@ -515,6 +517,7 @@ const translations = {
     "field.subject": "主体",
     "field.effect": "效果",
     "field.action": "操作",
+    "field.allowDecrypt": "允许解密",
     "field.resourceId": "资源",
     "field.field": "字段",
     "field.tagId": "标签 ID",
@@ -813,7 +816,7 @@ const translations = {
     "placeholder.orgNodeSearch": "選擇組織節點",
     "apiKey.newTitle": "新 API 金鑰",
     "apiKey.serviceTitle": "服務與操作員金鑰",
-    "apiKey.serviceDescription": "執行時使用者金鑰統一在 Users 工作區裡產生與重置。這個頁面只允許建立 admin 或 internal 範圍的非使用者服務金鑰。",
+    "apiKey.serviceDescription": "執行時使用者金鑰統一在 Users 工作區裡產生與重置。這個頁面只用於建立 admin 管理金鑰。",
     "apiKey.serviceCreate": "建立服務金鑰",
     "field.name": "名稱",
     "field.type": "類型",
@@ -832,6 +835,7 @@ const translations = {
     "field.subject": "主體",
     "field.effect": "效果",
     "field.action": "操作",
+    "field.allowDecrypt": "允許解密",
     "field.resourceId": "資源",
     "field.field": "欄位",
     "field.tagId": "標籤 ID",
@@ -3404,7 +3408,14 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const openCreate = () => {
     setTargetMode("resource");
     form.resetFields();
-    form.setFieldsValue({ subject_type: "user", effect: "allow", action: "read", priority: 0, status: "active" });
+    form.setFieldsValue({
+      subject_type: "user",
+      effect: "allow",
+      action: "read",
+      allow_decrypt: false,
+      priority: 0,
+      status: "active",
+    });
     setOpen(true);
   };
 
@@ -3443,6 +3454,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
     currentTargetMode: "resource" | "tag",
     setCurrentTargetMode: React.Dispatch<React.SetStateAction<"resource" | "tag">>,
   ) => {
+    const effectValue = Form.useWatch("effect", targetForm) || "allow";
     return (
       <Form form={targetForm} layout="vertical">
         <div className="config-form-grid">
@@ -3521,6 +3533,13 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 <TagSelect tags={tags.data || []} t={t} />
               </Form.Item>
             )}
+            <Form.Item
+              name="allow_decrypt"
+              label={t("field.allowDecrypt")}
+              valuePropName="checked"
+            >
+              <Switch disabled={effectValue !== "allow"} />
+            </Form.Item>
           </div>
         ) : null}
         {isField ? (
@@ -3564,6 +3583,14 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
           { title: columnLabel("subject_id", t), dataIndex: "subject_label", key: "subject_label" },
           { title: columnLabel("effect", t), dataIndex: "effect", key: "effect", render: (value: string) => optionLabel(value, t) },
           { title: columnLabel("action", t), dataIndex: "action", key: "action" },
+          ...(isField
+            ? []
+            : [{
+                title: t("field.allowDecrypt"),
+                dataIndex: "allow_decrypt",
+                key: "allow_decrypt",
+                render: (value: boolean) => (value ? t("common.yes") : t("common.no")),
+              }]),
           ...(isField ? [] : [{ title: columnLabel("tag_id", t), dataIndex: "tag_name", key: "tag_name" }]),
           { title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" },
           ...(isField ? [{ title: columnLabel("field_name", t), dataIndex: "field_name", key: "field_name" }] : []),
@@ -3751,7 +3778,6 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
   const { t } = useI18n();
   const serviceKeyScopeOptions = [
     { value: "admin", label: "admin" },
-    { value: "internal", label: "internal" },
   ];
   const state = useData<AnyRecord[]>(() => api.request("/admin/api-keys"), [api.apiKey]);
   const [open, setOpen] = useState(false);
@@ -4581,6 +4607,7 @@ function normalizePolicyValues(
 
   payload.resource_id = targetMode === "resource" ? values.resource_id : null;
   payload.tag_id = targetMode === "tag" ? values.tag_id : null;
+  payload.allow_decrypt = values.effect === "allow" && Boolean(values.allow_decrypt);
   return payload;
 }
 

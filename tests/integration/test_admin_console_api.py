@@ -288,11 +288,13 @@ def test_admin_policy_and_masking_policy_management() -> None:
             "effect": "allow",
             "action": "read",
             "resource_id": "res_customers",
+            "allow_decrypt": True,
         },
         headers=auth(),
     )
     assert resource_policy.status_code == 201
     assert resource_policy.json()["resource_label"] == "customers / warehouse.public.customers"
+    assert resource_policy.json()["allow_decrypt"] is True
     resource_policy_id = resource_policy.json()["id"]
 
     field_policy = client.post(
@@ -327,12 +329,13 @@ def test_admin_policy_and_masking_policy_management() -> None:
 
     updated_resource_policy = client.patch(
         f"/admin/resource-policies/{resource_policy_id}",
-        json={"priority": 10, "status": "disabled"},
+        json={"priority": 10, "status": "disabled", "allow_decrypt": False},
         headers=auth(),
     )
     assert updated_resource_policy.status_code == 200
     assert updated_resource_policy.json()["priority"] == 10
     assert updated_resource_policy.json()["status"] == "disabled"
+    assert updated_resource_policy.json()["allow_decrypt"] is False
 
     updated_field_policy = client.patch(
         f"/admin/field-policies/{field_policy_id}",
@@ -482,12 +485,12 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
 
     updated = client.patch(
         f"/admin/api-keys/{key_id}",
-        json={"name": "service-internal", "scopes": ["admin", "internal"]},
+        json={"name": "service-admin", "scopes": ["admin"]},
         headers=auth(),
     )
     assert updated.status_code == 200
-    assert updated.json()["name"] == "service-internal"
-    assert updated.json()["scopes"] == ["admin", "internal"]
+    assert updated.json()["name"] == "service-admin"
+    assert updated.json()["scopes"] == ["admin"]
 
     rejected = client.patch(
         f"/admin/api-keys/{key_id}",
@@ -495,7 +498,7 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
         headers=auth(),
     )
     assert rejected.status_code == 400
-    assert rejected.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
+    assert rejected.json() == {"detail": "Only admin scope is allowed on this page"}
 
     revoked = client.post(f"/admin/api-keys/{key_id}/revoke", headers=auth())
     assert revoked.status_code == 200

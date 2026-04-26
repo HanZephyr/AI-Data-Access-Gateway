@@ -334,7 +334,7 @@ def test_admin_cannot_create_service_api_key_with_runtime_scope() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
+    assert response.json() == {"detail": "Only admin scope is allowed on this page"}
 
 
 def test_admin_cannot_update_service_api_key_to_runtime_scope() -> None:
@@ -347,7 +347,7 @@ def test_admin_cannot_update_service_api_key_to_runtime_scope() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Only admin and internal scopes are allowed on this page"}
+    assert response.json() == {"detail": "Only admin scope is allowed on this page"}
 
 
 def test_admin_can_create_update_and_delete_org_nodes() -> None:
