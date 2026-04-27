@@ -286,7 +286,6 @@ const translations = {
     "users.importPlatform": "Platform import",
     "users.importPlatformHint": "Fill the official app credentials for one platform. The gateway will pull departments and users directly from that platform when you preview or execute the import.",
     "users.platformGuide": "Setup guide",
-    "users.platformGuideSummary": "Expand to see the app setup flow, required permissions, and how to obtain the configuration values.",
     "users.platformGuidePermissions": "Required permissions",
     "users.platformGuideManifest":
       "In Feishu developer console, open Permission management -> Batch import/export permissions and paste this JSON:",
@@ -308,7 +307,7 @@ const translations = {
     "users.platformFeishuStep4":
       "Required: in Version management & release, create a version, set availability to all employees, submit it for release, and wait for enterprise admin approval. Unlike DingTalk, Feishu permissions do not take effect until the app version is released and approved.",
     "users.platformFeishuPermissions":
-      "The app must include contact:contact.base:readonly, contact:department.base:readonly, contact:user.base:readonly, and contact:user.employee_id:readonly. Key point: the sync flow uses user_id (employee_id) as the unique identifier so directory members can be matched correctly with Feishu bot-channel users. open_id differs across apps and cannot be used as a cross-app identity, so contact:user.employee_id:readonly is mandatory.",
+      "The app must include contact:contact.base:readonly, contact:department.base:readonly, contact:user.base:readonly, and contact:user.employee_id:readonly.",
     "users.platformWecomStep1": "Create or reuse a Contacts Secret in Enterprise WeChat and grant read-only access to departments and members.",
     "users.platformWecomStep2": "Fill in the Corp ID, Contacts Secret, and the root department ID. The default root department ID is 1 for full-tree imports.",
     "users.platformWecomStep3": "Preview the generated organization paths before running the import. The gateway resolves department ids into full paths automatically.",
@@ -618,7 +617,6 @@ const translations = {
     "users.importPlatform": "平台导入",
     "users.importPlatformHint": "按平台填写官方应用凭据。预览或执行导入时，网关会直接调用对应平台的组织与用户接口，不再要求你手工粘贴返回体。",
     "users.platformGuide": "配置说明",
-    "users.platformGuideSummary": "展开后可查看应用配置步骤、所需权限，以及这些配置项应当从哪里获取。",
     "users.platformGuidePermissions": "所需权限",
     "users.platformGuideManifest": "在飞书开发者后台，进入「权限管理」->「批量导入/导出权限」，粘贴以下 JSON：",
     "users.platformGuideManifestNote":
@@ -639,7 +637,7 @@ const translations = {
     "users.platformFeishuStep4":
       "必须执行：左侧菜单进入「版本管理与发布」，创建版本（可用范围设为所有员工），提交审核发布，并在飞书管理后台审批通过。注意：与钉钉不同，飞书所有权限必须经过发版并由企业管理员审批后才能生效，未发布则同步无法正常使用。",
     "users.platformFeishuPermissions":
-      "必须开通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。关键权限说明：同步组织架构时系统使用 user_id（employee_id）作为用户唯一标识，确保组织成员与飞书机器人通道的用户能正确对应；open_id 在不同应用之间不同，不能作为跨应用识别符，因此 contact:user.employee_id:readonly 是必需权限。",
+      "必须开通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。",
     "users.platformWecomStep1": "在企业微信里准备可读通讯录的应用 Secret，并确认该应用具备读取部门和成员的只读权限。",
     "users.platformWecomStep2": "填写 Corp ID、通讯录 Secret 和根部门 ID。若要导入整棵树，根部门 ID 默认填 1。",
     "users.platformWecomStep3": "先预览导入结果。网关会自动把部门 ID 解析成完整组织路径。",
@@ -948,7 +946,6 @@ const translations = {
     "users.importPlatform": "平台匯入",
     "users.importPlatformHint": "依平台填寫官方應用憑據。預覽或執行匯入時，閘道會直接呼叫對應平台的組織與使用者介面，不再要求你手動貼上回傳內容。",
     "users.platformGuide": "設定說明",
-    "users.platformGuideSummary": "展開後可查看應用設定步驟、所需權限，以及這些設定值應當從哪裡取得。",
     "users.platformGuidePermissions": "所需權限",
     "users.platformGuideManifest": "在飛書開發者後台，進入「權限管理」->「批量導入/導出權限」，貼上以下 JSON：",
     "users.platformGuideManifestNote":
@@ -969,7 +966,7 @@ const translations = {
     "users.platformFeishuStep4":
       "必須執行：左側選單進入「版本管理與發布」，建立版本（可用範圍設為所有員工），提交審核發布，並在飛書管理後台審批通過。注意：與釘釘不同，飛書所有權限必須經過發版並由企業管理員審批後才能生效，未發布則同步無法正常使用。",
     "users.platformFeishuPermissions":
-      "必須開通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。關鍵權限說明：同步組織架構時系統使用 user_id（employee_id）作為使用者唯一標識，確保組織成員與飛書機器人通道的使用者能正確對應；open_id 在不同應用之間不同，不能作為跨應用識別符，因此 contact:user.employee_id:readonly 是必需權限。",
+      "必須開通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。",
     "users.platformWecomStep1": "在企業微信準備可讀通訊錄的應用 Secret，並確認該應用具備讀取部門與成員的唯讀權限。",
     "users.platformWecomStep2": "填寫 Corp ID、通訊錄 Secret 和根部門 ID。若要匯入整棵樹，根部門 ID 預設填 1。",
     "users.platformWecomStep3": "先預覽匯入結果。閘道會自動把部門 ID 解析成完整組織路徑。",
@@ -2363,7 +2360,6 @@ function ImportPlatformPanel({
             label: t("users.platformGuide"),
             children: (
               <div className="directory-guide-copy">
-                <Typography.Paragraph>{t("users.platformGuideSummary")}</Typography.Paragraph>
                 <ol>
                   {config.stepKeys.map((key) => (
                     <li key={key}>{t(key)}</li>
