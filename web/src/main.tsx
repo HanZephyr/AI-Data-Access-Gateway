@@ -1821,6 +1821,10 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
           : [];
         setSessionUsers((current) => mergeDirectoryUsers(current, executedUsers, orgNodes, roles));
         reloadDirectory();
+        setImportOpen(false);
+        setImportPreview(null);
+        setImportFile(null);
+        setImportFileName("");
         messageApi.success(t("common.saved"));
       }
     } catch (error) {

@@ -231,6 +231,21 @@ describe("Users console page", () => {
     expect(screen.queryByText("Users response")).not.toBeInTheDocument();
   }, 30000);
 
+  it("closes the import modal after a successful execute import", async () => {
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+    fireEvent.click(await screen.findByText("Import user data"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Feishu" }));
+    expect((await screen.findAllByText("App ID")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Execute import" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).not.toBeVisible();
+    });
+  }, 30000);
+
   it("renders the rooted org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
     await signInWithValidAdminKey();
