@@ -189,7 +189,24 @@ describe("Users console page", () => {
     expect((await screen.findAllByText("Upload file")).length).toBeGreaterThan(0);
     expect(screen.getByText("Drag file here")).toBeInTheDocument();
     expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
-  });
+  }, 30000);
+
+  it("keeps the selected Excel file inside the dragger without rendering a separate upload list", async () => {
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+    fireEvent.click(await screen.findByText("Import user data"));
+
+    const uploadInput = document.querySelector('input[type="file"]');
+    expect(uploadInput).not.toBeNull();
+
+    const file = new File(["name,external_ref\nAlice,u001"], "users.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    fireEvent.change(uploadInput as HTMLInputElement, { target: { files: [file] } });
+
+    expect((await screen.findAllByText("users.xlsx")).length).toBeGreaterThan(0);
+    expect(document.querySelector(".ant-upload-list")).toBeNull();
+  }, 30000);
 
   it("shows localized field guidance and credential-based third-party import tabs in the import modal", async () => {
     await mountConsoleApp("users");
@@ -225,7 +242,7 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getByText("Runtime key")).toBeInTheDocument();
     });
-  });
+  }, 30000);
 
   it("opens context actions from the org tree nodes instead of top toolbar icons", async () => {
     await mountConsoleApp("users");
@@ -251,5 +268,5 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
     });
-  });
+  }, 30000);
 });

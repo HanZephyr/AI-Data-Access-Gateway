@@ -2043,7 +2043,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                         setImportFileName(file.name);
                         return false;
                       }}
-                      showUploadList={Boolean(importFile)}
+                      showUploadList={false}
                       onRemove={() => {
                         setImportFile(null);
                         setImportFileName("");
