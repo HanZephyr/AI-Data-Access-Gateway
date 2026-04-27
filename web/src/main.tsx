@@ -1607,6 +1607,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importPreview, setImportPreview] = useState<AnyRecord | null>(null);
@@ -1653,6 +1654,52 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     orgNodesState.reload();
     rolesState.reload();
     usersState.reload();
+  };
+
+  const replaceSessionUser = (nextUser: DirectoryUserRecord) => {
+    const nextId = String(nextUser.id || nextUser.user_id || "");
+    setSessionUsers((current) => mergeDirectoryUsers(
+      current.filter((user) => String(user.id || user.user_id || "") !== nextId),
+      [nextUser],
+      orgNodes,
+      roles,
+    ));
+  };
+
+  const removeSessionUser = (userId: string) => {
+    setSessionUsers((current) => current.filter((user) => String(user.id || user.user_id || "") !== userId));
+  };
+
+  const closeUserDrawer = () => {
+    setCreateOpen(false);
+    setEditingUserId(null);
+    createForm.resetFields();
+  };
+
+  const openCreateUser = () => {
+    setEditingUserId(null);
+    createForm.setFieldsValue({
+      name: "",
+      externalRef: "",
+      orgNodeId: undefined,
+      roleIds: [],
+      status: "active",
+    });
+    setCreateOpen(true);
+  };
+
+  const openEditUser = (user: DirectoryUserRecord | null = selectedUser) => {
+    const userId = String(user?.id || user?.user_id || "");
+    if (!user || !userId) return;
+    setEditingUserId(userId);
+    createForm.setFieldsValue({
+      name: user.name,
+      externalRef: user.external_ref,
+      orgNodeId: user.org_node_id || undefined,
+      roleIds: user.role_ids || [],
+      status: user.status || "active",
+    });
+    setCreateOpen(true);
   };
 
   const openCreateOrgNode = (
@@ -1739,6 +1786,30 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
   const saveUser = async () => {
     const values = await createForm.validateFields();
     const payload = buildUserCreatePayload(values);
+    if (editingUserId) {
+      const updated = await api.request<DirectoryUserRecord>(`/admin/users/${editingUserId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...payload,
+          status: String(values.status || "active"),
+        }),
+      });
+      replaceSessionUser({
+        ...updated,
+        id: String(updated.id || editingUserId),
+        user_id: updated.user_id ? String(updated.user_id) : undefined,
+        org_node_id: updated.org_node_id ? String(updated.org_node_id) : null,
+        role_ids: Array.isArray(updated.role_ids) ? updated.role_ids.map(String) : [],
+        role_names: Array.isArray(updated.role_names) ? updated.role_names.map(String) : [],
+        status: String(updated.status || "active"),
+      });
+      setSelectedUserId(String(updated.id || editingUserId));
+      closeUserDrawer();
+      reloadDirectory();
+      messageApi.success(t("common.saved"));
+      return;
+    }
+
     const created = await api.request<AnyRecord>("/admin/users", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1746,7 +1817,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
     const roleNames = roles
       .filter((role) => payload.role_ids.includes(String(role.id)))
       .map((role) => String(role.name));
-    setSessionUsers((current) => mergeDirectoryUsers(current, [{
+    replaceSessionUser({
       id: String(created.id),
       name: String(created.name),
       external_ref: String(created.external_ref),
@@ -1755,13 +1826,24 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
       role_ids: payload.role_ids,
       role_names: roleNames,
       status: String(created.status || "active"),
-    }], orgNodes, roles));
-    setCreateOpen(false);
-    createForm.resetFields();
+    });
+    setSelectedUserId(String(created.id));
+    closeUserDrawer();
+    reloadDirectory();
     modal.info({
       title: t("users.runtimeKey"),
       content: <Typography.Text copyable>{String(created.api_key)}</Typography.Text>,
     });
+  };
+
+  const deleteUser = async (user: DirectoryUserRecord | null = selectedUser) => {
+    const userId = String(user?.id || user?.user_id || "");
+    if (!user || !userId) return;
+    await api.request(`/admin/users/${userId}`, { method: "DELETE" });
+    removeSessionUser(userId);
+    setSelectedUserId((current) => (current === userId ? null : current));
+    reloadDirectory();
+    messageApi.success(t("common.deleted"));
   };
 
   const resetRuntimeKey = async () => {
@@ -1857,7 +1939,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
             <Typography.Paragraph>{t("users.rootMapped")}</Typography.Paragraph>
           </div>
           <Space wrap>
-            <Button icon={<PlusOutlined />} type="primary" onClick={() => setCreateOpen(true)}>
+            <Button icon={<PlusOutlined />} type="primary" onClick={openCreateUser}>
               {t("users.new")}
             </Button>
             <Button icon={<InboxOutlined />} onClick={() => setImportOpen(true)}>
@@ -1902,8 +1984,25 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
           <section className="panel directory-detail-panel">
             <div className="panel-head">
               <Typography.Title level={4}>{t("users.details")}</Typography.Title>
-              <Space>
+              <Space wrap>
                 <Tag color="cyan">{selectedUser?.status || "active"}</Tag>
+                <Button
+                  aria-label={t("common.edit")}
+                  icon={<EditOutlined />}
+                  disabled={!selectedUser}
+                  onClick={() => openEditUser()}
+                >
+                  {t("common.edit")}
+                </Button>
+                <Popconfirm
+                  title={t("common.deleteConfirm", { title: selectedUser?.name || t("nav.users") })}
+                  onConfirm={() => void deleteUser()}
+                  disabled={!selectedUser}
+                >
+                  <Button aria-label={t("common.delete")} icon={<DeleteOutlined />} disabled={!selectedUser}>
+                    {t("common.delete")}
+                  </Button>
+                </Popconfirm>
                 <Button
                   icon={<SyncOutlined />}
                   disabled={!selectedUser}
@@ -1949,13 +2048,13 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
       </div>
 
       <Drawer
-        title={t("common.createTitle", { title: t("nav.users") })}
+        title={editingUserId ? t("common.editTitle", { title: t("nav.users") }) : t("common.createTitle", { title: t("nav.users") })}
         open={createOpen}
         width={460}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeUserDrawer}
         extra={<Button type="primary" onClick={() => void saveUser()}>{t("common.save")}</Button>}
       >
-        <Form form={createForm} layout="vertical" initialValues={{ roleIds: [] }}>
+        <Form form={createForm} layout="vertical" initialValues={{ roleIds: [], status: "active" }}>
           <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
             <Input autoComplete="off" />
           </Form.Item>
@@ -1979,6 +2078,9 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
               placeholder={t("placeholder.roleSearch")}
               options={roles.map((role) => ({ value: role.id, label: role.name }))}
             />
+          </Form.Item>
+          <Form.Item name="status" label={t("field.status")}>
+            <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
           </Form.Item>
         </Form>
       </Drawer>
@@ -4239,7 +4341,7 @@ function mergeDirectoryUsers(
   const merged = new Map<string, DirectoryUserRecord>();
 
   for (const user of [...baseUsers, ...nextUsers]) {
-    const key = String(user.external_ref || user.id || user.user_id || "");
+    const key = String(user.id || user.user_id || user.external_ref || "");
     if (!key) continue;
     const roleIds = Array.from(new Set((user.role_ids || []).map(String)));
     const roleNames = user.role_names?.length

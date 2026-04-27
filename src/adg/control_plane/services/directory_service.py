@@ -2,7 +2,7 @@ import json
 from collections import defaultdict
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from adg.control_plane.models.api_key import ApiKey
@@ -111,6 +111,37 @@ class DirectoryService:
             user_id=user_id,
         )
         return plaintext
+
+    def update_user(
+        self,
+        user_id: str,
+        *,
+        name: str | None = None,
+        external_ref: str | None = None,
+        org_node_id: str | None | object = _UNSET,
+        role_ids: list[str] | object = _UNSET,
+        status: str | None = None,
+    ) -> User:
+        user = self._session.execute(select(User).where(User.id == user_id)).scalar_one()
+        if name is not None:
+            user.name = name
+        if external_ref is not None:
+            user.external_ref = external_ref
+        if org_node_id is not _UNSET:
+            user.org_node_id = org_node_id if isinstance(org_node_id, str) else None
+        if status is not None:
+            user.status = status
+        if role_ids is not _UNSET:
+            self._replace_roles(user.id, role_ids if isinstance(role_ids, list) else [])
+        self._session.flush()
+        return user
+
+    def delete_user(self, user_id: str) -> None:
+        user = self._session.execute(select(User).where(User.id == user_id)).scalar_one()
+        self._session.execute(delete(UserRole).where(UserRole.user_id == user_id))
+        self._session.execute(delete(ApiKey).where(ApiKey.user_id == user_id))
+        self._session.delete(user)
+        self._session.flush()
 
     def list_users(self) -> list[DirectoryUserSummary]:
         users = list(self._session.execute(select(User).order_by(User.name, User.id)).scalars())
@@ -321,10 +352,10 @@ class DirectoryService:
         ]
 
     def _replace_roles(self, user_id: str, role_ids: list[str]) -> None:
-        if not role_ids:
-            return
+        self._session.execute(delete(UserRole).where(UserRole.user_id == user_id))
         for role_id in role_ids:
             self._session.add(UserRole(user_id=user_id, role_id=role_id))
+        self._session.flush()
 
     def _revoke_active_runtime_keys(self, user_id: str) -> None:
         active_keys = self._session.execute(

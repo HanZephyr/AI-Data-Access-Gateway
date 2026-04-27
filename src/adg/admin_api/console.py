@@ -183,6 +183,16 @@ class UserCreateRequest(BaseModel):
     role_ids: list[str] = []
 
 
+class UserUpdateRequest(BaseModel):
+    """Partial update payload for directory users."""
+
+    name: str | None = None
+    external_ref: str | None = None
+    org_node_id: str | None = None
+    role_ids: list[str] | None = None
+    status: str | None = None
+
+
 class RoleCreateRequest(BaseModel):
     """Payload for creating a directory role."""
 
@@ -855,6 +865,49 @@ def list_users(
     """List directory users enriched with organization, role, and runtime-key metadata."""
 
     return [user.to_dict() for user in DirectoryService(session).list_users()]
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: str,
+    payload: UserUpdateRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, object]:
+    """Update editable directory user fields used by the admin console."""
+
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("org_node_id") is not None:
+        _require_org_node(session, str(data["org_node_id"]))
+    if data.get("role_ids") is not None:
+        _require_roles(session, list(data["role_ids"]))
+    try:
+        user = DirectoryService(session).update_user(user_id, **data)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from exc
+    session.commit()
+    session.refresh(user)
+    return next(
+        summary.to_dict()
+        for summary in DirectoryService(session).list_users()
+        if summary.id == user.id
+    )
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Delete one directory user together with its role links and runtime keys."""
+
+    try:
+        DirectoryService(session).delete_user(user_id)
+    except NoResultFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") from exc
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/users/{user_id}/reset-key")

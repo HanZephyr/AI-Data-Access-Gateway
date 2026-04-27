@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type ReactDOM from "react-dom/client";
 
@@ -18,7 +18,7 @@ type WindowWithAppRoot = Window & {
   __adgRootElement?: HTMLElement | null;
 };
 
-const routeMap: Record<string, MockResponse> = {
+const baseRouteMap: Record<string, MockResponse> = {
   "/admin/system": { ok: true, json: { service_name: "AI Data Access Gateway" } },
   "/admin/datasources": { ok: true, json: [] },
   "/admin/resources": { ok: true, json: [] },
@@ -56,6 +56,27 @@ const routeMap: Record<string, MockResponse> = {
       },
     ],
   },
+  "/admin/users/importers/feishu/pull": {
+    ok: true,
+    json: {
+      summary: {
+        created_users: 1,
+        updated_users: 0,
+        runtime_keys_created: 1,
+      },
+      org_nodes_to_create: [],
+      roles_to_create: [],
+      users: [
+        {
+          user_id: "user_2",
+          user_name: "Imported User",
+          external_ref: "u-imported",
+          org_path: "Company/Finance",
+          roles: ["Analyst"],
+        },
+      ],
+    },
+  },
   "/admin/api-keys": { ok: true, json: [] },
   "/admin/mcp/setup": {
     ok: true,
@@ -67,6 +88,7 @@ const routeMap: Record<string, MockResponse> = {
     },
   },
 };
+let routeMap: Record<string, MockResponse>;
 
 function createStorage() {
   const store = new Map<string, string>();
@@ -111,8 +133,66 @@ async function mountConsoleApp(initialPage?: string) {
   if (initialPage) {
     localStorage.setItem("adg.page", initialPage);
   }
-  globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+  globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+    const method = String(init?.method || "GET").toUpperCase();
+    if (url === "/admin/users/user_1" && method === "PATCH") {
+      const body = JSON.parse(String(init?.body || "{}")) as {
+        name?: string;
+        external_ref?: string;
+        org_node_id?: string | null;
+        role_ids?: string[];
+        status?: string;
+      };
+      const users = Array.isArray(routeMap["/admin/users"]?.json)
+        ? [...(routeMap["/admin/users"]?.json as Array<Record<string, unknown>>)]
+        : [];
+      const nextUsers = users.map((user) => {
+        if (user.id !== "user_1") return user;
+        const orgPath = body.org_node_id === "org_company"
+          ? "Company"
+          : body.org_node_id === "org_finance"
+            ? "Company/Finance"
+            : null;
+        const roleNames = (body.role_ids || []).map((roleId) => (
+          roleId === "role_reviewer" ? "Reviewer" : "Analyst"
+        ));
+        return {
+          ...user,
+          name: body.name ?? user.name,
+          external_ref: body.external_ref ?? user.external_ref,
+          org_node_id: body.org_node_id ?? user.org_node_id,
+          org_path: orgPath ?? user.org_path,
+          role_ids: body.role_ids ?? user.role_ids,
+          role_names: roleNames.length ? roleNames : user.role_names,
+          status: body.status ?? user.status,
+        };
+      });
+      routeMap["/admin/users"] = { ok: true, json: nextUsers };
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => nextUsers.find((user) => user.id === "user_1"),
+        text: async () => JSON.stringify(nextUsers.find((user) => user.id === "user_1")),
+      } as Response;
+    }
+    if (url === "/admin/users/user_1" && method === "DELETE") {
+      const users = Array.isArray(routeMap["/admin/users"]?.json)
+        ? (routeMap["/admin/users"]?.json as Array<Record<string, unknown>>)
+        : [];
+      routeMap["/admin/users"] = {
+        ok: true,
+        json: users.filter((user) => user.id !== "user_1"),
+      };
+      return {
+        ok: true,
+        status: 204,
+        statusText: "No Content",
+        json: async () => undefined,
+        text: async () => "",
+      } as Response;
+    }
     const match = routeMap[url];
     if (!match) {
       return {
@@ -150,6 +230,7 @@ async function resizeWindow(width: number) {
 
 beforeEach(() => {
   vi.unstubAllGlobals();
+  routeMap = JSON.parse(JSON.stringify(baseRouteMap)) as Record<string, MockResponse>;
 });
 
 afterEach(() => {
@@ -256,6 +337,36 @@ describe("Users console page", () => {
     expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     await waitFor(() => {
       expect(screen.getByText("Runtime key")).toBeInTheDocument();
+    });
+  }, 30000);
+
+  it("edits the selected user from the details panel", async () => {
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+    await screen.findByText("Runtime key", {}, { timeout: 10000 });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const drawer = await screen.findByRole("dialog", { name: "Edit Users" });
+    fireEvent.change(within(drawer).getByDisplayValue("Alice"), { target: { value: "Alice Updated" } });
+    fireEvent.change(within(drawer).getByDisplayValue("u001"), { target: { value: "u009" } });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice Updated").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByText("u009").length).toBeGreaterThan(0);
+  }, 30000);
+
+  it("deletes the selected user from the details panel", async () => {
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+    await screen.findByText("Runtime key", {}, { timeout: 10000 });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Select a user to inspect roles, organization placement, and runtime key actions.")).toBeInTheDocument();
     });
   }, 30000);
 

@@ -169,6 +169,65 @@ def test_admin_can_list_users_with_org_path_roles_and_runtime_key_status() -> No
     ]
 
 
+def test_admin_can_update_user_details_roles_and_status() -> None:
+    client, session_factory = build_directory_app()
+
+    response = client.patch(
+        "/admin/users/user_1",
+        json={
+            "name": "Updated User",
+            "external_ref": "u-updated",
+            "org_node_id": "org_company",
+            "role_ids": ["role_admin"],
+            "status": "disabled",
+        },
+        headers=admin_auth(),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "user_1",
+        "name": "Updated User",
+        "external_ref": "u-updated",
+        "org_node_id": "org_company",
+        "org_path": "Company",
+        "role_ids": ["role_admin"],
+        "role_names": ["Admin"],
+        "status": "disabled",
+        "runtime_key_status": "active",
+    }
+
+    with session_factory() as session:
+        user = session.get(User, "user_1")
+        role_links = session.execute(
+            select(UserRole.role_id).where(UserRole.user_id == "user_1")
+        ).scalars().all()
+
+        assert user is not None
+        assert user.name == "Updated User"
+        assert user.external_ref == "u-updated"
+        assert user.org_node_id == "org_company"
+        assert user.status == "disabled"
+        assert role_links == ["role_admin"]
+
+
+def test_admin_can_delete_user_and_runtime_key() -> None:
+    client, session_factory = build_directory_app()
+
+    response = client.delete("/admin/users/user_1", headers=admin_auth())
+
+    assert response.status_code == 204
+
+    with session_factory() as session:
+        assert session.get(User, "user_1") is None
+        assert session.execute(
+            select(UserRole.user_id).where(UserRole.user_id == "user_1")
+        ).scalars().all() == []
+        assert session.execute(
+            select(ApiKey.user_id).where(ApiKey.user_id == "user_1")
+        ).scalars().all() == []
+
+
 def test_admin_can_list_roles_and_org_nodes() -> None:
     client, _ = build_directory_app()
 
