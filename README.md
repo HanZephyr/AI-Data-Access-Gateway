@@ -1,69 +1,61 @@
 # AI Data Access Gateway
 
-[Chinese Mirror / 中文镜像](docs/zh-CN/README.md) | [Chinese Status / 中文项目现状](docs/zh-CN/status.md) | [Chinese Roadmap / 中文路线图](docs/zh-CN/roadmap.md)
+[中文版 README](docs/zh-CN/README.md)
 
-AI Data Access Gateway is an open-source secure data access gateway for AI agents. It sits between agentic systems and real datasources, exposing governed metadata discovery and read-only runtime access with authorization, conservative SQL validation, masking, runtime decrypt controls, and audit logging.
+AI Data Access Gateway is an open-source secure data access gateway for AI agents. It provides database safety access services to AI agents through the MCP protocol. It sits between AI agents and real data sources, exposes governed metadata discovery and read-only data access, and enforces authorization, SQL safety checks, field-level policies, masking, data decrypt controls, and audit logging during AI-initiated data queries.
 
-## Project Status
+## Architecture Overview
 
-This repository is currently published as a V1 MVP. It is suitable for local evaluation, guided demos, and iterative open-source development. It should not be described as an enterprise-ready control plane or a production-hardened zero-trust platform in its current form.
+The project consists of a data security access layer and an admin console.
 
-## What It Does Today
+The runtime data access layer uses SQL Guard, resource policies, and field policies to constrain queries to controlled read-only paths. It exposes both a FastMCP Streamable HTTP `/mcp` endpoint and a simpler `/api/tools/{tool_name}` HTTP tool API.
 
-- FastAPI backend with admin, runtime, internal decrypt, FastMCP Streamable HTTP at `/mcp`, and a simpler HTTP tool API at `/api/tools/{tool_name}`
-- API-key-based admin, runtime, and internal access scopes
-- Directory-backed runtime identity with users, roles, org nodes, and runtime key reset flows
-- Relational datasource registration, metadata scanning, and resource snapshot persistence
-- Resource and field policy enforcement for read-only runtime access
-- Conservative SQL Guard validation that rejects unsafe or unsupported query patterns
-- Fixed, partial, hash, and reversible masking with runtime decrypt support
-- Audit event persistence for admin and runtime actions
-- React + Vite admin console for onboarding, datasources, policies, masking, users, roles, imports, and audit review
-- Demo seed data, example HTTP client flow, and Docker Compose packaging
+The admin console serves a single-admin trust model. It covers data source maintenance, resource governance, and audit review, and manages data source registration, directory identity mapping, resource metadata, field policies, masking configuration, API Key management, and enterprise organization structure management.
 
-## MVP Boundaries
+The repository also includes demo data initialization, Docker Compose startup, and minimal runtime HTTP call examples.
 
-- no separate admin login system, SSO, or MFA
-- no row-level policy enforcement or SQL rewriting
-- no multi-operator admin RBAC model
-- no built-in TLS termination, secret manager integration, or high-availability deployment model
+![system architecture](./docs/en/system-architecture.png)
 
-## Architecture
+## Admin UI Example
 
-The repository ships as a single FastAPI service backed by SQLAlchemy models and Alembic migrations. The control plane stores datasources, resources, policies, masking rules, audit events, and directory entities. Runtime access is derived from authenticated API keys bound to users and roles, then narrowed through datasource, resource, field, and masking checks before rows are returned. The runtime surface is exposed both as FastMCP Streamable HTTP at `/mcp` and as a simpler HTTP tool route at `/api/tools/{tool_name}`. The admin console is a React + Vite application in development and a built static site behind Nginx in the Docker Compose path.
+![mcp](./docs/en/admin-pages-screenshot/mcp.png)
 
 ## Repository Layout
 
-- `src/adg/`: backend application code, runtime services, admin APIs, and connector logic
+- `src/adg/`: backend application code, control plane, runtime, connectors, and security capabilities
 - `tests/`: backend unit and integration coverage
 - `web/`: React + Vite admin console
-- `examples/`: demo seed data and HTTP client examples
-- `docs/en/`: English release-facing documentation
-- `docs/zh-CN/`: Chinese mirror documentation
-- `docs/superpowers/`: internal planning, specs, and repository memory
+- `examples/`: demo seed data and example client flows
+- `docs/`: internal planning, design, acceptance, and repository memory docs
 
 ## Quickstart
+
+Prefer Docker Compose for a production-style runtime stack. If you run directly on the host, use non-development dependencies, keep reload disabled, and set production environment variables explicitly.
 
 ### Backend
 
 ```powershell
-uv sync --extra dev --extra all
-uv run --extra dev python examples/seed_demo.py --database-url sqlite:///./data/adg-control-plane.db
+uv sync --frozen --no-dev --extra all
+$env:ADG_ENV="production"
 $env:ADG_CONTROL_PLANE_DATABASE_URL="sqlite:///./data/adg-control-plane.db"
 $env:ADG_SECRET_KEY="<generate-a-long-random-secret>"
 $env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
-uv run --extra dev uvicorn adg.app.main:create_app --factory --reload
+uv run --no-dev --extra all alembic upgrade head
+uv run --no-dev --extra all init-admin --database-url sqlite:///./data/adg-control-plane.db
+uv run --no-dev --extra all uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
-The seed command prints a one-time admin API key for onboarding and admin setup. Open the console at `http://127.0.0.1:5173` and paste that key into the onboarding screen. The runtime HTTP example requires a separate runtime-scoped API key bound to a directory user, created or reset after setup.
+`init-admin` prints a one-time admin API key for console onboarding and admin setup. Save it immediately and use it in the console. Runtime HTTP examples require a separate runtime-scoped API key bound to a directory user; create or reset that key after initialization.
 
 ### Frontend
 
 ```powershell
 Set-Location web
 npm ci
-npm run dev
+npm run build
 ```
+
+The production build is written to `web/dist`. The Docker Compose path serves this static frontend with Nginx and exposes the web console at `http://127.0.0.1:8080`.
 
 ### Docker Compose
 
@@ -74,11 +66,12 @@ docker compose up --build
 docker compose exec backend init-admin
 ```
 
-The Compose stack publishes the web console on `http://127.0.0.1:8080`.
+The Compose stack starts production backend and static frontend containers. The web console is published at `http://127.0.0.1:8080` by default.
 
-## Verification
+## Contributor Verification
 
 ```powershell
+uv sync --extra dev --extra all
 uv run --extra dev pytest
 uv run --extra dev ruff check .
 uv run --extra dev mypy src tests
@@ -94,14 +87,11 @@ Remove-Item .tmp-audit-requirements.txt
 
 ## Documentation
 
-- [Project Status](docs/en/status.md)
-- [Roadmap](docs/en/roadmap.md)
 - [Chinese README](docs/zh-CN/README.md)
-- [Chinese Status](docs/zh-CN/status.md)
-- [Chinese Roadmap](docs/zh-CN/roadmap.md)
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## License
 
-Licensed under Apache 2.0. See [LICENSE](LICENSE).
+This project is licensed under Apache 2.0. See [LICENSE](LICENSE).
