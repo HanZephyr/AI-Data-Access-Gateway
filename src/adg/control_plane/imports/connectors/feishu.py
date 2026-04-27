@@ -58,7 +58,11 @@ class FeishuImporter(PullOnlyDirectoryImporter):
         root_department_id = str(config.get("root_department_id") or "0").strip() or "0"
         departments = self._fetch_departments(token, root_department_id)
         department_paths = self._build_department_path_map({"items": departments})
-        users = self._fetch_users(token, [record["open_department_id"] for record in departments])
+        department_ids = [
+            root_department_id,
+            *[record["open_department_id"] for record in departments],
+        ]
+        users = self._fetch_users(token, list(dict.fromkeys(department_ids)))
 
         return DirectoryImportBatch(
             users=[
@@ -100,7 +104,10 @@ class FeishuImporter(PullOnlyDirectoryImporter):
             for item in self._paginate(
                 f"{self._base_url}/contact/v3/departments/{department_id}/children",
                 token,
-                query={"page_size": "50"},
+                query={
+                    "department_id_type": self._department_id_type(department_id),
+                    "page_size": "50",
+                },
             ):
                 open_department_id = str(item.get("open_department_id") or "").strip()
                 if not open_department_id or open_department_id in departments:
@@ -118,22 +125,39 @@ class FeishuImporter(PullOnlyDirectoryImporter):
             for item in self._paginate(
                 f"{self._base_url}/contact/v3/users/find_by_department",
                 token,
-                query={"department_id": department_id, "page_size": "100"},
+                query={
+                    "department_id": department_id,
+                    "department_id_type": self._department_id_type(department_id),
+                    "page_size": "50",
+                },
             ):
                 user_id = str(item.get("user_id") or item.get("open_id") or "").strip()
                 if not user_id:
                     continue
-                if user_id not in users:
-                    users[user_id] = item
-                    continue
-                merged = dict(users[user_id])
-                existing = list(merged.get("department_ids") or [])
                 candidate_ids = item.get("department_ids")
+                normalized_department_ids = [department_id]
                 if isinstance(candidate_ids, Sequence) and not isinstance(
                     candidate_ids,
                     (str, bytes, bytearray),
                 ):
-                    merged["department_ids"] = list({*existing, *candidate_ids})
+                    normalized_department_ids = list(
+                        dict.fromkeys(
+                            [
+                                str(candidate).strip()
+                                for candidate in candidate_ids
+                                if str(candidate).strip()
+                            ]
+                            + [department_id]
+                        )
+                    )
+                row = dict(item)
+                row["department_ids"] = normalized_department_ids
+                if user_id not in users:
+                    users[user_id] = row
+                    continue
+                merged = dict(users[user_id])
+                existing = list(merged.get("department_ids") or [])
+                merged["department_ids"] = list(dict.fromkeys(existing + normalized_department_ids))
                 users[user_id] = merged
         return list(users.values())
 
@@ -154,8 +178,24 @@ class FeishuImporter(PullOnlyDirectoryImporter):
             data = body.get("data")
             payload = data if isinstance(data, Mapping) else body
             batch = payload.get("items")
+            if batch is None and set(payload.keys()).issubset({"has_more", "page_token"}):
+                batch = []
             if not isinstance(batch, list):
-                raise ValueError("Feishu directory response did not include an items list")
+                response_keys = sorted(str(key) for key in body.keys())
+                payload_keys = (
+                    sorted(str(key) for key in payload.keys())
+                    if isinstance(payload, Mapping)
+                    else []
+                )
+                detail = (
+                    "Feishu directory response did not include an items list "
+                    f"(response_keys={response_keys}, payload_keys={payload_keys}"
+                )
+                request_id = str(body.get("request_id") or "").strip()
+                if request_id:
+                    detail = f"{detail}, request_id={request_id}"
+                detail = f"{detail})"
+                raise ValueError(detail)
             items.extend(cast(list[Mapping[str, Any]], batch))
             if not payload.get("has_more"):
                 return items
@@ -183,10 +223,28 @@ class FeishuImporter(PullOnlyDirectoryImporter):
         req = request.Request(full_url, data=data, headers=headers, method=method)
         try:
             with request.urlopen(req, timeout=20) as response:
-                return cast(Mapping[str, Any], json.loads(response.read().decode("utf-8")))
+                body = cast(Mapping[str, Any], json.loads(response.read().decode("utf-8")))
+                self._raise_for_api_error(body)
+                return body
         except error.HTTPError as exc:  # pragma: no cover - exercised by integration only
             detail = exc.read().decode("utf-8", errors="ignore")
             raise ValueError(f"Feishu API request failed: {detail or exc.reason}") from exc
+
+    def _raise_for_api_error(self, body: Mapping[str, Any]) -> None:
+        code = body.get("code")
+        if code in (None, 0, "0"):
+            return
+        message = str(body.get("msg") or body.get("message") or "unknown error").strip()
+        detail = f"Feishu API error {code}: {message}"
+        request_id = str(body.get("request_id") or "").strip()
+        if request_id:
+            detail = f"{detail} (request_id={request_id})"
+        raise ValueError(detail)
+
+    def _department_id_type(self, department_id: str) -> str:
+        if department_id.strip() == "0":
+            return "department_id"
+        return "open_department_id"
 
     def _build_department_path_map(self, payload: Any) -> dict[str, str]:
         if not isinstance(payload, Mapping):
@@ -201,21 +259,24 @@ class FeishuImporter(PullOnlyDirectoryImporter):
             return {}
 
         records = cast(list[Mapping[str, Any]], departments)
-        names = {
-            str(record.get("open_department_id") or record.get("department_id")): required_text(
-                record.get("name"),
-                field_name="department.name",
-            )
-            for record in records
-            if record.get("open_department_id") or record.get("department_id")
-        }
-        parents = {
-            str(record.get("open_department_id") or record.get("department_id")): str(
+        names: dict[str, str] = {}
+        parents: dict[str, str] = {}
+        for record in records:
+            primary_id = str(
+                record.get("department_id") or record.get("open_department_id") or ""
+            ).strip()
+            alternate_id = str(
+                record.get("open_department_id") or record.get("department_id") or ""
+            ).strip()
+            if not primary_id and not alternate_id:
+                continue
+            name = required_text(record.get("name"), field_name="department.name")
+            parent_id = str(
                 record.get("parent_department_id") or record.get("parent_id") or ""
-            )
-            for record in records
-            if record.get("open_department_id") or record.get("department_id")
-        }
+            ).strip()
+            for department_id in {primary_id, alternate_id} - {""}:
+                names[department_id] = name
+                parents[department_id] = parent_id
 
         cache: dict[str, str] = {}
 

@@ -2492,16 +2492,6 @@ function Datasources({
   };
 
   useEffect(() => {
-    if (datasources.data && resources.data) {
-      setExpandedKeys(
-        flattenCatalogTree(sourceTree)
-          .filter((node) => (node.children || []).length > 0)
-          .map((node) => node.key)
-      );
-    }
-  }, [datasources.data, resources.data]);
-
-  useEffect(() => {
     if (!jumpTarget || loading || !datasources.data || !resources.data || !tags.data) {
       return;
     }
@@ -4222,11 +4212,16 @@ function mergeDirectoryUsers(
     const roleNames = user.role_names?.length
       ? user.role_names.map(String)
       : roleIds.map((roleId) => roleNameById.get(roleId)).filter(Boolean) as string[];
+    const resolvedOrgNodeId = user.org_node_id
+      ? String(user.org_node_id)
+      : orgNodeIdForPath(orgNodes, user.org_path);
+    const resolvedOrgPath = user.org_path ?? (resolvedOrgNodeId ? orgPathById.get(String(resolvedOrgNodeId)) || "" : "");
     merged.set(key, {
       ...user,
+      org_node_id: resolvedOrgNodeId,
       role_ids: roleIds,
       role_names: roleNames,
-      org_path: user.org_path ?? (user.org_node_id ? orgPathById.get(String(user.org_node_id)) || "" : ""),
+      org_path: resolvedOrgPath,
       status: String(user.status || "active"),
     });
   }
@@ -4257,7 +4252,15 @@ function ImportPreviewPanel({
             <div className="directory-preview-stats">
               <Statistic title={t("users.usersCreated")} value={Number(importPreview.summary?.created_users ?? importPreview.summary?.create_count ?? 0)} />
               <Statistic title={t("users.usersUpdated")} value={Number(importPreview.summary?.updated_users ?? importPreview.summary?.update_count ?? 0)} />
-              <Statistic title={t("users.keysCreated")} value={Number(importPreview.summary?.runtime_keys_created ?? 0)} />
+              <Statistic
+                title={t("users.keysCreated")}
+                value={Number(
+                  importPreview.summary?.runtime_keys_created
+                    ?? importPreview.summary?.created_users
+                    ?? importPreview.summary?.create_count
+                    ?? 0
+                )}
+              />
             </div>
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label={t("users.orgNodesToCreate")}>
@@ -4279,13 +4282,18 @@ function ImportPreviewPanel({
               columns={[
                 { title: columnLabel("name", t), dataIndex: "user_name", key: "user_name" },
                 { title: columnLabel("external_ref", t), dataIndex: "external_ref", key: "external_ref" },
-                { title: columnLabel("org_path", t), dataIndex: "org_path", key: "org_path" },
+                {
+                  title: columnLabel("org_path", t),
+                  dataIndex: "org_path",
+                  key: "org_path",
+                  render: (value: string | null | undefined) => String(value || "-"),
+                },
                 {
                   title: columnLabel("role_names", t),
                   dataIndex: "roles",
                   key: "roles",
                   render: (value: string[] | string) =>
-                    Array.isArray(value) ? value.join(", ") : String(value || "-"),
+                    Array.isArray(value) ? value.join(", ") || "-" : String(value || "-"),
                 },
               ]}
             />

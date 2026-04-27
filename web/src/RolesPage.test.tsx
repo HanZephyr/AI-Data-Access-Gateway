@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type ReactDOM from "react-dom/client";
 
@@ -41,7 +41,21 @@ const routeMap: Record<string, MockResponse> = {
     ],
   },
   "/admin/resources": { ok: true, json: [] },
-  "/admin/resource-tree": { ok: true, json: [] },
+  "/admin/resource-tree": {
+    ok: true,
+    json: [
+      {
+        key: "resource:db_1",
+        type: "resource",
+        id: "db_1",
+        datasource_id: "ds_1",
+        name: "warehouse_db",
+        display_name: "warehouse_db",
+        kind: "database",
+        children: [],
+      },
+    ],
+  },
   "/admin/tags": { ok: true, json: [] },
   "/admin/resource-policies": { ok: true, json: [] },
   "/admin/field-policies": { ok: true, json: [] },
@@ -69,6 +83,24 @@ const routeMap: Record<string, MockResponse> = {
   "/admin/org-nodes": { ok: true, json: [] },
   "/admin/users": { ok: true, json: [] },
   "/admin/api-keys": { ok: true, json: [] },
+  "/admin/users/importers/feishu/pull": {
+    ok: true,
+    json: {
+      users: [
+        {
+          user_name: "Alice",
+          external_ref: "u001",
+          org_path: null,
+          roles: [],
+          action: "create",
+        },
+      ],
+      org_nodes_to_create: [],
+      roles_to_create: [],
+      root_org_node_required: false,
+      summary: { create_count: 1, update_count: 0 },
+    },
+  },
   "/admin/mcp/setup": {
     ok: true,
     json: {
@@ -232,7 +264,9 @@ describe("Roles page", () => {
     await mountConsoleApp("datasources");
     await signInWithValidAdminKey();
 
-    fireEvent.click(await screen.findByText("Warehouse"));
+    const datasourceNode = await screen.findByText("Warehouse");
+    expect(screen.queryByText("warehouse_db")).not.toBeInTheDocument();
+    fireEvent.click(datasourceNode);
 
     const passwordInput = await screen.findByLabelText("Password");
     expect(passwordInput).toHaveAttribute("placeholder", "••••••••");
@@ -253,5 +287,64 @@ describe("Roles page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "View SQL" }));
     expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
+  }, 30000);
+
+  it("shows hyphen placeholders for empty org path and roles in import preview", async () => {
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+
+    fireEvent.click(await screen.findByText("Import user data"));
+    fireEvent.click(screen.getByRole("tab", { name: "Feishu" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    const externalRefCell = await screen.findByRole("cell", { name: "u001" });
+    const row = externalRefCell.closest("tr");
+    expect(row).not.toBeNull();
+    const cells = row ? Array.from(row.querySelectorAll("td")) : [];
+    expect(cells).toHaveLength(4);
+    expect(cells[2]).toHaveTextContent("-");
+    expect(cells[3]).toHaveTextContent("-");
+
+    const keyStat = screen.getByText("Runtime keys created").closest(".ant-statistic");
+    expect(keyStat).not.toBeNull();
+    expect(keyStat).toHaveTextContent("1");
+  }, 30000);
+
+  it("filters directory users by selected org node using org path fallback", async () => {
+    routeMap["/admin/org-nodes"] = {
+      ok: true,
+      json: [
+        { id: "org_root", name: "Root", path: "", parent_id: null, status: "active" },
+        { id: "org_finance", name: "Finance", path: "Company/Finance", parent_id: "org_root", status: "active" },
+      ],
+    };
+    routeMap["/admin/users"] = {
+      ok: true,
+      json: [
+        {
+          id: "user_1",
+          user_id: "user_1",
+          name: "Alice",
+          external_ref: "u001",
+          org_node_id: null,
+          org_path: "Company/Finance",
+          role_ids: [],
+          role_names: [],
+          status: "active",
+        },
+      ],
+    };
+
+    await mountConsoleApp("users");
+    await signInWithValidAdminKey();
+
+    const listPanelHeading = await screen.findAllByText("User directory");
+    const listPanel = listPanelHeading[1]?.closest("section");
+    expect(listPanel).not.toBeNull();
+
+    expect(await within(listPanel as HTMLElement).findByRole("cell", { name: "u001" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("img", { name: "caret-down" }));
+    fireEvent.click(await screen.findByText("Finance"));
+    expect(await within(listPanel as HTMLElement).findByRole("cell", { name: "u001" })).toBeInTheDocument();
   }, 30000);
 });
