@@ -1395,7 +1395,7 @@ function ConsoleApp() {
               key: "docker",
               label: t("onboarding.method.docker"),
               description: t("onboarding.method.dockerDescription"),
-              commandValue: "docker exec -it ai-data-access-gateway-backend-1 init-admin",
+              commandValue: "docker compose exec backend init-admin",
             },
           ],
           authErrorTitle: t("onboarding.authErrorTitle"),
