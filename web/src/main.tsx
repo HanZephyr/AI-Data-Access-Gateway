@@ -1194,6 +1194,23 @@ function columnLabel(key: string, t: I18nContextValue["t"]) {
   return translationKey in translations["en-US"] ? t(translationKey) : key;
 }
 
+async function readApiErrorMessage(response: Response) {
+  /** Prefer FastAPI's JSON detail field over raw response text for operator-facing errors. */
+
+  const fallback = response.statusText || `HTTP ${response.status}`;
+  const body = await response.text();
+  if (!body) return fallback;
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+  } catch {
+    return body;
+  }
+  return body;
+}
+
 function useApi() {
   /** Keep the admin API key in component state only and attach it to every console request. */
 
@@ -1232,7 +1249,7 @@ function useApi() {
       }
     });
     if (!response.ok) {
-      const message = (await response.text()) || response.statusText;
+      const message = await readApiErrorMessage(response);
       if (response.status === 401 || response.status === 403) {
         setAuthError(message);
       }
@@ -2707,10 +2724,19 @@ function DatasourceDetail({
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
   const [form] = Form.useForm();
+  const [runningAction, setRunningAction] = useState<"test" | "scan" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     form.setFieldsValue(toDatasourceFormValues(selected));
+    setActionError(null);
   }, [form, selected]);
+
+  const showActionError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    setActionError(message);
+    messageApi.error(message);
+  };
 
   const save = async () => {
     const values = await form.validateFields();
@@ -2722,13 +2748,29 @@ function DatasourceDetail({
     onSaved();
   };
   const test = async () => {
-    await api.request(`/admin/datasources/${selected.id}/test`, { method: "POST" });
-    messageApi.success(t("datasource.tested"));
+    setRunningAction("test");
+    setActionError(null);
+    try {
+      await api.request(`/admin/datasources/${selected.id}/test`, { method: "POST" });
+      messageApi.success(t("datasource.tested"));
+    } catch (error) {
+      showActionError(error);
+    } finally {
+      setRunningAction(null);
+    }
   };
   const scan = async () => {
-    await api.request(`/admin/datasources/${selected.id}/scan`, { method: "POST" });
-    messageApi.success(t("datasource.scanned"));
-    onSaved();
+    setRunningAction("scan");
+    setActionError(null);
+    try {
+      await api.request(`/admin/datasources/${selected.id}/scan`, { method: "POST" });
+      messageApi.success(t("datasource.scanned"));
+      onSaved();
+    } catch (error) {
+      showActionError(error);
+    } finally {
+      setRunningAction(null);
+    }
   };
   const remove = async () => {
     await api.request(`/admin/datasources/${selected.id}`, { method: "DELETE" });
@@ -2742,8 +2784,22 @@ function DatasourceDetail({
         <Typography.Title level={4}>{t("catalog.detailsTitle")}</Typography.Title>
         <Space>
           <Tag>{optionLabel(String(selected.status || "active"), t)}</Tag>
-          <Button icon={<ExperimentOutlined />} onClick={test}>{t("datasource.test")}</Button>
-          <Button icon={<SyncOutlined />} onClick={scan}>{t("datasource.scan")}</Button>
+          <Button
+            icon={<ExperimentOutlined />}
+            loading={runningAction === "test"}
+            disabled={Boolean(runningAction)}
+            onClick={test}
+          >
+            {t("datasource.test")}
+          </Button>
+          <Button
+            icon={<SyncOutlined />}
+            loading={runningAction === "scan"}
+            disabled={Boolean(runningAction)}
+            onClick={scan}
+          >
+            {t("datasource.scan")}
+          </Button>
           <Popconfirm title={t("datasource.deleteConfirm")} onConfirm={remove}>
             <Button icon={<DeleteOutlined />} />
           </Popconfirm>
@@ -2762,6 +2818,7 @@ function DatasourceDetail({
             {String(selected.datasource_kind || "")}
           </Descriptions.Item>
         </Descriptions>
+        {actionError ? <Alert type="error" showIcon message={actionError} /> : null}
         <Form form={form} layout="vertical">
           <Form.Item name="name" label={t("field.name")} rules={[{ required: true }]}>
             <Input autoComplete="off" />
