@@ -126,6 +126,77 @@ def test_metadata_scan_service_replaces_prior_snapshots(db_session: Session) -> 
     assert [field.name for field in fields] == ["total"]
 
 
+def test_metadata_scan_service_imports_resource_descriptions_without_overwriting_manual_edits(
+    db_session: Session,
+) -> None:
+    datasource_service = DatasourceService(db_session)
+    datasource = datasource_service.create_datasource(
+        name="Warehouse",
+        connector_type="postgres",
+        config={"database": "warehouse"},
+    )
+    db_session.commit()
+    scan_service = MetadataScanService(db_session)
+    snapshot = {
+        "databases": [
+            {
+                "name": "warehouse",
+                "schemas": [
+                    {
+                        "name": "public",
+                        "tables": [
+                            {
+                                "name": "orders",
+                                "description": "Orders imported from source table comment.",
+                                "columns": [],
+                            }
+                        ],
+                        "views": [],
+                    }
+                ],
+            }
+        ]
+    }
+
+    scan_service.replace_snapshot(datasource=datasource, snapshot=snapshot)
+    db_session.commit()
+
+    resource = db_session.execute(
+        select(Resource).where(Resource.path == "warehouse.public.orders")
+    ).scalar_one()
+    assert resource.description == "Orders imported from source table comment."
+
+    resource.description = "Manual steward description."
+    db_session.commit()
+    scan_service.replace_snapshot(
+        datasource=datasource,
+        snapshot={
+            "databases": [
+                {
+                    "name": "warehouse",
+                    "schemas": [
+                        {
+                            "name": "public",
+                            "tables": [
+                                {
+                                    "name": "orders",
+                                    "description": "Updated source comment.",
+                                    "columns": [],
+                                }
+                            ],
+                            "views": [],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    db_session.commit()
+
+    db_session.refresh(resource)
+    assert resource.description == "Manual steward description."
+
+
 def test_datasource_service_encrypts_password_before_persisting(db_session: Session) -> None:
     service = DatasourceService(db_session)
 

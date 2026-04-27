@@ -45,6 +45,7 @@ class MetadataScanService:
                 path=str(database_payload["name"]),
                 parent_id=None,
                 query_language="sql",
+                description=self._payload_description(database_payload),
                 metadata={},
                 scanned_at=scanned_at,
             )
@@ -65,6 +66,7 @@ class MetadataScanService:
                     path=schema_path,
                     parent_id=database.id,
                     query_language="sql",
+                    description=self._payload_description(schema_payload),
                     metadata={},
                     scanned_at=scanned_at,
                 )
@@ -89,6 +91,7 @@ class MetadataScanService:
                             path=relation_path,
                             parent_id=schema.id,
                             query_language="sql",
+                            description=self._payload_description(relation_payload),
                             metadata={},
                             scanned_at=scanned_at,
                         )
@@ -128,6 +131,7 @@ class MetadataScanService:
         path: str,
         parent_id: str | None,
         query_language: str | None,
+        description: str | None,
         metadata: dict[str, object],
         scanned_at: datetime,
     ) -> Resource:
@@ -139,11 +143,13 @@ class MetadataScanService:
                 datasource_id=datasource.id,
                 path=path,
                 display_name=name,
-                description=None,
+                description=description,
                 status="active",
             )
             self._session.add(resource)
             existing_resources[path] = resource
+        elif resource.description is None and description is not None:
+            resource.description = description
 
         resource.parent_id = parent_id
         resource.kind = kind
@@ -153,6 +159,15 @@ class MetadataScanService:
         resource.scanned_at = scanned_at
         self._session.flush()
         return resource
+
+    def _payload_description(self, payload: Mapping[str, object]) -> str | None:
+        """Return a non-empty description from connector metadata payloads."""
+
+        description = payload.get("description")
+        if description is None:
+            return None
+        text = str(description).strip()
+        return text or None
 
     def _upsert_field(
         self,

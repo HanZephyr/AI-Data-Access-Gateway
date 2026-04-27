@@ -35,8 +35,16 @@ class FakeConnection:
         if "information_schema.TABLES" in sql:
             return FakeResult(
                 [
-                    {"table_name": "orders", "table_type": "BASE TABLE"},
-                    {"table_name": "daily_sales", "table_type": "VIEW"},
+                    {
+                        "table_name": "orders",
+                        "table_type": "BASE TABLE",
+                        "table_comment": "Orders imported from Doris.",
+                    },
+                    {
+                        "table_name": "daily_sales",
+                        "table_type": "VIEW",
+                        "table_comment": "Daily sales rollup.",
+                    },
                 ]
             )
         if "information_schema.COLUMNS" in sql:
@@ -102,6 +110,7 @@ def test_doris_scan_metadata_uses_raw_information_schema(monkeypatch: MonkeyPatc
                                 "name": "orders",
                                 "kind": "table",
                                 "schema": "warehouse",
+                                "description": "Orders imported from Doris.",
                                 "columns": [
                                     {
                                         "name": "id",
@@ -125,6 +134,7 @@ def test_doris_scan_metadata_uses_raw_information_schema(monkeypatch: MonkeyPatc
                                 "name": "daily_sales",
                                 "kind": "view",
                                 "schema": "warehouse",
+                                "description": "Daily sales rollup.",
                                 "columns": [
                                     {
                                         "name": "total",

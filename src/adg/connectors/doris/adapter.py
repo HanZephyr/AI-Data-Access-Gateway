@@ -27,7 +27,10 @@ class DorisConnector(RelationalConnector):
                 relations = connection.execute(
                     text(
                         """
-                        SELECT TABLE_NAME AS table_name, TABLE_TYPE AS table_type
+                        SELECT
+                            TABLE_NAME AS table_name,
+                            TABLE_TYPE AS table_type,
+                            TABLE_COMMENT AS table_comment
                         FROM information_schema.TABLES
                         WHERE TABLE_SCHEMA = :schema
                         ORDER BY TABLE_NAME
@@ -78,6 +81,7 @@ class DorisConnector(RelationalConnector):
                 "name": relation_name,
                 "kind": "view" if str(relation["table_type"]).upper() == "VIEW" else "table",
                 "schema": database_name,
+                "description": self._normalize_comment(relation["table_comment"]),
                 "columns": columns_by_relation.get(relation_name, []),
             }
             if relation_payload["kind"] == "view":
@@ -99,3 +103,9 @@ class DorisConnector(RelationalConnector):
                 }
             ]
         }
+
+    def _normalize_comment(self, value: object) -> str | None:
+        """Convert empty database comments to null descriptions."""
+
+        text_value = str(value).strip() if value is not None else ""
+        return text_value or None
