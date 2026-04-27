@@ -288,7 +288,10 @@ const translations = {
     "users.platformGuide": "Setup guide",
     "users.platformGuideSummary": "Expand to see the app setup flow, required permissions, and how to obtain the configuration values.",
     "users.platformGuidePermissions": "Required permissions",
-    "users.platformGuideManifest": "Feishu permission import example",
+    "users.platformGuideManifest":
+      "In Feishu developer console, open Permission management -> Batch import/export permissions and paste this JSON:",
+    "users.platformGuideManifestNote":
+      "After adding permissions, you must create and publish a new app version, then wait for enterprise admin approval before the permissions take effect.",
     "users.platformAppId": "App ID",
     "users.platformAppSecret": "App secret",
     "users.platformCorpId": "Corp ID",
@@ -296,10 +299,16 @@ const translations = {
     "users.platformAppKey": "App key",
     "users.platformRootDepartmentId": "Root department ID",
     "users.platformRootDepartmentHint": "Optional. Limit the import to one branch. Leave the default root department ID when you want the full tree.",
-    "users.platformFeishuStep1": "Create an internal app in Feishu Open Platform and enable read-only contact permissions.",
-    "users.platformFeishuStep2": "Copy the App ID and App Secret from the app credentials page. Keep the default root department ID of 0 when you want the full company tree.",
-    "users.platformFeishuStep3": "Preview the import first. The gateway will call Feishu APIs directly and build the organization tree automatically.",
-    "users.platformFeishuPermissions": "Department read, user read, and tenant access token permissions for the app.",
+    "users.platformFeishuStep1":
+      "Open open.feishu.cn, sign in, enter the developer console, and create an internal enterprise app.",
+    "users.platformFeishuStep2":
+      "In the left menu, open Credentials & Basic Info, copy the App ID and App Secret, then fill them in below and save the configuration.",
+    "users.platformFeishuStep3":
+      "In the left menu, open Permission management, click Batch import/export permissions, paste the JSON below, and confirm the import.",
+    "users.platformFeishuStep4":
+      "Required: in Version management & release, create a version, set availability to all employees, submit it for release, and wait for enterprise admin approval. Unlike DingTalk, Feishu permissions do not take effect until the app version is released and approved.",
+    "users.platformFeishuPermissions":
+      "The app must include contact:contact.base:readonly, contact:department.base:readonly, contact:user.base:readonly, and contact:user.employee_id:readonly. Key point: the sync flow uses user_id (employee_id) as the unique identifier so directory members can be matched correctly with Feishu bot-channel users. open_id differs across apps and cannot be used as a cross-app identity, so contact:user.employee_id:readonly is mandatory.",
     "users.platformWecomStep1": "Create or reuse a Contacts Secret in Enterprise WeChat and grant read-only access to departments and members.",
     "users.platformWecomStep2": "Fill in the Corp ID, Contacts Secret, and the root department ID. The default root department ID is 1 for full-tree imports.",
     "users.platformWecomStep3": "Preview the generated organization paths before running the import. The gateway resolves department ids into full paths automatically.",
@@ -611,7 +620,9 @@ const translations = {
     "users.platformGuide": "配置说明",
     "users.platformGuideSummary": "展开后可查看应用配置步骤、所需权限，以及这些配置项应当从哪里获取。",
     "users.platformGuidePermissions": "所需权限",
-    "users.platformGuideManifest": "飞书权限导入示例",
+    "users.platformGuideManifest": "在飞书开发者后台，进入「权限管理」->「批量导入/导出权限」，粘贴以下 JSON：",
+    "users.platformGuideManifestNote":
+      "注意：添加权限后，必须创建并发布应用新版本，并在企业后台审批通过后，权限才会生效。",
     "users.platformAppId": "App ID",
     "users.platformAppSecret": "App Secret",
     "users.platformCorpId": "Corp ID",
@@ -619,10 +630,16 @@ const translations = {
     "users.platformAppKey": "App Key",
     "users.platformRootDepartmentId": "根部门 ID",
     "users.platformRootDepartmentHint": "可选。用于把导入范围限制在某个组织分支内；如果要导入整棵组织树，就保留默认根部门 ID。",
-    "users.platformFeishuStep1": "在飞书开放平台创建企业自建应用，并为应用授予通讯录只读权限。",
-    "users.platformFeishuStep2": "从应用凭据页面复制 App ID 和 App Secret。若要导入整棵组织树，根部门 ID 保持默认值 0 即可。",
-    "users.platformFeishuStep3": "先做预览。网关会直接调用飞书接口，并自动构建组织树和用户归属。",
-    "users.platformFeishuPermissions": "应用需要具备部门只读、用户只读，以及获取 tenant_access_token 的相关权限。",
+    "users.platformFeishuStep1":
+      "打开 open.feishu.cn，登录后进入开发者后台，创建企业自建应用。",
+    "users.platformFeishuStep2":
+      "左侧菜单进入「凭证与基础信息」，复制 App ID 和 App Secret，填入下方并保存配置。",
+    "users.platformFeishuStep3":
+      "左侧菜单进入「权限管理」，点击「批量导入/导出权限」，粘贴下方权限 JSON，并确认导入。",
+    "users.platformFeishuStep4":
+      "必须执行：左侧菜单进入「版本管理与发布」，创建版本（可用范围设为所有员工），提交审核发布，并在飞书管理后台审批通过。注意：与钉钉不同，飞书所有权限必须经过发版并由企业管理员审批后才能生效，未发布则同步无法正常使用。",
+    "users.platformFeishuPermissions":
+      "必须开通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。关键权限说明：同步组织架构时系统使用 user_id（employee_id）作为用户唯一标识，确保组织成员与飞书机器人通道的用户能正确对应；open_id 在不同应用之间不同，不能作为跨应用识别符，因此 contact:user.employee_id:readonly 是必需权限。",
     "users.platformWecomStep1": "在企业微信里准备可读通讯录的应用 Secret，并确认该应用具备读取部门和成员的只读权限。",
     "users.platformWecomStep2": "填写 Corp ID、通讯录 Secret 和根部门 ID。若要导入整棵树，根部门 ID 默认填 1。",
     "users.platformWecomStep3": "先预览导入结果。网关会自动把部门 ID 解析成完整组织路径。",
@@ -933,7 +950,9 @@ const translations = {
     "users.platformGuide": "設定說明",
     "users.platformGuideSummary": "展開後可查看應用設定步驟、所需權限，以及這些設定值應當從哪裡取得。",
     "users.platformGuidePermissions": "所需權限",
-    "users.platformGuideManifest": "飛書權限匯入範例",
+    "users.platformGuideManifest": "在飛書開發者後台，進入「權限管理」->「批量導入/導出權限」，貼上以下 JSON：",
+    "users.platformGuideManifestNote":
+      "注意：新增權限後，必須建立並發布應用新版本，並在企業後台審批通過後，權限才會生效。",
     "users.platformAppId": "App ID",
     "users.platformAppSecret": "App Secret",
     "users.platformCorpId": "Corp ID",
@@ -941,10 +960,16 @@ const translations = {
     "users.platformAppKey": "App Key",
     "users.platformRootDepartmentId": "根部門 ID",
     "users.platformRootDepartmentHint": "可選。用來把匯入範圍限制在某個組織分支；若要匯入整棵組織樹，就保留預設根部門 ID。",
-    "users.platformFeishuStep1": "在飛書開放平台建立企業自建應用，並為應用授予通訊錄唯讀權限。",
-    "users.platformFeishuStep2": "從應用憑據頁面複製 App ID 和 App Secret。若要匯入整棵組織樹，根部門 ID 保持預設值 0 即可。",
-    "users.platformFeishuStep3": "先做預覽。閘道會直接呼叫飛書介面，並自動建立組織樹與使用者歸屬。",
-    "users.platformFeishuPermissions": "應用需要具備部門唯讀、使用者唯讀，以及取得 tenant_access_token 的相關權限。",
+    "users.platformFeishuStep1":
+      "打開 open.feishu.cn，登入後進入開發者後台，建立企業自建應用。",
+    "users.platformFeishuStep2":
+      "左側選單進入「憑證與基礎資訊」，複製 App ID 和 App Secret，填入下方並保存設定。",
+    "users.platformFeishuStep3":
+      "左側選單進入「權限管理」，點擊「批量導入/導出權限」，貼上下方權限 JSON，並確認導入。",
+    "users.platformFeishuStep4":
+      "必須執行：左側選單進入「版本管理與發布」，建立版本（可用範圍設為所有員工），提交審核發布，並在飛書管理後台審批通過。注意：與釘釘不同，飛書所有權限必須經過發版並由企業管理員審批後才能生效，未發布則同步無法正常使用。",
+    "users.platformFeishuPermissions":
+      "必須開通 contact:contact.base:readonly、contact:department.base:readonly、contact:user.base:readonly、contact:user.employee_id:readonly。關鍵權限說明：同步組織架構時系統使用 user_id（employee_id）作為使用者唯一標識，確保組織成員與飛書機器人通道的使用者能正確對應；open_id 在不同應用之間不同，不能作為跨應用識別符，因此 contact:user.employee_id:readonly 是必需權限。",
     "users.platformWecomStep1": "在企業微信準備可讀通訊錄的應用 Secret，並確認該應用具備讀取部門與成員的唯讀權限。",
     "users.platformWecomStep2": "填寫 Corp ID、通訊錄 Secret 和根部門 ID。若要匯入整棵樹，根部門 ID 預設填 1。",
     "users.platformWecomStep3": "先預覽匯入結果。閘道會自動把部門 ID 解析成完整組織路徑。",
@@ -2351,13 +2376,20 @@ function ImportPlatformPanel({
                     <Typography.Text strong>{t("users.platformGuideManifest")}</Typography.Text>
                     <pre className="directory-guide-snippet">
 {`{
-  "scopes": [
-    "contact:department.base:readonly",
-    "contact:user.base:readonly",
-    "contact:user.department:readonly"
-  ]
+  "scopes": {
+    "tenant": [
+      "contact:contact.base:readonly",
+      "contact:department.base:readonly",
+      "contact:user.base:readonly",
+      "contact:user.employee_id:readonly"
+    ],
+    "user": []
+  }
 }`}
                     </pre>
+                    <Typography.Paragraph type="secondary">
+                      {t("users.platformGuideManifestNote")}
+                    </Typography.Paragraph>
                   </>
                 ) : null}
               </div>
@@ -2390,6 +2422,7 @@ function buildImportPlatformUiConfig(
         "users.platformFeishuStep1",
         "users.platformFeishuStep2",
         "users.platformFeishuStep3",
+        "users.platformFeishuStep4",
       ] as TranslationKey[],
       permissionsKey: "users.platformFeishuPermissions" as TranslationKey,
     };
