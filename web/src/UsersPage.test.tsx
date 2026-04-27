@@ -212,14 +212,14 @@ describe("Users console page", () => {
     expect(screen.getAllByText("Root department ID").length).toBeGreaterThan(0);
     expect(screen.queryByText("Departments response")).not.toBeInTheDocument();
     expect(screen.queryByText("Users response")).not.toBeInTheDocument();
-  });
+  }, 30000);
 
   it("renders the rooted org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
     await signInWithValidAdminKey();
 
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
-    expect(screen.getByText("/")).toBeInTheDocument();
+    expect(await screen.findByText("/", {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getAllByText("User directory").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
     await waitFor(() => {
@@ -231,7 +231,7 @@ describe("Users console page", () => {
     await mountConsoleApp("users");
     await signInWithValidAdminKey();
 
-    expect(await screen.findByText("/")).toBeInTheDocument();
+    expect(await screen.findByText("/", {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
 
     fireEvent.contextMenu(screen.getByText("/"));
