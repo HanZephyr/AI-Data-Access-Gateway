@@ -574,3 +574,26 @@ def test_preview_resource_rejects_when_no_fields_are_readable(
 
     assert response == {"status": "rejected", "reason": "no_readable_fields"}
     assert FakeConnector.last_sql is None
+
+
+def test_preview_resource_uses_schema_less_doris_style_paths(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(
+        db_session,
+        resource_id="res_customers",
+        path="warehouse.customers",
+    )
+    allow_resource_read(db_session, resource.id)
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).preview_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=resource.id,
+        limit=1,
+    )
+
+    assert response["status"] == "success"
+    assert FakeConnector.last_sql == "SELECT id, email FROM warehouse.customers LIMIT 1"

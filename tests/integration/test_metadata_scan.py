@@ -81,6 +81,37 @@ class FakeConnector:
         }
 
 
+class SchemaLessFakeConnector:
+    connector_type = "fake_schema_less"
+
+    def test_connection(self, config: dict[str, object]) -> None:
+        assert config["database"] == "warehouse"
+
+    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
+        return {
+            "databases": [
+                {
+                    "name": "warehouse",
+                    "tables": [
+                        {
+                            "name": "orders",
+                            "kind": "table",
+                            "description": "Orders imported from Doris.",
+                            "columns": [
+                                {
+                                    "name": "id",
+                                    "data_type": "integer",
+                                    "nullable": False,
+                                }
+                            ],
+                        }
+                    ],
+                    "views": [],
+                }
+            ]
+        }
+
+
 def build_scan_client() -> tuple[TestClient, Session]:
     FakeConnector.scan_count = 0
     engine = create_engine_from_url("sqlite:///:memory:")
@@ -118,6 +149,48 @@ def build_scan_client() -> tuple[TestClient, Session]:
     app.dependency_overrides[get_session] = override_session
     registry = get_connector_registry()
     registry.register("fake", cast(type[MetadataConnector], FakeConnector))
+    return TestClient(app), session_factory()
+
+
+def build_schema_less_scan_client() -> tuple[TestClient, Session]:
+    engine = create_engine_from_url("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_factory = create_session_factory(engine)
+
+    with session_factory() as session:
+        session.add(
+            ApiKey(
+                id="key_admin",
+                name="admin",
+                key_hash=hash_api_key("adg_admin"),
+                status="active",
+                scopes='["admin"]',
+            )
+        )
+        session.add(
+            Datasource(
+                id="ds_schema_less",
+                name="Warehouse",
+                type="fake_schema_less",
+                datasource_kind="relational",
+                config_json='{"database":"warehouse"}',
+                status="active",
+            )
+        )
+        session.commit()
+
+    app = create_app()
+
+    def override_session() -> Iterator[Session]:
+        with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    registry = get_connector_registry()
+    registry.register(
+        "fake_schema_less",
+        cast(type[MetadataConnector], SchemaLessFakeConnector),
+    )
     return TestClient(app), session_factory()
 
 
@@ -206,5 +279,26 @@ def test_metadata_scan_preserves_admin_annotations_for_stable_assets() -> None:
         assert preserved_resource.status == "disabled"
         assert preserved_field.description == "Primary order identifier."
         assert preserved_field.status == "disabled"
+    finally:
+        session.close()
+
+
+def test_admin_datasource_scan_endpoint_supports_schema_less_snapshots() -> None:
+    client, session = build_schema_less_scan_client()
+    try:
+        response = client.post(
+            "/admin/datasources/ds_schema_less/scan",
+            headers={"X-ADG-API-Key": "adg_admin"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "resources": 2, "fields": 1}
+
+        resources = session.execute(select(Resource).order_by(Resource.path)).scalars().all()
+        assert [resource.path for resource in resources] == [
+            "warehouse",
+            "warehouse.orders",
+        ]
+        assert [resource.kind for resource in resources] == ["database", "relational_table"]
     finally:
         session.close()

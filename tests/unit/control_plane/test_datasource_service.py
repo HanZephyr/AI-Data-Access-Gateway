@@ -197,6 +197,60 @@ def test_metadata_scan_service_imports_resource_descriptions_without_overwriting
     assert resource.description == "Manual steward description."
 
 
+def test_metadata_scan_service_supports_schema_less_relation_snapshots(
+    db_session: Session,
+) -> None:
+    datasource_service = DatasourceService(db_session)
+    datasource = datasource_service.create_datasource(
+        name="Warehouse",
+        connector_type="doris",
+        config={"database": "warehouse"},
+    )
+    db_session.commit()
+
+    counts = MetadataScanService(db_session).replace_snapshot(
+        datasource=datasource,
+        snapshot={
+            "databases": [
+                {
+                    "name": "warehouse",
+                    "tables": [
+                        {
+                            "name": "orders",
+                            "description": "Orders table.",
+                            "columns": [
+                                {
+                                    "name": "id",
+                                    "data_type": "largeint",
+                                    "nullable": False,
+                                    "ordinal_position": 1,
+                                }
+                            ],
+                        }
+                    ],
+                    "views": [],
+                }
+            ]
+        },
+    )
+    db_session.commit()
+
+    resources = db_session.execute(select(Resource).order_by(Resource.path)).scalars().all()
+    fields = db_session.execute(select(ResourceField).order_by(ResourceField.name)).scalars().all()
+
+    assert counts == {"resources": 2, "fields": 1}
+    assert [resource.path for resource in resources] == [
+        "warehouse",
+        "warehouse.orders",
+    ]
+    assert [resource.kind for resource in resources] == [
+        "database",
+        "relational_table",
+    ]
+    assert resources[-1].parent_id == resources[0].id
+    assert [field.name for field in fields] == ["id"]
+
+
 def test_datasource_service_encrypts_password_before_persisting(db_session: Session) -> None:
     service = DatasourceService(db_session)
 

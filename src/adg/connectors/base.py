@@ -29,7 +29,7 @@ class MetadataConnector(Protocol):
         ...
 
     def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
-        """Return normalized database/schema/relation metadata."""
+        """Return normalized database-first metadata with optional schema nesting."""
         ...
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:

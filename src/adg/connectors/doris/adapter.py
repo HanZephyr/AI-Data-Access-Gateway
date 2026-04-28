@@ -80,7 +80,6 @@ class DorisConnector(RelationalConnector):
             relation_payload: dict[str, object] = {
                 "name": relation_name,
                 "kind": "view" if str(relation["table_type"]).upper() == "VIEW" else "table",
-                "schema": database_name,
                 "description": self._normalize_comment(relation["table_comment"]),
                 "columns": columns_by_relation.get(relation_name, []),
             }
@@ -93,13 +92,8 @@ class DorisConnector(RelationalConnector):
             "databases": [
                 {
                     "name": database_name,
-                    "schemas": [
-                        {
-                            "name": database_name,
-                            "tables": tables,
-                            "views": views,
-                        }
-                    ],
+                    "tables": tables,
+                    "views": views,
                 }
             ]
         }

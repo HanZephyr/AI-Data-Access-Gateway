@@ -102,49 +102,42 @@ def test_doris_scan_metadata_uses_raw_information_schema(monkeypatch: MonkeyPatc
         "databases": [
             {
                 "name": "warehouse",
-                "schemas": [
+                "tables": [
                     {
-                        "name": "warehouse",
-                        "tables": [
+                        "name": "orders",
+                        "kind": "table",
+                        "description": "Orders imported from Doris.",
+                        "columns": [
                             {
-                                "name": "orders",
-                                "kind": "table",
-                                "schema": "warehouse",
-                                "description": "Orders imported from Doris.",
-                                "columns": [
-                                    {
-                                        "name": "id",
-                                        "data_type": "largeint",
-                                        "nullable": False,
-                                        "ordinal_position": 1,
-                                        "description": "primary key",
-                                    },
-                                    {
-                                        "name": "created_at",
-                                        "data_type": "datetimev2",
-                                        "nullable": True,
-                                        "ordinal_position": 2,
-                                        "description": None,
-                                    },
-                                ],
-                            }
+                                "name": "id",
+                                "data_type": "largeint",
+                                "nullable": False,
+                                "ordinal_position": 1,
+                                "description": "primary key",
+                            },
+                            {
+                                "name": "created_at",
+                                "data_type": "datetimev2",
+                                "nullable": True,
+                                "ordinal_position": 2,
+                                "description": None,
+                            },
                         ],
-                        "views": [
+                    }
+                ],
+                "views": [
+                    {
+                        "name": "daily_sales",
+                        "kind": "view",
+                        "description": "Daily sales rollup.",
+                        "columns": [
                             {
-                                "name": "daily_sales",
-                                "kind": "view",
-                                "schema": "warehouse",
-                                "description": "Daily sales rollup.",
-                                "columns": [
-                                    {
-                                        "name": "total",
-                                        "data_type": "decimal",
-                                        "nullable": True,
-                                        "ordinal_position": 1,
-                                        "description": "daily total",
-                                    },
-                                ],
-                            }
+                                "name": "total",
+                                "data_type": "decimal",
+                                "nullable": True,
+                                "ordinal_position": 1,
+                                "description": "daily total",
+                            },
                         ],
                     }
                 ],

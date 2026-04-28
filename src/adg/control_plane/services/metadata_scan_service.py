@@ -35,7 +35,8 @@ class MetadataScanService:
         field_count = 0
         scanned_at = datetime.now(UTC)
 
-        # The connector contract is hierarchical: database -> schema -> relation -> column.
+        # Connectors always emit databases, and may either nest relations under schemas
+        # or attach tables/views directly to the database when schemas are not meaningful.
         for database_payload in snapshot.get("databases", []):
             database = self._upsert_resource(
                 datasource=datasource,
@@ -51,6 +52,18 @@ class MetadataScanService:
             )
             seen_resource_ids.add(database.id)
             resource_count += 1
+
+            relation_resources, relation_fields = self._upsert_relations(
+                datasource=datasource,
+                existing_resources=existing_resources,
+                parent_resource=database,
+                relation_container=database_payload,
+                scanned_at=scanned_at,
+            )
+            seen_resource_ids.update(relation_resources)
+            seen_field_ids.update(relation_fields)
+            resource_count += len(relation_resources)
+            field_count += len(relation_fields)
 
             schema_items = database_payload.get("schemas", [])
             if not isinstance(schema_items, Sequence):
@@ -73,50 +86,17 @@ class MetadataScanService:
                 seen_resource_ids.add(schema.id)
                 resource_count += 1
 
-                for relation_key, relation_kind in (
-                    ("tables", "relational_table"),
-                    ("views", "relational_view"),
-                ):
-                    # Tables and views share the same persistence shape but keep distinct kinds.
-                    relation_items = schema_payload.get(relation_key, [])
-                    if not isinstance(relation_items, Sequence):
-                        continue
-                    for relation_payload in relation_items:
-                        relation_path = f"{schema.path}.{relation_payload['name']}"
-                        relation = self._upsert_resource(
-                            datasource=datasource,
-                            existing_resources=existing_resources,
-                            kind=relation_kind,
-                            name=str(relation_payload["name"]),
-                            path=relation_path,
-                            parent_id=schema.id,
-                            query_language="sql",
-                            description=self._payload_description(relation_payload),
-                            metadata={},
-                            scanned_at=scanned_at,
-                        )
-                        seen_resource_ids.add(relation.id)
-                        resource_count += 1
-
-                        column_items = relation_payload.get("columns", [])
-                        if not isinstance(column_items, Sequence):
-                            continue
-                        for index, column_payload in enumerate(column_items, start=1):
-                            field = self._upsert_field(
-                                datasource=datasource,
-                                relation=relation,
-                                name=str(column_payload["name"]),
-                                data_type=str(column_payload["data_type"]),
-                                nullable=bool(column_payload.get("nullable", True)),
-                                ordinal_position=int(column_payload.get("ordinal_position", index)),
-                                description=(
-                                    None
-                                    if column_payload.get("description") is None
-                                    else str(column_payload["description"])
-                                ),
-                            )
-                            seen_field_ids.add(field.id)
-                            field_count += 1
+                relation_resources, relation_fields = self._upsert_relations(
+                    datasource=datasource,
+                    existing_resources=existing_resources,
+                    parent_resource=schema,
+                    relation_container=schema_payload,
+                    scanned_at=scanned_at,
+                )
+                seen_resource_ids.update(relation_resources)
+                seen_field_ids.update(relation_fields)
+                resource_count += len(relation_resources)
+                field_count += len(relation_fields)
 
         self._delete_stale_snapshot_rows(datasource.id, seen_resource_ids, seen_field_ids)
         return {"resources": resource_count, "fields": field_count}
@@ -226,3 +206,59 @@ class MetadataScanService:
         if seen_resource_ids:
             resource_conditions.append(Resource.id.not_in(seen_resource_ids))
         self._session.execute(delete(Resource).where(*resource_conditions))
+
+    def _upsert_relations(
+        self,
+        *,
+        datasource: Datasource,
+        existing_resources: dict[str, Resource],
+        parent_resource: Resource,
+        relation_container: Mapping[str, object],
+        scanned_at: datetime,
+    ) -> tuple[set[str], set[str]]:
+        """Persist tables and views nested directly under one parent resource."""
+
+        seen_resource_ids: set[str] = set()
+        seen_field_ids: set[str] = set()
+        for relation_key, relation_kind in (
+            ("tables", "relational_table"),
+            ("views", "relational_view"),
+        ):
+            relation_items = relation_container.get(relation_key, [])
+            if not isinstance(relation_items, Sequence):
+                continue
+            for relation_payload in relation_items:
+                relation_path = f"{parent_resource.path}.{relation_payload['name']}"
+                relation = self._upsert_resource(
+                    datasource=datasource,
+                    existing_resources=existing_resources,
+                    kind=relation_kind,
+                    name=str(relation_payload["name"]),
+                    path=relation_path,
+                    parent_id=parent_resource.id,
+                    query_language="sql",
+                    description=self._payload_description(relation_payload),
+                    metadata={},
+                    scanned_at=scanned_at,
+                )
+                seen_resource_ids.add(relation.id)
+
+                column_items = relation_payload.get("columns", [])
+                if not isinstance(column_items, Sequence):
+                    continue
+                for index, column_payload in enumerate(column_items, start=1):
+                    field = self._upsert_field(
+                        datasource=datasource,
+                        relation=relation,
+                        name=str(column_payload["name"]),
+                        data_type=str(column_payload["data_type"]),
+                        nullable=bool(column_payload.get("nullable", True)),
+                        ordinal_position=int(column_payload.get("ordinal_position", index)),
+                        description=(
+                            None
+                            if column_payload.get("description") is None
+                            else str(column_payload["description"])
+                        ),
+                    )
+                    seen_field_ids.add(field.id)
+        return seen_resource_ids, seen_field_ids
