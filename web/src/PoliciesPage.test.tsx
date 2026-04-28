@@ -37,7 +37,25 @@ const routeMap: Record<string, MockResponse> = {
     ok: true,
     json: [{ id: "tag_finance", name: "Finance", category: "domain", description: null }],
   },
-  "/admin/resource-policies": { ok: true, json: [] },
+  "/admin/resource-policies": {
+    ok: true,
+    json: [
+      {
+        id: "policy_1",
+        subject_type: "role",
+        subject_id: "role_analyst",
+        subject_label: "Analyst",
+        effect: "allow",
+        action: "read",
+        allow_decrypt: true,
+        tag_id: "tag_finance",
+        tag_name: "Finance",
+        resource_id: null,
+        resource_label: null,
+        status: "active",
+      },
+    ],
+  },
   "/admin/field-policies": { ok: true, json: [] },
   "/admin/masking-policies": { ok: true, json: [] },
   "/admin/org-nodes": { ok: true, json: [] },
@@ -102,7 +120,7 @@ function createMatchMedia() {
   });
 }
 
-async function mountConsoleApp(initialPage: string) {
+async function mountConsoleApp(initialPage: string, language = "en-US") {
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
   const storage = createStorage();
@@ -112,7 +130,7 @@ async function mountConsoleApp(initialPage: string) {
     writable: true,
     value: createMatchMedia(),
   });
-  localStorage.setItem("adg.language", "en-US");
+  localStorage.setItem("adg.language", language);
   localStorage.setItem("adg.page", initialPage);
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -138,12 +156,12 @@ async function mountConsoleApp(initialPage: string) {
 }
 
 async function signInWithValidAdminKey() {
-  const input = await screen.findByPlaceholderText("Paste the key printed by init-admin");
+  const input = await screen.findByPlaceholderText(/Paste the key printed by init-admin|输入 init-admin 输出的密钥|輸入 init-admin 輸出的金鑰/);
   fireEvent.change(input, {
     target: { value: "adg_admin" },
   });
   expect(input).toHaveValue("adg_admin");
-  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+  fireEvent.click(screen.getByRole("button", { name: /Sign In|登录控制台|登入控制台/ }));
 }
 
 beforeEach(() => {
@@ -161,6 +179,23 @@ afterEach(() => {
 });
 
 describe("Policies page", () => {
+  it("localizes resource policy detail labels in Simplified Chinese", async () => {
+    await mountConsoleApp("policies", "zh-CN");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("Analyst")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "查看" }));
+
+    await screen.findByText("资源权限策略详情");
+    expect(screen.getAllByText("主体").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("标签 ID").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("标签名称").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("允许解密").length).toBeGreaterThan(0);
+    expect(screen.queryByText("subject_label")).not.toBeInTheDocument();
+    expect(screen.queryByText("tag_name")).not.toBeInTheDocument();
+    expect(screen.queryByText("allow_decrypt")).not.toBeInTheDocument();
+  }, 30000);
+
   it("lets admins target a tag and pick a user or role instead of typing raw ids", async () => {
     await mountConsoleApp("policies");
     await signInWithValidAdminKey();
@@ -170,7 +205,7 @@ describe("Policies page", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Subject type").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Subject").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("Tag").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Tag name").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();

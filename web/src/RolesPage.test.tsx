@@ -67,6 +67,7 @@ const routeMap: Record<string, MockResponse> = {
         id: "event_1",
         event_type: "query_allowed",
         decision: "allowed",
+        reason: "allowed_by_policy",
         datasource_id: "ds_1",
         query_id: "query_1",
         created_at: "2026-04-26T10:00:00Z",
@@ -82,7 +83,19 @@ const routeMap: Record<string, MockResponse> = {
   },
   "/admin/org-nodes": { ok: true, json: [] },
   "/admin/users": { ok: true, json: [] },
-  "/admin/api-keys": { ok: true, json: [] },
+  "/admin/api-keys": {
+    ok: true,
+    json: [
+      {
+        id: "key_1",
+        name: "Console key",
+        scopes: ["admin"],
+        status: "active",
+        created_at: "2026-04-26T10:00:00Z",
+      },
+    ],
+  },
+  "/admin/api-keys/key_1/revoke": { ok: true, json: {} },
   "/admin/users/importers/feishu/pull": {
     ok: true,
     json: {
@@ -176,7 +189,7 @@ function createMatchMedia() {
   });
 }
 
-async function mountConsoleApp(initialPage: string) {
+async function mountConsoleApp(initialPage: string, language = "en-US") {
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
   const storage = createStorage();
@@ -186,7 +199,7 @@ async function mountConsoleApp(initialPage: string) {
     writable: true,
     value: createMatchMedia(),
   });
-  localStorage.setItem("adg.language", "en-US");
+  localStorage.setItem("adg.language", language);
   localStorage.setItem("adg.page", initialPage);
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -222,12 +235,12 @@ async function mountConsoleApp(initialPage: string) {
 }
 
 async function signInWithValidAdminKey() {
-  const input = await screen.findByPlaceholderText("Paste the key printed by init-admin");
+  const input = await screen.findByPlaceholderText(/Paste the key printed by init-admin|输入 init-admin 输出的密钥|輸入 init-admin 輸出的金鑰/);
   fireEvent.change(input, {
     target: { value: "adg_admin" },
   });
   expect(input).toHaveValue("adg_admin");
-  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+  fireEvent.click(screen.getByRole("button", { name: /Sign In|登录控制台|登入控制台/ }));
 }
 
 beforeEach(() => {
@@ -253,9 +266,11 @@ describe("Roles page", () => {
     expect(await screen.findByText("Role directory")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Create/ })).toBeInTheDocument();
     expect(await screen.findByText("Analyst")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "View linked users" })).toBeInTheDocument();
+    const linkedUsersButton = screen.getByRole("button", { name: "View linked users" });
+    expect(linkedUsersButton).toBeInTheDocument();
+    expect(linkedUsersButton.textContent).toBe("");
 
-    fireEvent.click(screen.getByRole("button", { name: "View linked users" }));
+    fireEvent.click(linkedUsersButton);
     expect(await screen.findByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
   }, 30000);
@@ -284,9 +299,37 @@ describe("Roles page", () => {
 
     expect(await screen.findByText("query_1")).toBeInTheDocument();
     expect(screen.queryByText("select id from public.customers limit 1")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "View SQL" })).not.toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events/event_1/sql")).toBe(false);
 
-    fireEvent.click(screen.getByRole("button", { name: "View SQL" }));
+    fireEvent.click(screen.getByRole("button", { name: "View audit log details" }));
+    expect(await screen.findByText("Raw query SQL")).toBeInTheDocument();
     expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events/event_1/sql")).toBe(true);
+  }, 30000);
+
+  it("localizes audit detail decision and reason labels in Simplified Chinese", async () => {
+    await mountConsoleApp("audit", "zh-CN");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("query_1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "查看审计日志详情" }));
+
+    await screen.findByText("原始查询 SQL");
+    expect(screen.getAllByText("决策").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("原因").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("允许").length).toBeGreaterThan(0);
+  }, 30000);
+
+  it("labels the API key revoke icon action", async () => {
+    await mountConsoleApp("apiKeys");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("Console key")).toBeInTheDocument();
+    const revokeButton = screen.getByRole("button", { name: "Revoke" });
+    expect(revokeButton).toBeInTheDocument();
+    expect(revokeButton.textContent).toBe("");
   }, 30000);
 
   it("shows hyphen placeholders for empty org path and roles in import preview", async () => {

@@ -165,6 +165,7 @@ const translations = {
     "common.delete": "Delete",
     "common.saved": "Saved",
     "common.deleted": "Deleted",
+    "common.revoke": "Revoke",
     "common.revoked": "Revoked",
     "common.detailsTitle": "{title} Details",
     "common.createTitle": "Create {title}",
@@ -217,6 +218,7 @@ const translations = {
     "field.scopes": "Scopes",
     "tab.resource": "Resource",
     "tab.field": "Field",
+    "tab.tag": "Tag",
     "policy.resourcePolicies": "Resource Policies",
     "policy.fieldPolicies": "Field Policies",
     "section.fields": "Fields",
@@ -252,8 +254,8 @@ const translations = {
     "users.resetKey": "Reset runtime key",
     "users.latestKey": "Latest plaintext key",
     "users.importTitle": "User data import",
-    "audit.viewSql": "View SQL",
-    "audit.sqlTitle": "Audit SQL",
+    "audit.viewDetails": "View audit log details",
+    "audit.rawSql": "Raw query SQL",
     "audit.emptySql": "No SQL text available for this event.",
     "users.uploadFile": "Upload file",
     "users.dragFileHere": "Drag file here",
@@ -406,6 +408,8 @@ const translations = {
     "option.all": "all users",
     "option.allow": "allow",
     "option.deny": "deny",
+    "option.allowed": "allowed",
+    "option.denied": "denied",
     "option.user": "user",
     "option.role": "role",
     "option.fixed": "fixed",
@@ -441,16 +445,21 @@ const translations = {
     "column.description": "Description",
     "column.subject_type": "Subject type",
     "column.subject_id": "Subject",
+    "column.subject_label": "Subject",
     "column.effect": "Effect",
     "column.action": "Action",
-    "column.tag_id": "Tag",
+    "column.tag_id": "Tag ID",
+    "column.tag_name": "Tag name",
     "column.priority": "Priority",
     "column.field_name": "Field",
+    "column.allow_decrypt": "Allow decrypt",
     "column.strategy": "Strategy",
     "column.subject": "Subject",
     "column.scopes": "Scopes",
     "column.expires_at": "Expires at",
     "column.event_type": "Event type",
+    "column.decision": "Decision",
+    "column.reason": "Reason",
     "column.resource_ids": "Resources",
     "column.query_id": "Query ID",
     "column.data_type": "Data type",
@@ -496,6 +505,7 @@ const translations = {
     "common.delete": "删除",
     "common.saved": "已保存",
     "common.deleted": "已删除",
+    "common.revoke": "撤销",
     "common.revoked": "已撤销",
     "common.detailsTitle": "{title}详情",
     "common.createTitle": "新建{title}",
@@ -548,6 +558,7 @@ const translations = {
     "field.scopes": "权限范围",
     "tab.resource": "资源",
     "tab.field": "字段",
+    "tab.tag": "标签",
     "policy.resourcePolicies": "资源权限策略",
     "policy.fieldPolicies": "字段权限策略",
     "section.fields": "字段",
@@ -583,8 +594,8 @@ const translations = {
     "users.resetKey": "重置运行时密钥",
     "users.latestKey": "最近一次明文密钥",
     "users.importTitle": "用户数据导入",
-    "audit.viewSql": "查看 SQL",
-    "audit.sqlTitle": "审计 SQL",
+    "audit.viewDetails": "查看审计日志详情",
+    "audit.rawSql": "原始查询 SQL",
     "audit.emptySql": "该事件没有可查看的 SQL 文本。",
     "users.uploadFile": "上传文件",
     "users.dragFileHere": "拖拽文件到这里",
@@ -735,6 +746,8 @@ const translations = {
     "option.all": "全员",
     "option.allow": "允许",
     "option.deny": "拒绝",
+    "option.allowed": "允许",
+    "option.denied": "拒绝",
     "option.user": "用户",
     "option.role": "角色",
     "option.fixed": "固定替换",
@@ -770,16 +783,21 @@ const translations = {
     "column.description": "描述",
     "column.subject_type": "主体类型",
     "column.subject_id": "主体",
+    "column.subject_label": "主体",
     "column.effect": "效果",
     "column.action": "操作",
-    "column.tag_id": "标签",
+    "column.tag_id": "标签 ID",
+    "column.tag_name": "标签名称",
     "column.priority": "优先级",
     "column.field_name": "字段",
+    "column.allow_decrypt": "允许解密",
     "column.strategy": "策略",
     "column.subject": "主体",
     "column.scopes": "权限范围",
     "column.expires_at": "过期时间",
     "column.event_type": "事件类型",
+    "column.decision": "决策",
+    "column.reason": "原因",
     "column.resource_ids": "资源",
     "column.query_id": "查询 ID",
     "column.data_type": "数据类型",
@@ -825,6 +843,7 @@ const translations = {
     "common.delete": "刪除",
     "common.saved": "已儲存",
     "common.deleted": "已刪除",
+    "common.revoke": "撤銷",
     "common.revoked": "已撤銷",
     "common.detailsTitle": "{title}詳情",
     "common.createTitle": "新增{title}",
@@ -877,6 +896,7 @@ const translations = {
     "field.scopes": "權限範圍",
     "tab.resource": "資源",
     "tab.field": "欄位",
+    "tab.tag": "標籤",
     "policy.resourcePolicies": "資源權限策略",
     "policy.fieldPolicies": "欄位權限策略",
     "section.fields": "欄位",
@@ -912,8 +932,8 @@ const translations = {
     "users.resetKey": "重置執行時金鑰",
     "users.latestKey": "最近一次明文金鑰",
     "users.importTitle": "使用者資料匯入",
-    "audit.viewSql": "檢視 SQL",
-    "audit.sqlTitle": "稽核 SQL",
+    "audit.viewDetails": "查看稽核日誌詳情",
+    "audit.rawSql": "原始查詢 SQL",
     "audit.emptySql": "此事件沒有可檢視的 SQL 文字。",
     "users.uploadFile": "上傳檔案",
     "users.dragFileHere": "將檔案拖曳到這裡",
@@ -1064,6 +1084,8 @@ const translations = {
     "option.all": "全員",
     "option.allow": "允許",
     "option.deny": "拒絕",
+    "option.allowed": "允許",
+    "option.denied": "拒絕",
     "option.user": "使用者",
     "option.role": "角色",
     "option.fixed": "固定替換",
@@ -1099,16 +1121,21 @@ const translations = {
     "column.description": "描述",
     "column.subject_type": "主體類型",
     "column.subject_id": "主體",
+    "column.subject_label": "主體",
     "column.effect": "效果",
     "column.action": "操作",
-    "column.tag_id": "標籤",
+    "column.tag_id": "標籤 ID",
+    "column.tag_name": "標籤名稱",
     "column.priority": "優先順序",
     "column.field_name": "欄位",
+    "column.allow_decrypt": "允許解密",
     "column.strategy": "策略",
     "column.subject": "主體",
     "column.scopes": "權限範圍",
     "column.expires_at": "到期時間",
     "column.event_type": "事件類型",
+    "column.decision": "決策",
+    "column.reason": "原因",
     "column.resource_ids": "資源",
     "column.query_id": "查詢 ID",
     "column.data_type": "資料類型",
@@ -2338,12 +2365,14 @@ function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
               {
                 title: columnLabel("actions", t),
                 key: "actions",
-                width: 180,
+                width: 132,
                 render: (_, row) => (
                   <Space size={6} wrap>
-                    <Button size="small" onClick={() => void openLinkedUsers(row)}>
-                      {t("roles.linkedUsers")}
-                    </Button>
+                    <CompactActionButton
+                      title={t("roles.linkedUsers")}
+                      icon={<LinkOutlined />}
+                      onClick={() => void openLinkedUsers(row)}
+                    />
                     <IconAction title={t("common.edit")} icon={<EditOutlined />} onClick={() => openEdit(row)} />
                     <Popconfirm title={t("common.deleteConfirm", { title: row.name || t("roles.directory") })} onConfirm={() => void deleteRole(String(row.id))}>
                       <Button size="small" icon={<DeleteOutlined />} />
@@ -3700,7 +3729,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 value={currentTargetMode}
                 options={[
                   { value: "resource", label: t("tab.resource") },
-                  { value: "tag", label: columnLabel("tag_id", t) },
+                  { value: "tag", label: t("tab.tag") },
                 ]}
                 onChange={(value) => {
                   setCurrentTargetMode(value);
@@ -3780,7 +3809,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 key: "allow_decrypt",
                 render: (value: boolean) => (value ? t("common.yes") : t("common.no")),
               }]),
-          ...(isField ? [] : [{ title: columnLabel("tag_id", t), dataIndex: "tag_name", key: "tag_name" }]),
+          ...(isField ? [] : [{ title: columnLabel("tag_name", t), dataIndex: "tag_name", key: "tag_name" }]),
           { title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" },
           ...(isField ? [{ title: columnLabel("field_name", t), dataIndex: "field_name", key: "field_name" }] : []),
           { title: columnLabel("status", t), dataIndex: "status", key: "status", render: (value: string) => optionLabel(value, t) },
@@ -4020,7 +4049,9 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
               }}
             />
             <Popconfirm title={t("common.revokeConfirm")} onConfirm={() => revoke(row)}>
-              <Button size="small" icon={<StopOutlined />} />
+              <Tooltip title={t("common.revoke")}>
+                <Button size="small" aria-label={t("common.revoke")} icon={<StopOutlined />} />
+              </Tooltip>
             </Popconfirm>
           </Space>
         )}
@@ -4646,17 +4677,21 @@ function IconAction({ title, icon, onClick }: { title: string; icon: React.React
 function RecordDetails({
   record,
   title,
-  onClose
+  onClose,
+  extraItems,
+  width = 560
 }: {
   record: AnyRecord | null;
   title: string;
   onClose: () => void;
+  extraItems?: Array<{ key: string; label: React.ReactNode; children: React.ReactNode }>;
+  width?: number;
 }) {
   /** Show all fields of a selected row in a copy-friendly details drawer. */
 
   const { t } = useI18n();
   return (
-    <Drawer title={t("common.detailsTitle", { title })} open={Boolean(record)} onClose={onClose} width={560}>
+    <Drawer title={t("common.detailsTitle", { title })} open={Boolean(record)} onClose={onClose} width={width}>
       {record ? (
         <Descriptions bordered column={1} size="small">
           {Object.entries(record).map(([key, value]) => (
@@ -4664,6 +4699,11 @@ function RecordDetails({
               <Typography.Text copyable={typeof value === "string"}>
                 {typeof value === "object" && value !== null ? JSON.stringify(value) : typeof value === "string" ? optionLabel(value, t) : String(value ?? "")}
               </Typography.Text>
+            </Descriptions.Item>
+          ))}
+          {(extraItems || []).map((item) => (
+            <Descriptions.Item key={item.key} label={item.label}>
+              {item.children}
             </Descriptions.Item>
           ))}
         </Descriptions>
@@ -4868,7 +4908,9 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
   const titleText = t("nav.audit");
   const columns = columnsFromRows(state.data || [], t);
 
-  const viewSql = async (row: AnyRecord) => {
+  const openAuditDetails = async (row: AnyRecord) => {
+    setSelected(row);
+    setSqlRecord(null);
     setSqlLoading(true);
     setSqlError(null);
     try {
@@ -4882,6 +4924,31 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
     }
   };
 
+  const closeAuditDetails = () => {
+    setSelected(null);
+    setSqlRecord(null);
+    setSqlError(null);
+    setSqlLoading(false);
+  };
+
+  const auditSqlDetail = selected
+    ? [{
+        key: "raw-sql",
+        label: t("audit.rawSql"),
+        children: sqlError ? (
+          <Alert type="error" message={sqlError} />
+        ) : sqlLoading ? (
+          <Typography.Text type="secondary">{t("common.refresh")}</Typography.Text>
+        ) : sqlRecord?.sql_text ? (
+          <Typography.Paragraph copyable>
+            <pre>{String(sqlRecord.sql_text)}</pre>
+          </Typography.Paragraph>
+        ) : (
+          <Typography.Text type="secondary">{t("audit.emptySql")}</Typography.Text>
+        ),
+      }]
+    : undefined;
+
   return (
     <>
       <DataPanel
@@ -4890,35 +4957,17 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
         columns={columns}
         actions={(row) => (
           <Space size={6}>
-            <IconAction title={t("common.view")} icon={<EyeOutlined />} onClick={() => setSelected(row)} />
-            <Button size="small" onClick={() => void viewSql(row)}>
-              {t("audit.viewSql")}
-            </Button>
+            <IconAction title={t("audit.viewDetails")} icon={<EyeOutlined />} onClick={() => void openAuditDetails(row)} />
           </Space>
         )}
       />
-      <RecordDetails record={selected} title={titleText} onClose={() => setSelected(null)} />
-      <Drawer
-        title={t("audit.sqlTitle")}
-        open={Boolean(sqlRecord) || Boolean(sqlError) || sqlLoading}
+      <RecordDetails
+        record={selected}
+        title={titleText}
+        onClose={closeAuditDetails}
+        extraItems={auditSqlDetail}
         width={720}
-        onClose={() => {
-          setSqlRecord(null);
-          setSqlError(null);
-          setSqlLoading(false);
-        }}
-      >
-        {sqlError ? <Alert type="error" message={sqlError} /> : null}
-        {sqlLoading ? <Typography.Paragraph>{t("common.refresh")}</Typography.Paragraph> : null}
-        {!sqlLoading && !sqlError && sqlRecord?.sql_text ? (
-          <Typography.Paragraph copyable>
-            <pre>{String(sqlRecord.sql_text)}</pre>
-          </Typography.Paragraph>
-        ) : null}
-        {!sqlLoading && !sqlError && !sqlRecord?.sql_text ? (
-          <Empty description={t("audit.emptySql")} />
-        ) : null}
-      </Drawer>
+      />
     </>
   );
 }
