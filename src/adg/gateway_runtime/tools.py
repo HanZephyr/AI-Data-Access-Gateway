@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from adg.app.settings import get_settings
 from adg.audit.service import AuditService
+from adg.connectors.base import QueryResult
 from adg.connectors.registry import ConnectorRegistry, get_connector_registry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
@@ -400,6 +401,7 @@ class GatewayRuntimeService:
         connector = self._connector_registry.create(datasource.type)
         query_id = f"qry_{uuid4()}"
         result = connector.execute_query(datasource.config(), guard_result.normalized_sql, limit)
+        result = self._enrich_result_column_types(result=result, resources=actual_resources)
         result, masked_columns = self._masking.apply_to_result(
             identity=identity,
             datasource_id=datasource_id,
@@ -625,6 +627,36 @@ class GatewayRuntimeService:
         if not readable_fields:
             return None
         return ", ".join(readable_fields)
+
+    def _enrich_result_column_types(
+        self,
+        *,
+        result: QueryResult,
+        resources: list[Resource],
+    ) -> QueryResult:
+        """Fill connector-unknown column types from scanned field metadata when available."""
+
+        if not result.columns:
+            return result
+
+        field_rows = self._session.execute(
+            select(ResourceField.name, ResourceField.data_type)
+            .where(ResourceField.resource_id.in_([resource.id for resource in resources]))
+            .order_by(ResourceField.resource_id, ResourceField.ordinal_position)
+        ).all()
+        data_type_by_name: dict[str, str] = {}
+        for field_name, data_type in field_rows:
+            data_type_by_name.setdefault(str(field_name).lower(), str(data_type))
+
+        enriched_columns: list[dict[str, Any]] = []
+        for column in result.columns:
+            column_name = str(column.get("name", ""))
+            data_type = str(column.get("data_type", "unknown"))
+            if data_type == "unknown":
+                data_type = data_type_by_name.get(column_name.lower(), data_type)
+            enriched_columns.append({"name": column_name, "data_type": data_type})
+
+        return QueryResult(columns=enriched_columns, rows=result.rows)
 
     def _record_discovery(
         self,

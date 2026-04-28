@@ -17,6 +17,7 @@ from adg.policy.runtime import IdentityContext
 class FakeConnector:
     connector_type = "fake"
     last_sql: str | None = None
+    override_columns: list[dict[str, str]] | None = None
 
     def test_connection(self, config: dict[str, object]) -> None:
         return None
@@ -26,6 +27,13 @@ class FakeConnector:
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
         type(self).last_sql = sql
+        if type(self).override_columns is not None:
+            override_columns = type(self).override_columns
+            assert override_columns is not None
+            return QueryResult(
+                columns=override_columns,
+                rows=[{"ID": 1, "EMAIL": "alice@example.com"}],
+            )
         if "email" in sql.lower():
             return QueryResult(
                 columns=[
@@ -597,3 +605,33 @@ def test_preview_resource_uses_schema_less_doris_style_paths(
 
     assert response["status"] == "success"
     assert FakeConnector.last_sql == "SELECT id, email FROM warehouse.customers LIMIT 1"
+
+
+def test_execute_query_enriches_unknown_column_types_from_scanned_metadata(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    FakeConnector.override_columns = [
+        {"name": "ID", "data_type": "unknown"},
+        {"name": "EMAIL", "data_type": "unknown"},
+    ]
+
+    try:
+        response = runtime(db_session).execute_query(
+            identity=identity(),
+            api_key_id="key_1",
+            datasource_id="ds_1",
+            resource_ids=[resource.id],
+            query="select id, email from public.customers",
+            limit=1,
+        )
+    finally:
+        FakeConnector.override_columns = None
+
+    assert response["status"] == "success"
+    assert response["columns"] == [
+        {"name": "ID", "data_type": "integer"},
+        {"name": "EMAIL", "data_type": "varchar"},
+    ]
