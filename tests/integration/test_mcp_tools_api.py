@@ -120,6 +120,102 @@ def test_mcp_tool_route_accepts_non_admin_api_key() -> None:
     assert response.json()["datasources"][0]["id"] == "ds_1"
 
 
+def test_mcp_tool_route_inherits_database_policy_to_child_tables() -> None:
+    client, session_factory = build_mcp_app()
+
+    with session_factory() as session:
+        session.add(
+            Datasource(
+                id="ds_2",
+                name="Inherited Warehouse",
+                type="postgres",
+                datasource_kind="relational",
+                config_json="{}",
+                status="active",
+            )
+        )
+        session.add_all(
+            [
+                Resource(
+                    id="res_database",
+                    datasource_id="ds_2",
+                    parent_id=None,
+                    kind="database",
+                    name="warehouse",
+                    path="warehouse",
+                    display_name="warehouse",
+                    query_language="sql",
+                    status="active",
+                    metadata_json="{}",
+                ),
+                Resource(
+                    id="res_schema",
+                    datasource_id="ds_2",
+                    parent_id="res_database",
+                    kind="schema",
+                    name="public",
+                    path="warehouse.public",
+                    display_name="public",
+                    query_language="sql",
+                    status="active",
+                    metadata_json="{}",
+                ),
+                Resource(
+                    id="res_orders",
+                    datasource_id="ds_2",
+                    parent_id="res_schema",
+                    kind="relational_table",
+                    name="orders",
+                    path="warehouse.public.orders",
+                    display_name="orders",
+                    query_language="sql",
+                    status="active",
+                    metadata_json="{}",
+                ),
+            ]
+        )
+        session.add(
+            ResourcePolicy(
+                subject_type="user",
+                subject_id="user_1",
+                effect="allow",
+                action="read",
+                resource_id="res_database",
+                status="active",
+            )
+        )
+        session.commit()
+
+    datasources = client.post(
+        "/api/tools/list_datasources",
+        json={},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+    resources = client.post(
+        "/api/tools/list_resources",
+        json={"datasource_id": "ds_2"},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+
+    assert datasources.status_code == 200
+    assert "ds_2" in [item["id"] for item in datasources.json()["datasources"]]
+    assert resources.status_code == 200
+    assert resources.json() == {
+        "resources": [
+            {
+                "id": "res_orders",
+                "datasource_id": "ds_2",
+                "kind": "relational_table",
+                "name": "orders",
+                "path": "warehouse.public.orders",
+                "display_name": "orders",
+                "description": None,
+                "query_language": "sql",
+            }
+        ]
+    }
+
+
 def test_mcp_tool_route_rejects_unknown_tool_name() -> None:
     client, _ = build_mcp_app()
 

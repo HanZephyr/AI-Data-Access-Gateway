@@ -76,6 +76,13 @@ class PolicyDecision:
 class RuntimePolicyService:
     """Evaluates resource and field access against active governance policies."""
 
+    _RESOURCE_SPECIFICITY = {
+        "relational_table": 4,
+        "relational_view": 4,
+        "schema": 3,
+        "database": 2,
+    }
+
     def __init__(self, session: Session) -> None:
         self._session = session
 
@@ -93,13 +100,11 @@ class RuntimePolicyService:
         if not policies:
             return PolicyDecision(allowed=False, reason="no_policy_default_deny")
 
-        # Once policies exist for an action, at least one subject/resource match must allow it.
-        matching = [
-            policy
-            for policy in policies
-            if self._subject_matches(policy, identity)
-            and self._resource_policy_matches(policy, resource)
-        ]
+        matching = self._matching_resource_policies(
+            policies=policies,
+            identity=identity,
+            resource=resource,
+        )
         if any(policy.effect == "deny" for policy in matching):
             return PolicyDecision(allowed=False, reason="denied_by_policy")
         if any(policy.effect == "allow" for policy in matching):
@@ -119,12 +124,11 @@ class RuntimePolicyService:
         if not policies:
             return PolicyDecision(allowed=False, reason="no_policy_default_deny")
 
-        matching = [
-            policy
-            for policy in policies
-            if self._subject_matches(policy, identity)
-            and self._resource_policy_matches(policy, resource)
-        ]
+        matching = self._matching_resource_policies(
+            policies=policies,
+            identity=identity,
+            resource=resource,
+        )
         if any(policy.effect == "deny" for policy in matching):
             return PolicyDecision(allowed=False, reason="denied_by_policy")
         if any(policy.effect == "allow" and policy.allow_decrypt for policy in matching):
@@ -212,3 +216,72 @@ class RuntimePolicyService:
         if policy.subject_type == "role":
             return policy.subject_id in identity.roles
         return False
+
+    def _matching_resource_policies(
+        self,
+        *,
+        policies: list[ResourcePolicy],
+        identity: IdentityContext,
+        resource: Resource,
+    ) -> list[ResourcePolicy]:
+        """Return subject-matching policies from the most specific matching resource scope."""
+
+        resource_chain = self._resource_scope_chain(resource)
+        matched: list[tuple[int, ResourcePolicy]] = []
+        for policy in policies:
+            if not self._subject_matches(policy, identity):
+                continue
+            specificity = self._resource_policy_specificity(
+                policy=policy,
+                resource=resource,
+                resource_chain=resource_chain,
+            )
+            if specificity is None:
+                continue
+            matched.append((specificity, policy))
+        if not matched:
+            return []
+        highest_specificity = max(specificity for specificity, _ in matched)
+        return [
+            policy for specificity, policy in matched if specificity == highest_specificity
+        ]
+
+    def _resource_policy_specificity(
+        self,
+        *,
+        policy: ResourcePolicy,
+        resource: Resource,
+        resource_chain: list[Resource],
+    ) -> int | None:
+        """Return one sortable specificity score when a policy applies to a resource."""
+
+        if policy.resource_id is not None:
+            for current in resource_chain:
+                if current.id == policy.resource_id:
+                    return self._RESOURCE_SPECIFICITY.get(current.kind, 1)
+            return None
+        if policy.tag_id is not None:
+            matches = (
+                self._session.execute(
+                    select(ResourceTag).where(
+                        ResourceTag.resource_id == resource.id,
+                        ResourceTag.tag_id == policy.tag_id,
+                    )
+                ).scalar_one_or_none()
+                is not None
+            )
+            return 1 if matches else None
+        return 0
+
+    def _resource_scope_chain(self, resource: Resource) -> list[Resource]:
+        """Return one resource followed by its ancestors up to the datasource root."""
+
+        chain = [resource]
+        current = resource
+        while current.parent_id is not None:
+            parent = self._session.get(Resource, current.parent_id)
+            if parent is None:
+                break
+            chain.append(parent)
+            current = parent
+        return chain

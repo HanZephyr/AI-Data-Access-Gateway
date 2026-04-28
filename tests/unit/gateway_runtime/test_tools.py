@@ -69,12 +69,14 @@ def add_resource(
     datasource_id: str = "ds_1",
     path: str = "warehouse.public.customers",
     status: str = "active",
+    parent_id: str | None = None,
+    kind: str = "relational_table",
 ) -> Resource:
     resource = Resource(
         id=resource_id,
         datasource_id=datasource_id,
-        parent_id=None,
-        kind="relational_table",
+        parent_id=parent_id,
+        kind=kind,
         name=path.rsplit(".", 1)[-1],
         path=path,
         display_name=path.rsplit(".", 1)[-1],
@@ -246,6 +248,38 @@ def test_runtime_discovery_hides_disabled_resources_and_fields(
     assert [resource["id"] for resource in listed["resources"]] == [active.id]
     assert [column["name"] for column in described["columns"]] == ["id"]
     assert disabled_description == {"status": "rejected", "reason": "resource_disabled"}
+
+
+def test_database_policy_makes_child_tables_discoverable(db_session: Session) -> None:
+    add_datasource(db_session)
+    database = add_resource(
+        db_session,
+        resource_id="res_database",
+        path="warehouse",
+        kind="database",
+    )
+    schema = add_resource(
+        db_session,
+        resource_id="res_schema",
+        path="warehouse.public",
+        parent_id=database.id,
+        kind="schema",
+    )
+    table = add_resource(
+        db_session,
+        resource_id="res_customers",
+        path="warehouse.public.customers",
+        parent_id=schema.id,
+    )
+    allow_resource_read(db_session, database.id)
+
+    listed = runtime(db_session).list_resources(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+    )
+
+    assert [resource["id"] for resource in listed["resources"]] == [table.id]
 
 
 def test_describe_resource_hides_denied_fields(db_session: Session) -> None:

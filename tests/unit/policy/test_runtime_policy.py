@@ -17,12 +17,14 @@ def add_resource(
     resource_id: str,
     datasource_id: str = "ds_1",
     path: str = "warehouse.public.customers",
+    parent_id: str | None = None,
+    kind: str = "relational_table",
 ) -> Resource:
     resource = Resource(
         id=resource_id,
         datasource_id=datasource_id,
-        parent_id=None,
-        kind="relational_table",
+        parent_id=parent_id,
+        kind=kind,
         name=path.rsplit(".", 1)[-1],
         path=path,
         display_name=path.rsplit(".", 1)[-1],
@@ -178,6 +180,139 @@ def test_deny_policy_overrides_allow_policy(db_session: Session) -> None:
     decision = RuntimePolicyService(db_session).check_resource_access(
         identity=identity(),
         resource=resource,
+        action="read",
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "denied_by_policy"
+
+
+def test_database_allow_is_inherited_by_child_table(db_session: Session) -> None:
+    database = add_resource(
+        db_session=db_session,
+        resource_id="res_database",
+        path="warehouse",
+        kind="database",
+    )
+    schema = add_resource(
+        db_session=db_session,
+        resource_id="res_schema",
+        path="warehouse.public",
+        parent_id=database.id,
+        kind="schema",
+    )
+    table = add_resource(
+        db_session=db_session,
+        resource_id="res_table",
+        path="warehouse.public.customers",
+        parent_id=schema.id,
+    )
+    db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            resource_id=database.id,
+            status="active",
+        )
+    )
+
+    decision = RuntimePolicyService(db_session).check_resource_access(
+        identity=identity(),
+        resource=table,
+        action="read",
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == "allowed_by_policy"
+
+
+def test_schema_allow_is_inherited_by_child_table(db_session: Session) -> None:
+    database = add_resource(
+        db_session=db_session,
+        resource_id="res_database",
+        path="warehouse",
+        kind="database",
+    )
+    schema = add_resource(
+        db_session=db_session,
+        resource_id="res_schema",
+        path="warehouse.public",
+        parent_id=database.id,
+        kind="schema",
+    )
+    table = add_resource(
+        db_session=db_session,
+        resource_id="res_table",
+        path="warehouse.public.customers",
+        parent_id=schema.id,
+    )
+    db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            resource_id=schema.id,
+            status="active",
+        )
+    )
+
+    decision = RuntimePolicyService(db_session).check_resource_access(
+        identity=identity(),
+        resource=table,
+        action="read",
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == "allowed_by_policy"
+
+
+def test_table_deny_overrides_database_allow(db_session: Session) -> None:
+    database = add_resource(
+        db_session=db_session,
+        resource_id="res_database",
+        path="warehouse",
+        kind="database",
+    )
+    schema = add_resource(
+        db_session=db_session,
+        resource_id="res_schema",
+        path="warehouse.public",
+        parent_id=database.id,
+        kind="schema",
+    )
+    table = add_resource(
+        db_session=db_session,
+        resource_id="res_table",
+        path="warehouse.public.customers",
+        parent_id=schema.id,
+    )
+    db_session.add_all(
+        [
+            ResourcePolicy(
+                subject_type="role",
+                subject_id="analyst",
+                effect="allow",
+                action="read",
+                resource_id=database.id,
+                status="active",
+            ),
+            ResourcePolicy(
+                subject_type="user",
+                subject_id="user-1",
+                effect="deny",
+                action="read",
+                resource_id=table.id,
+                status="active",
+            ),
+        ]
+    )
+
+    decision = RuntimePolicyService(db_session).check_resource_access(
+        identity=identity(),
+        resource=table,
         action="read",
     )
 
