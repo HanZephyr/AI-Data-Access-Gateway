@@ -24,7 +24,9 @@ class DorisConnector(RelationalConnector):
         try:
             engine = create_engine(self._build_url(config))
             with engine.connect() as connection:
-                database_names = [database_name] if database_name else self._list_database_names(connection)
+                database_names = (
+                    [database_name] if database_name else self._list_database_names(connection)
+                )
                 databases = [
                     self._scan_database(connection, scanned_database_name)
                     for scanned_database_name in database_names
@@ -44,7 +46,12 @@ class DorisConnector(RelationalConnector):
                 """
                 SELECT SCHEMA_NAME AS schema_name
                 FROM information_schema.SCHEMATA
-                WHERE SCHEMA_NAME NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+                WHERE SCHEMA_NAME NOT IN (
+                    'information_schema',
+                    'mysql',
+                    'performance_schema',
+                    'sys'
+                )
                 ORDER BY SCHEMA_NAME
                 """
             )
