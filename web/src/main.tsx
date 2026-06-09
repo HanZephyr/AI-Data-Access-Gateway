@@ -428,7 +428,9 @@ const translations = {
     "column.resource_id": "Resource",
     "column.resource_label": "Resource",
     "column.api_key_id": "API key",
-    "column.user_id": "User",
+    "column.user_id": "User ID",
+    "column.user_name": "User",
+    "column.user_org_path": "Organization",
     "column.name": "Name",
     "column.type": "Type",
     "column.datasource_kind": "Datasource kind",
@@ -469,7 +471,14 @@ const translations = {
     "column.external_ref": "External reference",
     "column.org_path": "Organization path",
     "column.role_names": "Roles",
-    "column.actions": "Actions"
+    "column.actions": "Actions",
+    "option.metadata_discovery": "Metadata discovery",
+    "option.resource_preview": "Resource preview",
+    "option.query_execution": "Query execution",
+    "option.permission_rejected": "Permission rejected",
+    "option.audit_sql_view": "Audit SQL viewed",
+    "option.decryption": "Decryption",
+    "option.query_allowed": "Query allowed"
   },
   "zh-CN": {
     "brand.productName": "AI 数据库连接网关",
@@ -766,7 +775,9 @@ const translations = {
     "column.resource_id": "资源",
     "column.resource_label": "资源",
     "column.api_key_id": "API 密钥",
-    "column.user_id": "用户",
+    "column.user_id": "用户 ID",
+    "column.user_name": "用户",
+    "column.user_org_path": "所属组织",
     "column.name": "名称",
     "column.type": "类型",
     "column.datasource_kind": "数据源类型",
@@ -807,7 +818,14 @@ const translations = {
     "column.external_ref": "外部标识",
     "column.org_path": "组织路径",
     "column.role_names": "角色",
-    "column.actions": "操作"
+    "column.actions": "操作",
+    "option.metadata_discovery": "元数据发现",
+    "option.resource_preview": "资源预览",
+    "option.query_execution": "查询执行",
+    "option.permission_rejected": "权限拒绝",
+    "option.audit_sql_view": "查看审计 SQL",
+    "option.decryption": "数据解密",
+    "option.query_allowed": "查询放行"
   },
   "zh-TW": {
     "brand.productName": "AI 資料庫連接閘道",
@@ -1104,7 +1122,9 @@ const translations = {
     "column.resource_id": "資源",
     "column.resource_label": "資源",
     "column.api_key_id": "API 金鑰",
-    "column.user_id": "使用者",
+    "column.user_id": "使用者 ID",
+    "column.user_name": "使用者",
+    "column.user_org_path": "所屬組織",
     "column.name": "名稱",
     "column.type": "類型",
     "column.datasource_kind": "資料來源類型",
@@ -1145,7 +1165,14 @@ const translations = {
     "column.external_ref": "外部識別",
     "column.org_path": "組織路徑",
     "column.role_names": "角色",
-    "column.actions": "操作"
+    "column.actions": "操作",
+    "option.metadata_discovery": "中繼資料探索",
+    "option.resource_preview": "資源預覽",
+    "option.query_execution": "查詢執行",
+    "option.permission_rejected": "權限拒絕",
+    "option.audit_sql_view": "查看稽核 SQL",
+    "option.decryption": "資料解密",
+    "option.query_allowed": "查詢放行"
   }
 } as const;
 
@@ -4670,6 +4697,62 @@ function columnsFromRows(rows: AnyRecord[], t: I18nContextValue["t"]): ColumnsTy
   }));
 }
 
+function auditColumns(t: I18nContextValue["t"]): ColumnsType<AnyRecord> {
+  /** Keep audit tables operator-readable while preserving raw identifiers for details. */
+
+  return [
+    {
+      title: columnLabel("user_name", t),
+      dataIndex: "user_name",
+      key: "user_name",
+      ellipsis: true,
+      render: (value: unknown, row: AnyRecord) => String(value || row.user_id || ""),
+    },
+    {
+      title: columnLabel("event_type", t),
+      dataIndex: "event_type",
+      key: "event_type",
+      ellipsis: true,
+      render: (value: unknown) => optionLabel(String(value || ""), t),
+    },
+    {
+      title: columnLabel("resource_ids", t),
+      dataIndex: "resource_ids",
+      key: "resource_ids",
+      ellipsis: true,
+      render: (value: unknown) => (typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? "")),
+    },
+    {
+      title: columnLabel("decision", t),
+      dataIndex: "decision",
+      key: "decision",
+      ellipsis: true,
+      render: (value: unknown) => optionLabel(String(value || ""), t),
+    },
+    {
+      title: columnLabel("reason", t),
+      dataIndex: "reason",
+      key: "reason",
+      ellipsis: true,
+      render: (value: unknown) => optionLabel(String(value || ""), t),
+    },
+    {
+      title: columnLabel("query_id", t),
+      dataIndex: "query_id",
+      key: "query_id",
+      ellipsis: true,
+      render: (value: unknown) => String(value ?? ""),
+    },
+    {
+      title: columnLabel("created_at", t),
+      dataIndex: "created_at",
+      key: "created_at",
+      ellipsis: true,
+      render: (value: unknown) => String(value ?? ""),
+    },
+  ];
+}
+
 function IconAction({ title, icon, onClick }: { title: string; icon: React.ReactNode; onClick: () => void }) {
   /** Render a compact icon button with an accessible tooltip label. */
 
@@ -4912,7 +4995,7 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
   const [sqlError, setSqlError] = useState<string | null>(null);
   const [sqlLoading, setSqlLoading] = useState(false);
   const titleText = t("nav.audit");
-  const columns = columnsFromRows(state.data || [], t);
+  const columns = auditColumns(t);
 
   const openAuditDetails = async (row: AnyRecord) => {
     setSelected(row);

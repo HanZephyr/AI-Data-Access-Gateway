@@ -66,7 +66,10 @@ const routeMap: Record<string, MockResponse> = {
     json: [
       {
         id: "event_1",
-        event_type: "query_allowed",
+        user_id: "user_1",
+        user_name: "Alice Analyst",
+        user_org_path: "Company/Finance",
+        event_type: "query_execution",
         decision: "allowed",
         reason: "allowed_by_policy",
         datasource_id: "ds_1",
@@ -334,11 +337,29 @@ describe("Roles page", () => {
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events/event_1/sql")).toBe(true);
   }, 30000);
 
+  it("shows audit user names in the table and user identity details in the drawer", async () => {
+    await mountConsoleApp("audit");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("Alice Analyst")).toBeInTheDocument();
+    expect(screen.queryByText("user_1")).not.toBeInTheDocument();
+    expect(screen.getByText("Query execution")).toBeInTheDocument();
+    expect(screen.queryByText("query_execution")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View audit log details" }));
+
+    expect(await screen.findByText("user_1")).toBeInTheDocument();
+    expect(screen.getAllByText("Alice Analyst").length).toBeGreaterThan(0);
+    expect(screen.getByText("Company/Finance")).toBeInTheDocument();
+  }, 30000);
+
   it("localizes audit detail decision and reason labels in Simplified Chinese", async () => {
     await mountConsoleApp("audit", "zh-CN");
     await signInWithValidAdminKey();
 
     expect(await screen.findByText("query_1")).toBeInTheDocument();
+    expect(screen.getByText("查询执行")).toBeInTheDocument();
+    expect(screen.queryByText("query_execution")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "查看审计日志详情" }));
 

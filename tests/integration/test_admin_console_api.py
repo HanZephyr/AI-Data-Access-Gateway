@@ -11,6 +11,7 @@ from adg.control_plane.db import create_engine_from_url, create_session_factory,
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
 from adg.control_plane.models.datasource import Datasource
+from adg.control_plane.models.directory import OrgNode, User
 from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.security import hash_api_key
 
@@ -37,6 +38,24 @@ def build_console_app() -> TestClient:
                 type="postgres",
                 datasource_kind="relational",
                 config_json="{}",
+                status="active",
+            )
+        )
+        session.add(
+            OrgNode(
+                id="org_finance",
+                name="Finance",
+                path="Company/Finance",
+                depth=2,
+                status="active",
+            )
+        )
+        session.add(
+            User(
+                id="user-1",
+                name="Alice Analyst",
+                external_ref="alice",
+                org_node_id="org_finance",
                 status="active",
             )
         )
@@ -511,6 +530,9 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     audit = client.get("/admin/audit-events", headers=auth())
     assert audit.status_code == 200
     assert audit.json()[0]["event_type"] == "metadata_discovery"
+    assert audit.json()[0]["user_id"] == "user-1"
+    assert audit.json()[0]["user_name"] == "Alice Analyst"
+    assert audit.json()[0]["user_org_path"] == "Company/Finance"
     assert "tenant_id" not in audit.json()[0]
     assert "sql_text" not in audit.json()[0]
 

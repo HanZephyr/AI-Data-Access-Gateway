@@ -1220,7 +1220,7 @@ def list_audit_events(
         select(AuditEvent)
         .order_by(AuditEvent.created_at.desc())
     ).scalars()
-    return [_serialize_audit_event_summary(event) for event in events]
+    return [_serialize_audit_event_summary(event, session) for event in events]
 
 
 @router.get("/audit-events/{event_id}/sql")
@@ -1611,12 +1611,15 @@ def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
     }
 
 
-def _serialize_audit_event_summary(event: AuditEvent) -> dict[str, Any]:
+def _serialize_audit_event_summary(event: AuditEvent, session: Session) -> dict[str, Any]:
     """Decode audit JSON fields for the summary list without raw SQL text."""
 
+    user_summary = _audit_user_summary(session, event.user_id)
     return {
         "id": event.id,
         "user_id": event.user_id,
+        "user_name": user_summary["user_name"],
+        "user_org_path": user_summary["user_org_path"],
         "api_key_id": event.api_key_id,
         "event_type": event.event_type,
         "datasource_id": event.datasource_id,
@@ -1627,6 +1630,21 @@ def _serialize_audit_event_summary(event: AuditEvent) -> dict[str, Any]:
         "metadata": event.audit_metadata,
         "created_at": event.created_at.isoformat(),
     }
+
+
+def _audit_user_summary(session: Session, user_id: str | None) -> dict[str, str | None]:
+    """Resolve audit user ids into operator-readable directory details."""
+
+    if user_id is None:
+        return {"user_name": None, "user_org_path": None}
+    user = session.get(User, user_id)
+    if user is None:
+        return {"user_name": None, "user_org_path": None}
+    org_path = None
+    if user.org_node_id:
+        org_node = session.get(OrgNode, user.org_node_id)
+        org_path = org_node.path if org_node is not None else None
+    return {"user_name": user.name, "user_org_path": org_path}
 
 
 def _resource_label(session: Session, resource_id: str | None) -> str | None:
