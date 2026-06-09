@@ -322,6 +322,27 @@ describe("Roles page", () => {
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.database");
   }, 30000);
 
+  it("localizes datasource delete confirmation buttons in Simplified Chinese", async () => {
+    await mountConsoleApp("datasources", "zh-CN");
+    await signInWithValidAdminKey();
+
+    const datasourceNode = await screen.findByText("Warehouse");
+    fireEvent.click(datasourceNode);
+    const deleteButton = screen.getByRole("img", { name: "delete" }).closest("button");
+    expect(deleteButton).not.toBeNull();
+    fireEvent.click(deleteButton as HTMLButtonElement);
+
+    expect(await screen.findByText("确认删除该数据源及其扫描元数据？")).toBeInTheDocument();
+    const cancelButton = screen.getByRole("button", { name: "取消" });
+    const okButton = screen.getByRole("button", { name: "确定" });
+    expect(cancelButton).toBeInTheDocument();
+    expect(okButton).toBeInTheDocument();
+    expect(cancelButton).not.toHaveClass("ant-btn-sm");
+    expect(okButton).not.toHaveClass("ant-btn-sm");
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "OK" })).not.toBeInTheDocument();
+  }, 30000);
+
   it("keeps audit rows summary-only and loads raw SQL on demand", async () => {
     await mountConsoleApp("audit");
     await signInWithValidAdminKey();

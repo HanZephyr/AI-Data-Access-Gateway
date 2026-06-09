@@ -597,6 +597,16 @@ body {
   background: var(--teal-600) !important;
 }
 
+.ant-popconfirm .ant-popover-buttons .ant-btn {
+  min-width: 56px;
+  padding-inline: 14px;
+}
+
+.ant-popconfirm .ant-popover-buttons .ant-btn-primary,
+.ant-popconfirm .ant-popover-buttons .ant-btn-primary:hover {
+  color: #fff !important;
+}
+
 .ant-btn-sm {
   width: 28px;
   height: 28px;

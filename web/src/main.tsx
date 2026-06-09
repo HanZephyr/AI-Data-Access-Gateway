@@ -176,6 +176,8 @@ const translations = {
     "common.validJson": "{label} must be valid JSON",
     "common.yes": "Yes",
     "common.no": "No",
+    "common.confirm": "OK",
+    "common.cancel": "Cancel",
     "placeholder.resourceSearch": "Search and select a resource",
     "placeholder.tagSearch": "Search and select a tag",
     "placeholder.roleSearch": "Select one or more roles",
@@ -525,6 +527,8 @@ const translations = {
     "common.validJson": "{label}必须是有效 JSON",
     "common.yes": "是",
     "common.no": "否",
+    "common.confirm": "确定",
+    "common.cancel": "取消",
     "placeholder.resourceSearch": "搜索并选择资源",
     "placeholder.tagSearch": "搜索并选择标签",
     "placeholder.roleSearch": "选择一个或多个角色",
@@ -872,6 +876,8 @@ const translations = {
     "common.validJson": "{label}必須是有效 JSON",
     "common.yes": "是",
     "common.no": "否",
+    "common.confirm": "確定",
+    "common.cancel": "取消",
     "placeholder.resourceSearch": "搜尋並選擇資源",
     "placeholder.tagSearch": "搜尋並選擇標籤",
     "placeholder.roleSearch": "選擇一個或多個角色",
@@ -1261,6 +1267,17 @@ function optionLabel(value: string, t: I18nContextValue["t"]) {
 
   const key = `option.${value}` as TranslationKey;
   return key in translations["en-US"] ? t(key) : value;
+}
+
+function popconfirmButtonProps(t: I18nContextValue["t"]) {
+  /** Keep confirmation popovers localized and sized for text labels. */
+
+  return {
+    okText: t("common.confirm"),
+    cancelText: t("common.cancel"),
+    okButtonProps: { size: "middle" as const },
+    cancelButtonProps: { size: "middle" as const },
+  };
 }
 
 function columnLabel(key: string, t: I18nContextValue["t"]) {
@@ -2052,6 +2069,7 @@ function UsersPage({ api }: { api: ReturnType<typeof useApi> }) {
                   title={t("common.deleteConfirm", { title: selectedUser?.name || t("nav.users") })}
                   onConfirm={() => void deleteUser()}
                   disabled={!selectedUser}
+                  {...popconfirmButtonProps(t)}
                 >
                   <Button aria-label={t("common.delete")} icon={<DeleteOutlined />} disabled={!selectedUser}>
                     {t("common.delete")}
@@ -2401,7 +2419,11 @@ function RolesPage({ api }: { api: ReturnType<typeof useApi> }) {
                       onClick={() => void openLinkedUsers(row)}
                     />
                     <IconAction title={t("common.edit")} icon={<EditOutlined />} onClick={() => openEdit(row)} />
-                    <Popconfirm title={t("common.deleteConfirm", { title: row.name || t("roles.directory") })} onConfirm={() => void deleteRole(String(row.id))}>
+                    <Popconfirm
+                      title={t("common.deleteConfirm", { title: row.name || t("roles.directory") })}
+                      onConfirm={() => void deleteRole(String(row.id))}
+                      {...popconfirmButtonProps(t)}
+                    >
                       <Button size="small" icon={<DeleteOutlined />} />
                     </Popconfirm>
                   </Space>
@@ -2979,7 +3001,11 @@ function DatasourceDetail({
           >
             {t("datasource.scan")}
           </Button>
-          <Popconfirm title={t("datasource.deleteConfirm")} onConfirm={remove}>
+          <Popconfirm
+            title={t("datasource.deleteConfirm")}
+            onConfirm={remove}
+            {...popconfirmButtonProps(t)}
+          >
             <Button icon={<DeleteOutlined />} />
           </Popconfirm>
           <Button type="primary" onClick={save}>{t("common.save")}</Button>
@@ -3537,7 +3563,11 @@ function Tags({
                 editForm.setFieldsValue(row);
               }}
             />
-            <Popconfirm title={t("common.deleteConfirm", { title: t("nav.tags") })} onConfirm={() => remove(row)}>
+            <Popconfirm
+              title={t("common.deleteConfirm", { title: t("nav.tags") })}
+              onConfirm={() => remove(row)}
+              {...popconfirmButtonProps(t)}
+            >
               <Button size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Space>
@@ -3859,7 +3889,13 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 editForm.setFieldsValue(row);
               }}
             />
-            <Popconfirm title={t("common.deleteConfirm", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })} onConfirm={() => remove(row)}>
+            <Popconfirm
+              title={t("common.deleteConfirm", {
+                title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies"),
+              })}
+              onConfirm={() => remove(row)}
+              {...popconfirmButtonProps(t)}
+            >
               <Button size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Space>
@@ -3995,7 +4031,11 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
                 editForm.setFieldsValue(toMaskingFormValues(row));
               }}
             />
-            <Popconfirm title={t("common.deleteConfirm", { title: t("nav.masking") })} onConfirm={() => remove(row)}>
+            <Popconfirm
+              title={t("common.deleteConfirm", { title: t("nav.masking") })}
+              onConfirm={() => remove(row)}
+              {...popconfirmButtonProps(t)}
+            >
               <Button size="small" icon={<DeleteOutlined />} />
             </Popconfirm>
           </Space>
@@ -4081,7 +4121,11 @@ function ApiKeys({ api }: { api: ReturnType<typeof useApi> }) {
                 editForm.setFieldsValue(row);
               }}
             />
-            <Popconfirm title={t("common.revokeConfirm")} onConfirm={() => revoke(row)}>
+            <Popconfirm
+              title={t("common.revokeConfirm")}
+              onConfirm={() => revoke(row)}
+              {...popconfirmButtonProps(t)}
+            >
               <Tooltip title={t("common.revoke")}>
                 <Button size="small" aria-label={t("common.revoke")} icon={<StopOutlined />} />
               </Tooltip>
@@ -4326,7 +4370,11 @@ function CrudPanel({
               />
             ) : null}
             {deletePath ? (
-              <Popconfirm title={t("common.deleteConfirm", { title: titleText })} onConfirm={() => remove(row)}>
+              <Popconfirm
+                title={t("common.deleteConfirm", { title: titleText })}
+                onConfirm={() => remove(row)}
+                {...popconfirmButtonProps(t)}
+              >
                 <Button size="small" icon={<DeleteOutlined />} />
               </Popconfirm>
             ) : null}
