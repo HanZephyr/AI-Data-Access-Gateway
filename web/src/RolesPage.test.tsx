@@ -334,11 +334,12 @@ describe("Roles page", () => {
 
     expect(await screen.findByText("确认删除该数据源及其扫描元数据？")).toBeInTheDocument();
     const cancelButton = screen.getByRole("button", { name: "取消" });
-    const okButton = screen.getByRole("button", { name: "确定" });
+    const okButton = screen.getByRole("button", { name: "删除" });
     expect(cancelButton).toBeInTheDocument();
     expect(okButton).toBeInTheDocument();
     expect(cancelButton).not.toHaveClass("ant-btn-sm");
     expect(okButton).not.toHaveClass("ant-btn-sm");
+    expect(okButton).toHaveClass("ant-btn-dangerous");
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OK" })).not.toBeInTheDocument();
   }, 30000);

@@ -607,6 +607,18 @@ body {
   color: #fff !important;
 }
 
+.ant-popconfirm .ant-popover-buttons .ant-btn-primary.ant-btn-dangerous {
+  background: #b42318 !important;
+  border-color: #b42318 !important;
+  color: #fff !important;
+}
+
+.ant-popconfirm .ant-popover-buttons .ant-btn-primary.ant-btn-dangerous:hover {
+  background: #a11d15 !important;
+  border-color: #a11d15 !important;
+  color: #fff !important;
+}
+
 .ant-btn-sm {
   width: 28px;
   height: 28px;
