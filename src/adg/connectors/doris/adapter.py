@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import create_engine, text
 
 from adg.connectors.base import MetadataSnapshot
@@ -18,47 +20,71 @@ class DorisConnector(RelationalConnector):
 
         self._require_dependency()
         database_name = str(config.get("database", "")).strip()
-        if not database_name:
-            raise ConnectorOperationError("Doris datasource config requires a database")
 
         try:
             engine = create_engine(self._build_url(config))
             with engine.connect() as connection:
-                relations = connection.execute(
-                    text(
-                        """
-                        SELECT
-                            TABLE_NAME AS table_name,
-                            TABLE_TYPE AS table_type,
-                            TABLE_COMMENT AS table_comment
-                        FROM information_schema.TABLES
-                        WHERE TABLE_SCHEMA = :schema
-                        ORDER BY TABLE_NAME
-                        """
-                    ),
-                    {"schema": database_name},
-                ).mappings().all()
-                columns = connection.execute(
-                    text(
-                        """
-                        SELECT
-                            TABLE_NAME AS table_name,
-                            COLUMN_NAME AS column_name,
-                            DATA_TYPE AS data_type,
-                            IS_NULLABLE AS is_nullable,
-                            ORDINAL_POSITION AS ordinal_position,
-                            COLUMN_COMMENT AS column_comment
-                        FROM information_schema.COLUMNS
-                        WHERE TABLE_SCHEMA = :schema
-                        ORDER BY TABLE_NAME, ORDINAL_POSITION
-                        """
-                    ),
-                    {"schema": database_name},
-                ).mappings().all()
+                database_names = [database_name] if database_name else self._list_database_names(connection)
+                databases = [
+                    self._scan_database(connection, scanned_database_name)
+                    for scanned_database_name in database_names
+                ]
         except ConnectorDependencyError:
             raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
+
+        return {"databases": databases}
+
+    def _list_database_names(self, connection: Any) -> list[str]:
+        """Discover user-accessible Doris databases from information_schema."""
+
+        rows = connection.execute(
+            text(
+                """
+                SELECT SCHEMA_NAME AS schema_name
+                FROM information_schema.SCHEMATA
+                WHERE SCHEMA_NAME NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+                ORDER BY SCHEMA_NAME
+                """
+            )
+        ).mappings().all()
+        return [str(row["schema_name"]) for row in rows if str(row["schema_name"]).strip()]
+
+    def _scan_database(self, connection: Any, database_name: str) -> dict[str, object]:
+        """Read Doris table and column metadata for one database."""
+
+        relations = connection.execute(
+            text(
+                """
+                SELECT
+                    TABLE_NAME AS table_name,
+                    TABLE_TYPE AS table_type,
+                    TABLE_COMMENT AS table_comment
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = :schema
+                ORDER BY TABLE_NAME
+                """
+            ),
+            {"schema": database_name},
+        ).mappings().all()
+        columns = connection.execute(
+            text(
+                """
+                SELECT
+                    TABLE_NAME AS table_name,
+                    COLUMN_NAME AS column_name,
+                    DATA_TYPE AS data_type,
+                    IS_NULLABLE AS is_nullable,
+                    ORDINAL_POSITION AS ordinal_position,
+                    COLUMN_COMMENT AS column_comment
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = :schema
+                ORDER BY TABLE_NAME, ORDINAL_POSITION
+                """
+            ),
+            {"schema": database_name},
+        ).mappings().all()
 
         columns_by_relation: dict[str, list[dict[str, object]]] = {}
         for column in columns:
@@ -89,13 +115,9 @@ class DorisConnector(RelationalConnector):
                 tables.append(relation_payload)
 
         return {
-            "databases": [
-                {
-                    "name": database_name,
-                    "tables": tables,
-                    "views": views,
-                }
-            ]
+            "name": database_name,
+            "tables": tables,
+            "views": views,
         }
 
     def _normalize_comment(self, value: object) -> str | None:

@@ -23,6 +23,7 @@ class DatasourceCreateRequest(BaseModel):
 
     name: str
     type: str
+    description: str | None = None
     config: dict[str, object]
     status: str = "active"
 
@@ -31,6 +32,7 @@ class DatasourceUpdateRequest(BaseModel):
     """Partial update payload for datasource metadata and connection config."""
 
     name: str | None = None
+    description: str | None = None
     config: dict[str, object] | None = None
     status: str | None = None
 
@@ -46,6 +48,7 @@ def _serialize_datasource(
         "name": datasource.name,
         "type": datasource.type,
         "datasource_kind": datasource.datasource_kind,
+        "description": datasource.description,
         "config": datasource.admin_config(),
         "status": datasource.status,
         "created_at": datasource.created_at.isoformat(),
@@ -79,6 +82,7 @@ def create_datasource(
     datasource = service.create_datasource(
         name=payload.name,
         connector_type=payload.type,
+        description=payload.description,
         config=payload.config,
         status=payload.status,
     )
@@ -120,6 +124,7 @@ def update_datasource(
         datasource = service.update_datasource(
             datasource_id=datasource_id,
             name=payload.name,
+            description=payload.description,
             status=payload.status,
             config=payload.config,
         )

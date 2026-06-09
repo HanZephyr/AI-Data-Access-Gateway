@@ -37,6 +37,7 @@ class DatasourceService:
         name: str,
         connector_type: str,
         config: dict[str, object],
+        description: str | None = None,
         status: str = "active",
     ) -> Datasource:
         """Create a relational datasource record with compact JSON configuration."""
@@ -45,6 +46,7 @@ class DatasourceService:
             name=name,
             type=connector_type,
             datasource_kind="relational",
+            description=description,
             config_json=json.dumps(
                 self._secret_config.protect_persisted_config(config),
                 separators=(",", ":"),
@@ -66,15 +68,18 @@ class DatasourceService:
         self,
         *,
         datasource_id: str,
-        name: str | None,
-        status: str | None,
-        config: dict[str, object] | None,
+        name: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        config: dict[str, object] | None = None,
     ) -> Datasource:
         """Apply partial datasource updates while preserving omitted fields."""
 
         datasource = self.get_datasource(datasource_id)
         if name is not None:
             datasource.name = name
+        if description is not None:
+            datasource.description = description
         if status is not None:
             datasource.status = status
         if config is not None:

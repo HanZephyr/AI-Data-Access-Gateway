@@ -32,7 +32,25 @@ class FakeConnection:
     ) -> FakeResult:
         sql = str(statement)
         self.statements.append((sql, parameters))
+        if "information_schema.SCHEMATA" in sql:
+            return FakeResult(
+                [
+                    {"schema_name": "analytics"},
+                    {"schema_name": "warehouse"},
+                ]
+            )
         if "information_schema.TABLES" in sql:
+            schema = str((parameters or {}).get("schema", "warehouse"))
+            if schema == "analytics":
+                return FakeResult(
+                    [
+                        {
+                            "table_name": "visits",
+                            "table_type": "BASE TABLE",
+                            "table_comment": "Web visits.",
+                        },
+                    ]
+                )
             return FakeResult(
                 [
                     {
@@ -48,6 +66,20 @@ class FakeConnection:
                 ]
             )
         if "information_schema.COLUMNS" in sql:
+            schema = str((parameters or {}).get("schema", "warehouse"))
+            if schema == "analytics":
+                return FakeResult(
+                    [
+                        {
+                            "table_name": "visits",
+                            "column_name": "id",
+                            "data_type": "largeint",
+                            "is_nullable": "NO",
+                            "ordinal_position": 1,
+                            "column_comment": "visit id",
+                        },
+                    ]
+                )
             return FakeResult(
                 [
                     {
@@ -145,3 +177,35 @@ def test_doris_scan_metadata_uses_raw_information_schema(monkeypatch: MonkeyPatc
         ]
     }
     assert all(parameters == {"schema": "warehouse"} for _, parameters in connection.statements)
+
+
+def test_doris_scan_metadata_discovers_all_accessible_databases_when_database_is_blank(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = FakeConnection()
+
+    def fake_create_engine(url: object) -> FakeEngine:
+        return FakeEngine(connection)
+
+    monkeypatch.setattr(adapter, "create_engine", fake_create_engine, raising=False)
+    monkeypatch.setattr(DorisConnector, "_require_dependency", lambda self: None)
+
+    snapshot = DorisConnector().scan_metadata({})
+
+    assert [database["name"] for database in snapshot["databases"]] == ["analytics", "warehouse"]
+    assert snapshot["databases"][0]["tables"] == [
+        {
+            "name": "visits",
+            "kind": "table",
+            "description": "Web visits.",
+            "columns": [
+                {
+                    "name": "id",
+                    "data_type": "largeint",
+                    "nullable": False,
+                    "ordinal_position": 1,
+                    "description": "visit id",
+                }
+            ],
+        }
+    ]

@@ -80,6 +80,18 @@ def test_api_keys_table_has_user_id_column(tmp_path: Path) -> None:
     assert "user_id" in columns
 
 
+def test_datasources_table_has_description_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "control-plane.db"
+    db_url = f"sqlite:///{db_path}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", db_url)
+
+    command.upgrade(config, "head")
+
+    columns = migrated_columns(db_url, "datasources")
+    assert "description" in columns
+
+
 def test_migration_uses_database_url_from_environment(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -144,6 +156,7 @@ def test_migrations_follow_the_expected_directory_runtime_chain() -> None:
     assert revision_files == [
         "202604260001_directory_runtime_baseline.py",
         "202604260002_security_hardening_runtime_admin.py",
+        "202606090001_datasource_descriptions.py",
     ]
 
     revisions: dict[str, tuple[str, str | None]] = {}
@@ -165,5 +178,9 @@ def test_migrations_follow_the_expected_directory_runtime_chain() -> None:
         "202604260002_security_hardening_runtime_admin.py": (
             "202604260002",
             "202604260001",
+        ),
+        "202606090001_datasource_descriptions.py": (
+            "202606090001",
+            "202604260002",
         ),
     }

@@ -2,6 +2,7 @@ import importlib
 from collections.abc import Sequence
 
 from sqlalchemy import URL, create_engine, inspect, text
+from sqlalchemy.engine import Connection
 
 from adg.connectors.base import MetadataColumn, MetadataSnapshot, QueryResult
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
@@ -55,45 +56,99 @@ class RelationalConnector:
         """Inspect schemas, tables, views, and columns into the shared snapshot shape."""
 
         self._require_dependency()
+        configured_database = str(config.get("database", "")).strip()
         try:
-            engine = create_engine(self._build_url(config))
-            with engine.connect() as connection:
-                inspector = inspect(connection)
-                database_name = str(config.get("database", "default"))
-                schemas: list[dict[str, object]] = []
-                for schema_name in inspector.get_schema_names():
-                    # SQLAlchemy inspectors expose tables and views separately; ADG preserves both.
-                    tables = [
-                        self._build_relation_payload(
-                            relation_name=table_name,
-                            relation_kind="table",
-                            schema_name=schema_name,
-                            columns=inspector.get_columns(table_name, schema=schema_name),
-                        )
-                        for table_name in inspector.get_table_names(schema=schema_name)
-                    ]
-                    views = [
-                        self._build_relation_payload(
-                            relation_name=view_name,
-                            relation_kind="view",
-                            schema_name=schema_name,
-                            columns=inspector.get_columns(view_name, schema=schema_name),
-                        )
-                        for view_name in inspector.get_view_names(schema=schema_name)
-                    ]
-                    schemas.append(
-                        {
-                            "name": schema_name,
-                            "tables": tables,
-                            "views": views,
-                        }
-                    )
+            if configured_database:
+                engine = create_engine(self._build_url(config))
+                with engine.connect() as connection:
+                    databases = [self._scan_database(connection, configured_database)]
+            else:
+                discovery_engine = create_engine(self._build_url(config))
+                with discovery_engine.connect() as connection:
+                    database_names = self._discover_database_names(connection)
+                databases = []
+                for database_name in database_names:
+                    database_config = {**config, "database": database_name}
+                    database_engine = create_engine(self._build_url(database_config))
+                    with database_engine.connect() as connection:
+                        databases.append(self._scan_database(connection, database_name))
         except ConnectorDependencyError:
             raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
 
-        return {"databases": [{"name": database_name, "schemas": schemas}]}
+        return {"databases": databases}
+
+    def _discover_database_names(self, connection: Connection) -> list[str]:
+        """Return accessible logical databases when the datasource did not pin one."""
+
+        dialect_name = str(getattr(connection.dialect, "name", "")).lower()
+        if dialect_name.startswith("postgres"):
+            result = connection.exec_driver_sql(
+                """
+                SELECT datname
+                FROM pg_database
+                WHERE datallowconn = true
+                  AND datistemplate = false
+                ORDER BY datname
+                """
+            )
+            return [str(name) for name in result.scalars().all() if str(name).strip()]
+        if dialect_name in {"mysql", "mariadb"}:
+            result = connection.exec_driver_sql("SHOW DATABASES")
+            system_databases = {"information_schema", "mysql", "performance_schema", "sys"}
+            return [
+                str(name)
+                for name in result.scalars().all()
+                if str(name).strip() and str(name).lower() not in system_databases
+            ]
+        fallback_name = self._connection_database_name(connection)
+        return [fallback_name] if fallback_name else ["default"]
+
+    def _connection_database_name(self, connection: Connection) -> str | None:
+        """Best-effort database name fallback for dialects without discovery support."""
+
+        direct_name = getattr(connection, "database", None)
+        if direct_name:
+            return str(direct_name)
+        engine = getattr(connection, "engine", None)
+        url = getattr(engine, "url", None)
+        database_name = getattr(url, "database", None)
+        return str(database_name) if database_name else None
+
+    def _scan_database(self, connection: Connection, database_name: str) -> dict[str, object]:
+        """Inspect one connected database into ADG's database-first snapshot shape."""
+
+        inspector = inspect(connection)
+        schemas: list[dict[str, object]] = []
+        for schema_name in inspector.get_schema_names():
+            # SQLAlchemy inspectors expose tables and views separately; ADG preserves both.
+            tables = [
+                self._build_relation_payload(
+                    relation_name=table_name,
+                    relation_kind="table",
+                    schema_name=schema_name,
+                    columns=inspector.get_columns(table_name, schema=schema_name),
+                )
+                for table_name in inspector.get_table_names(schema=schema_name)
+            ]
+            views = [
+                self._build_relation_payload(
+                    relation_name=view_name,
+                    relation_kind="view",
+                    schema_name=schema_name,
+                    columns=inspector.get_columns(view_name, schema=schema_name),
+                )
+                for view_name in inspector.get_view_names(schema=schema_name)
+            ]
+            schemas.append(
+                {
+                    "name": schema_name,
+                    "tables": tables,
+                    "views": views,
+                }
+            )
+        return {"name": database_name, "schemas": schemas}
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
         """Execute already-approved read-only SQL and return normalized rows."""

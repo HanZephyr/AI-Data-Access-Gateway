@@ -61,6 +61,7 @@ class GatewayRuntimeService:
                     "name": datasource.name,
                     "type": datasource.type,
                     "datasource_kind": datasource.datasource_kind,
+                    "description": datasource.description,
                 }
                 for datasource in datasources
             ]

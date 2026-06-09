@@ -28,6 +28,7 @@ const routeMap: Record<string, MockResponse> = {
         name: "Warehouse",
         type: "postgres",
         datasource_kind: "relational",
+        description: "Existing warehouse description",
         status: "active",
         config: {
           host: "db.internal",
@@ -291,6 +292,31 @@ describe("Roles page", () => {
       expect(lastDatasourcePatchBody).not.toBeNull();
     });
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.password");
+  }, 30000);
+
+  it("allows datasource database to stay blank and saves the operator description", async () => {
+    await mountConsoleApp("datasources");
+    await signInWithValidAdminKey();
+
+    const datasourceNode = await screen.findByText("Warehouse");
+    fireEvent.click(datasourceNode);
+
+    expect(screen.queryByText("Use explicit connection fields instead of pasting JSON.")).not.toBeInTheDocument();
+
+    fireEvent.change(await screen.findByLabelText("Database"), { target: { value: "" } });
+    fireEvent.change(await screen.findByLabelText("Description"), {
+      target: { value: "Use for curated finance and operations datasets." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(lastDatasourcePatchBody).not.toBeNull();
+    });
+    expect(lastDatasourcePatchBody).toHaveProperty(
+      "description",
+      "Use for curated finance and operations datasets.",
+    );
+    expect(lastDatasourcePatchBody).not.toHaveProperty("config.database");
   }, 30000);
 
   it("keeps audit rows summary-only and loads raw SQL on demand", async () => {

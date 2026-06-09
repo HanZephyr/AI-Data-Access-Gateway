@@ -19,6 +19,7 @@ class Datasource(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     datasource_kind: Mapped[str] = mapped_column(String(64), nullable=False, default="relational")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(

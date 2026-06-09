@@ -48,10 +48,10 @@ def test_admin_datasource_crud_routes() -> None:
     payload = {
         "name": "Warehouse",
         "type": "postgres",
+        "description": "Primary analytical warehouse for finance and operations.",
         "config": {
             "host": "localhost",
             "port": 5432,
-            "database": "warehouse",
             "username": "alice",
             "password": "secret",
         },
@@ -67,6 +67,8 @@ def test_admin_datasource_crud_routes() -> None:
     assert "tenant_id" not in created_body
     datasource_id = created_body["id"]
     assert created_body["datasource_kind"] == "relational"
+    assert created_body["description"] == "Primary analytical warehouse for finance and operations."
+    assert "database" not in created_body["config"]
     assert created_body["config"]["password"] == {
         "kind": "secret_placeholder",
         "configured": True,
@@ -75,6 +77,7 @@ def test_admin_datasource_crud_routes() -> None:
     listed = client.get("/admin/datasources", headers={"X-ADG-API-Key": "adg_admin"})
     assert listed.status_code == 200
     assert [item["id"] for item in listed.json()] == [datasource_id]
+    assert listed.json()[0]["description"] == "Primary analytical warehouse for finance and operations."
     assert listed.json()[0]["config"]["password"] == {
         "kind": "secret_placeholder",
         "configured": True,
@@ -86,6 +89,7 @@ def test_admin_datasource_crud_routes() -> None:
     )
     assert fetched.status_code == 200
     assert fetched.json()["name"] == "Warehouse"
+    assert fetched.json()["description"] == "Primary analytical warehouse for finance and operations."
     assert fetched.json()["tags"] == []
     assert fetched.json()["config"]["password"] == {
         "kind": "secret_placeholder",
@@ -96,11 +100,11 @@ def test_admin_datasource_crud_routes() -> None:
         f"/admin/datasources/{datasource_id}",
         json={
             "name": "Warehouse Replica",
+            "description": "Replica used by governed AI agents.",
             "status": "disabled",
             "config": {
                 "host": "localhost",
                 "port": 5432,
-                "database": "replica",
                 "username": "alice",
                 "password": "",
             },
@@ -109,8 +113,9 @@ def test_admin_datasource_crud_routes() -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["name"] == "Warehouse Replica"
+    assert updated.json()["description"] == "Replica used by governed AI agents."
     assert updated.json()["status"] == "disabled"
-    assert updated.json()["config"]["database"] == "replica"
+    assert "database" not in updated.json()["config"]
     assert updated.json()["config"]["password"] == {
         "kind": "secret_placeholder",
         "configured": True,

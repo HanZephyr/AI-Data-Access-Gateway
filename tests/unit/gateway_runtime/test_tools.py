@@ -57,12 +57,14 @@ def add_datasource(
     *,
     datasource_id: str = "ds_1",
     status: str = "active",
+    description: str | None = None,
 ) -> Datasource:
     datasource = Datasource(
         id=datasource_id,
         name=f"Datasource {datasource_id}",
         type="fake",
         datasource_kind="relational",
+        description=description,
         config_json="{}",
         status=status,
     )
@@ -172,7 +174,39 @@ def test_list_datasources_only_returns_datasources_with_visible_resources(
 
     response = runtime(db_session).list_datasources(identity=identity(), api_key_id="key_1")
 
-    assert [item["id"] for item in response["datasources"]] == ["ds_visible"]
+    assert response["datasources"] == [
+        {
+            "id": "ds_visible",
+            "name": "Datasource ds_visible",
+            "type": "fake",
+            "datasource_kind": "relational",
+            "description": None,
+        }
+    ]
+
+
+def test_list_datasources_includes_operator_description_for_agents(db_session: Session) -> None:
+    add_datasource(
+        db_session,
+        description="Contains curated customer service datasets for support analysis.",
+    )
+    resource = add_resource(db_session, resource_id="res_orders")
+    allow_resource_read(db_session, resource.id)
+
+    response = runtime(db_session).list_datasources(
+        identity=identity(),
+        api_key_id="key_1",
+    )
+
+    assert response["datasources"] == [
+        {
+            "id": "ds_1",
+            "name": "Datasource ds_1",
+            "type": "fake",
+            "datasource_kind": "relational",
+            "description": "Contains curated customer service datasets for support analysis.",
+        }
+    ]
 
 
 def test_tags_only_include_accessible_resources(db_session: Session) -> None:

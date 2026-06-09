@@ -2769,7 +2769,6 @@ function DatasourceConnectionFields({ passwordConfigured = false }: { passwordCo
     : t("datasource.passwordPlaceholder");
   return (
     <>
-      <Alert type="info" showIcon message={t("datasource.configHint")} />
       <div className="config-form-grid">
         <Form.Item
           name="host"
@@ -2788,7 +2787,6 @@ function DatasourceConnectionFields({ passwordConfigured = false }: { passwordCo
         <Form.Item
           name="database"
           label={t("field.database")}
-          rules={[{ required: true, message: t("common.required", { label: t("field.database") }) }]}
           className="span-2"
         >
           <Input autoComplete="off" />
@@ -2979,6 +2977,9 @@ function DatasourceDetail({
           </Form.Item>
           <Form.Item name="status" label={t("field.status")}>
             <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
+          </Form.Item>
+          <Form.Item name="description" label={t("field.description")}>
+            <Input.TextArea autoComplete="off" autoSize={{ minRows: 4, maxRows: 10 }} />
           </Form.Item>
           <DatasourceConnectionFields passwordConfigured={datasourceHasConfiguredPassword(selected.config || {})} />
         </Form>
@@ -3239,6 +3240,9 @@ function DatasourceCreateDrawer({
         <Form.Item name="status" label={t("field.status")} rules={[{ required: true }]}>
           <Select options={["active", "disabled"].map((value) => ({ value, label: optionLabel(value, t) }))} />
         </Form.Item>
+        <Form.Item name="description" label={t("field.description")}>
+          <Input.TextArea autoComplete="off" autoSize={{ minRows: 4, maxRows: 10 }} />
+        </Form.Item>
         <DatasourceConnectionFields />
       </Form>
     </Drawer>
@@ -3260,6 +3264,7 @@ function buildDatasourceTree(
     datasource_type: datasource.type,
     type_name: datasource.type,
     datasource_kind: datasource.datasource_kind,
+    description: datasource.description,
     config: datasource.config,
     status: datasource.status,
     tags: datasource.tags || [],
@@ -3318,6 +3323,7 @@ function toDatasourceFormValues(node: CatalogTreeNode) {
   return {
     name: node.name,
     status: node.status || "active",
+    description: node.description,
     ...datasourceFormValuesFromConfig(node.config || {}),
   };
 }
