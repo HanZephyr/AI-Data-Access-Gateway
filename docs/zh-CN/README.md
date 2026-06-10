@@ -60,13 +60,14 @@ npm run build
 ### Docker Compose
 
 ```powershell
+Copy-Item docker-compose.example.yml docker-compose.yml
 $env:ADG_SECRET_KEY="<generate-a-long-random-secret>"
 $env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
 docker compose up --build
 docker compose exec backend init-admin
 ```
 
-Compose 方案会启动生产环境的后端与静态前端容器，其中 Web 控制台默认暴露在 `http://127.0.0.1:8080`。
+`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。Compose 方案会启动生产环境的后端与静态前端容器，其中 Web 控制台默认暴露在 `http://127.0.0.1:8080`。
 
 ## 贡献者验证命令
 

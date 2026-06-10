@@ -60,13 +60,14 @@ The production build is written to `web/dist`. The Docker Compose path serves th
 ### Docker Compose
 
 ```powershell
+Copy-Item docker-compose.example.yml docker-compose.yml
 $env:ADG_SECRET_KEY="<generate-a-long-random-secret>"
 $env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
 docker compose up --build
 docker compose exec backend init-admin
 ```
 
-The Compose stack starts production backend and static frontend containers. The web console is published at `http://127.0.0.1:8080` by default.
+`docker-compose.example.yml` is the tracked template. Copy it to `docker-compose.yml` for local deployment changes, then edit the copied file for ports, volumes, or environment-specific settings. The Compose stack starts production backend and static frontend containers. The web console is published at `http://127.0.0.1:8080` by default.
 
 ## Contributor Verification
 

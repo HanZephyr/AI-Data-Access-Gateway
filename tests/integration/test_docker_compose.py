@@ -1,11 +1,23 @@
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import yaml  # type: ignore[import-untyped]
 
+COMPOSE_EXAMPLE = Path("docker-compose.example.yml")
+
+
+def load_compose_example() -> dict[str, Any]:
+    return cast(dict[str, Any], yaml.safe_load(COMPOSE_EXAMPLE.read_text(encoding="utf-8")))
+
+
+def test_compose_stack_is_tracked_as_an_example_template() -> None:
+    assert COMPOSE_EXAMPLE.exists()
+    assert "docker-compose.yml" in Path(".gitignore").read_text(encoding="utf-8").splitlines()
+
 
 def test_backend_healthcheck_targets_live_health_endpoint() -> None:
-    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+    compose = load_compose_example()
 
     healthcheck = compose["services"]["backend"]["healthcheck"]["test"]
 
@@ -13,7 +25,7 @@ def test_backend_healthcheck_targets_live_health_endpoint() -> None:
 
 
 def test_backend_compose_requires_both_production_secrets() -> None:
-    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+    compose = load_compose_example()
 
     environment = compose["services"]["backend"]["environment"]
 
@@ -22,7 +34,7 @@ def test_backend_compose_requires_both_production_secrets() -> None:
 
 
 def test_production_compose_does_not_publish_backend_directly() -> None:
-    compose = yaml.safe_load(Path("docker-compose.yml").read_text(encoding="utf-8"))
+    compose = load_compose_example()
 
     backend = compose["services"]["backend"]
 
