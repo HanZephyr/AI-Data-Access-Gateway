@@ -363,7 +363,8 @@ describe("Users console page", () => {
     await screen.findByText("Runtime key", {}, { timeout: 10000 });
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-    fireEvent.click(await screen.findByRole("button", { name: "OK" }));
+    const deleteConfirmButtons = await screen.findAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteConfirmButtons[deleteConfirmButtons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Select a user to inspect roles, organization placement, and runtime key actions.")).toBeInTheDocument();
