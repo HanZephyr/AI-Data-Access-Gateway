@@ -67,7 +67,7 @@ docker compose up --build
 docker compose exec backend init-admin
 ```
 
-`docker-compose.example.yml` is the tracked template. Copy it to `docker-compose.yml` for local deployment changes, then edit the copied file for ports, volumes, or environment-specific settings. The Compose stack starts production backend and static frontend containers. The web console is published at `http://127.0.0.1:8080` by default.
+`docker-compose.example.yml` is the tracked template. Copy it to `docker-compose.yml` for local deployment changes, then edit the copied file for ports, volumes, or environment-specific settings. To build with a PyPI mirror, set `PYPI_INDEX_URL` in `.env`; if it is omitted, the Docker build uses `https://pypi.org/simple`. The Compose stack starts production backend and static frontend containers. The web console is published at `http://127.0.0.1:8080` by default.
 
 ## Contributor Verification
 

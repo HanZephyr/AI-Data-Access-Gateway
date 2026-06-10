@@ -33,6 +33,14 @@ def test_backend_compose_requires_both_production_secrets() -> None:
     assert "ADG_CREDENTIAL_ENCRYPTION_KEY" in environment
 
 
+def test_backend_compose_passes_optional_pypi_index_build_arg() -> None:
+    compose = load_compose_example()
+
+    build = compose["services"]["backend"]["build"]
+
+    assert build["args"]["PYPI_INDEX_URL"] == "${PYPI_INDEX_URL:-https://pypi.org/simple}"
+
+
 def test_production_compose_does_not_publish_backend_directly() -> None:
     compose = load_compose_example()
 
@@ -52,6 +60,20 @@ def test_backend_dockerfile_uses_uv_lock_for_frozen_installs() -> None:
 
     assert "COPY pyproject.toml uv.lock" in dockerfile
     assert "uv sync --frozen --no-dev --extra all" in dockerfile
+
+
+def test_backend_dockerfile_supports_configurable_pypi_index() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert "ARG PYPI_INDEX_URL=https://pypi.org/simple" in dockerfile
+    assert 'pip install --no-cache-dir --index-url "${PYPI_INDEX_URL}" uv' in dockerfile
+    assert 'uv sync --frozen --no-dev --extra all --default-index "${PYPI_INDEX_URL}"' in dockerfile
+
+
+def test_env_example_documents_optional_pypi_index() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "PYPI_INDEX_URL=https://pypi.org/simple" in env_example
 
 
 def test_web_dockerfile_uses_npm_ci() -> None:

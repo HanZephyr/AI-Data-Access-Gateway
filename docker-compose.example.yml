@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://pypi.org/simple}
     environment:
       ADG_ENV: production
       ADG_CONTROL_PLANE_DATABASE_URL: sqlite:///./data/adg-control-plane.db
