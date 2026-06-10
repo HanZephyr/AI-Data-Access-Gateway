@@ -8,14 +8,15 @@ services:
     environment:
       ADG_ENV: production
       ADG_CONTROL_PLANE_DATABASE_URL: sqlite:///./data/adg-control-plane.db
+      ADG_BACKEND_PORT: ${ADG_BACKEND_PORT:-8000}
       ADG_SECRET_KEY: ${ADG_SECRET_KEY:?Set ADG_SECRET_KEY before starting docker compose}
       ADG_CREDENTIAL_ENCRYPTION_KEY: ${ADG_CREDENTIAL_ENCRYPTION_KEY:?Set ADG_CREDENTIAL_ENCRYPTION_KEY before starting docker compose}
       PYTHONUNBUFFERED: "1"
     command: >
       sh -c "alembic upgrade head &&
-      uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port 8000"
+      uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port ${ADG_BACKEND_PORT:-8000}"
     expose:
-      - "8000"
+      - "${ADG_BACKEND_PORT:-8000}"
     volumes:
       - adg-data:/app/data
     healthcheck:
@@ -24,7 +25,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health')",
+          "from os import environ; from urllib.request import urlopen; urlopen(f\"http://127.0.0.1:{environ.get('ADG_BACKEND_PORT', '8000')}/health\")",
         ]
       interval: 15s
       timeout: 5s
@@ -38,6 +39,8 @@ services:
       dockerfile: web/Dockerfile
       args:
         NPM_REGISTRY_URL: ${NPM_REGISTRY_URL:-https://registry.npmjs.org/}
+    environment:
+      ADG_BACKEND_PORT: ${ADG_BACKEND_PORT:-8000}
     ports:
       - "${ADG_WEB_PORT:-8080}:80"
     depends_on:

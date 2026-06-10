@@ -21,7 +21,28 @@ def test_backend_healthcheck_targets_live_health_endpoint() -> None:
 
     healthcheck = compose["services"]["backend"]["healthcheck"]["test"]
 
-    assert healthcheck[-1] == "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health')"
+    assert healthcheck[-1] == (
+        "from os import environ; "
+        "from urllib.request import urlopen; "
+        "urlopen(f\"http://127.0.0.1:{environ.get('ADG_BACKEND_PORT', '8000')}/health\")"
+    )
+
+
+def test_backend_compose_allows_configurable_internal_port() -> None:
+    compose = load_compose_example()
+
+    backend = compose["services"]["backend"]
+
+    assert backend["environment"]["ADG_BACKEND_PORT"] == "${ADG_BACKEND_PORT:-8000}"
+    assert backend["expose"] == ["${ADG_BACKEND_PORT:-8000}"]
+    assert "--port ${ADG_BACKEND_PORT:-8000}" in backend["command"]
+
+
+def test_backend_dockerfile_supports_configurable_runtime_port() -> None:
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+
+    assert "ENV ADG_BACKEND_PORT=8000" in dockerfile
+    assert "--port ${ADG_BACKEND_PORT:-8000}" in dockerfile
 
 
 def test_backend_compose_requires_both_production_secrets() -> None:
@@ -76,6 +97,12 @@ def test_env_example_documents_optional_pypi_index() -> None:
     assert "PYPI_INDEX_URL=https://pypi.org/simple" in env_example
 
 
+def test_env_example_documents_backend_port_override() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "ADG_BACKEND_PORT=8000" in env_example
+
+
 def test_web_compose_passes_optional_npm_registry_build_arg() -> None:
     compose = load_compose_example()
 
@@ -92,6 +119,14 @@ def test_web_compose_allows_configurable_host_port() -> None:
     assert web["ports"] == ["${ADG_WEB_PORT:-8080}:80"]
 
 
+def test_web_compose_passes_backend_port_to_nginx() -> None:
+    compose = load_compose_example()
+
+    web = compose["services"]["web"]
+
+    assert web["environment"]["ADG_BACKEND_PORT"] == "${ADG_BACKEND_PORT:-8000}"
+
+
 def test_web_dockerfile_uses_npm_ci() -> None:
     dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
 
@@ -104,6 +139,20 @@ def test_web_dockerfile_supports_configurable_npm_registry() -> None:
 
     assert "ARG NPM_REGISTRY_URL=https://registry.npmjs.org/" in dockerfile
     assert 'npm ci --registry "${NPM_REGISTRY_URL}"' in dockerfile
+
+
+def test_web_dockerfile_renders_nginx_config_from_template() -> None:
+    dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
+
+    assert "COPY web/nginx.conf /etc/nginx/templates/default.conf.template" in dockerfile
+    assert "COPY web/nginx.conf /etc/nginx/conf.d/default.conf" not in dockerfile
+
+
+def test_web_nginx_proxy_uses_configurable_backend_port() -> None:
+    nginx_conf = Path("web/nginx.conf").read_text(encoding="utf-8")
+
+    assert "backend:${ADG_BACKEND_PORT}" in nginx_conf
+    assert "backend:8000" not in nginx_conf
 
 
 def test_env_example_documents_optional_npm_registry() -> None:
