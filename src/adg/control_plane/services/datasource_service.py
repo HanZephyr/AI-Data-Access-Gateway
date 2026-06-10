@@ -70,6 +70,7 @@ class DatasourceService:
         datasource_id: str,
         name: str | None = None,
         description: str | None = None,
+        description_provided: bool = False,
         status: str | None = None,
         config: dict[str, object] | None = None,
     ) -> Datasource:
@@ -78,7 +79,7 @@ class DatasourceService:
         datasource = self.get_datasource(datasource_id)
         if name is not None:
             datasource.name = name
-        if description is not None:
+        if description_provided or description is not None:
             datasource.description = description
         if status is not None:
             datasource.status = status

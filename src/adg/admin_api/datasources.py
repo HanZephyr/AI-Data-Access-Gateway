@@ -125,6 +125,7 @@ def update_datasource(
             datasource_id=datasource_id,
             name=payload.name,
             description=payload.description,
+            description_provided="description" in payload.model_fields_set,
             status=payload.status,
             config=payload.config,
         )

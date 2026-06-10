@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from pytest import MonkeyPatch
 
 from adg.connectors import relational
@@ -95,7 +97,10 @@ def test_relational_scan_metadata_discovers_all_accessible_databases_when_databa
     monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
 
     snapshot = FakePostgresConnector().scan_metadata({"host": "db.internal"})
+    databases = cast(list[dict[str, Any]], snapshot["databases"])
+    schemas = cast(list[dict[str, Any]], databases[0]["schemas"])
+    tables = cast(list[dict[str, Any]], schemas[0]["tables"])
 
     assert created_databases == [None, "analytics", "warehouse"]
-    assert [database["name"] for database in snapshot["databases"]] == ["analytics", "warehouse"]
-    assert snapshot["databases"][0]["schemas"][0]["tables"][0]["name"] == "analytics_orders"
+    assert [database["name"] for database in databases] == ["analytics", "warehouse"]
+    assert tables[0]["name"] == "analytics_orders"

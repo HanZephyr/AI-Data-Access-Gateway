@@ -135,6 +135,14 @@ def test_admin_datasource_crud_routes() -> None:
         "configured": True,
     }
 
+    cleared = client.patch(
+        f"/admin/datasources/{datasource_id}",
+        json={"description": None},
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["description"] is None
+
     deleted = client.delete(
         f"/admin/datasources/{datasource_id}",
         headers={"X-ADG-API-Key": "adg_admin"},
