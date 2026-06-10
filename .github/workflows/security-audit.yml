@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           trap 'rm -f .tmp-audit-requirements.txt' EXIT
           uv export --frozen --extra dev --extra all --no-editable --no-hashes --no-emit-project --format requirements-txt --output-file .tmp-audit-requirements.txt
-          uv tool run --from pip-audit pip-audit -r .tmp-audit-requirements.txt
+          uv tool run --from pip-audit pip-audit -r .tmp-audit-requirements.txt --no-deps --vulnerability-service osv --progress-spinner off
 
   frontend-audit:
     runs-on: ubuntu-latest

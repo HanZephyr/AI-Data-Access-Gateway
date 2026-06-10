@@ -82,7 +82,7 @@ npm run build
 npm run audit:prod
 Set-Location ..
 uv export --frozen --extra dev --extra all --no-editable --no-hashes --no-emit-project --format requirements-txt --output-file .tmp-audit-requirements.txt
-uv tool run --from pip-audit pip-audit -r .tmp-audit-requirements.txt
+uv tool run --from pip-audit pip-audit -r .tmp-audit-requirements.txt --no-deps --vulnerability-service osv --progress-spinner off
 Remove-Item .tmp-audit-requirements.txt
 ```
 
