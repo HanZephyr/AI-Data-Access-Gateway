@@ -76,11 +76,32 @@ def test_env_example_documents_optional_pypi_index() -> None:
     assert "PYPI_INDEX_URL=https://pypi.org/simple" in env_example
 
 
+def test_web_compose_passes_optional_npm_registry_build_arg() -> None:
+    compose = load_compose_example()
+
+    build = compose["services"]["web"]["build"]
+
+    assert build["args"]["NPM_REGISTRY_URL"] == "${NPM_REGISTRY_URL:-https://registry.npmjs.org/}"
+
+
 def test_web_dockerfile_uses_npm_ci() -> None:
     dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
 
     assert "RUN npm ci" in dockerfile
     assert "RUN npm install" not in dockerfile
+
+
+def test_web_dockerfile_supports_configurable_npm_registry() -> None:
+    dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
+
+    assert "ARG NPM_REGISTRY_URL=https://registry.npmjs.org/" in dockerfile
+    assert 'npm ci --registry "${NPM_REGISTRY_URL}"' in dockerfile
+
+
+def test_env_example_documents_optional_npm_registry() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "NPM_REGISTRY_URL=https://registry.npmjs.org/" in env_example
 
 
 def test_web_package_declares_auditable_dependency_scripts() -> None:

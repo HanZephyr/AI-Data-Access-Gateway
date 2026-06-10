@@ -67,7 +67,7 @@ docker compose up --build
 docker compose exec backend init-admin
 ```
 
-`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用 PyPI 镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple`。Compose 方案会启动生产环境的后端与静态前端容器，其中 Web 控制台默认暴露在 `http://127.0.0.1:8080`。
+`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用包镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL` 和/或 `NPM_REGISTRY_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple` 和 `https://registry.npmjs.org/`。Compose 方案会启动生产环境的后端与静态前端容器，其中 Web 控制台默认暴露在 `http://127.0.0.1:8080`。
 
 ## 贡献者验证命令
 
