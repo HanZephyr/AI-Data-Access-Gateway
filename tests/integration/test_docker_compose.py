@@ -84,6 +84,14 @@ def test_web_compose_passes_optional_npm_registry_build_arg() -> None:
     assert build["args"]["NPM_REGISTRY_URL"] == "${NPM_REGISTRY_URL:-https://registry.npmjs.org/}"
 
 
+def test_web_compose_allows_configurable_host_port() -> None:
+    compose = load_compose_example()
+
+    web = compose["services"]["web"]
+
+    assert web["ports"] == ["${ADG_WEB_PORT:-8080}:80"]
+
+
 def test_web_dockerfile_uses_npm_ci() -> None:
     dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
 
@@ -102,6 +110,12 @@ def test_env_example_documents_optional_npm_registry() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "NPM_REGISTRY_URL=https://registry.npmjs.org/" in env_example
+
+
+def test_env_example_documents_web_port_override() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "ADG_WEB_PORT=8080" in env_example
 
 
 def test_web_package_declares_auditable_dependency_scripts() -> None:
