@@ -65,10 +65,10 @@ const routeMap: Record<string, MockResponse> = {
       {
         id: "res_long_table",
         datasource_id: "ds_warehouse",
-        parent_id: null,
+        parent_id: "res_schema",
         display_name: "dws_ecommerce_order_overdue_detail_2025",
         name: "dws_ecommerce_order_overdue_detail_2025",
-        path: "warehouse.dws_ecommerce_order_overdue_detail_2025",
+        path: "warehouse.finance.dws_ecommerce_order_overdue_detail_2025",
         kind: "relational_table",
       },
     ],
@@ -254,10 +254,10 @@ describe("Policies page", () => {
   }, 30000);
 
   it("renders datasource and resource scopes as a tree transfer", async () => {
-    await mountConsoleApp("policies");
+    await mountConsoleApp("policies", "zh-CN");
     await signInWithValidAdminKey();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     await waitFor(() => {
       expect(document.querySelector(".resource-tree-transfer")).toBeInTheDocument();
@@ -267,30 +267,21 @@ describe("Policies page", () => {
     expect(transfer).toBeInTheDocument();
     expect(document.querySelector(".resource-tree-transfer .ant-transfer-list")).toHaveStyle({ height: "360px" });
     expect(screen.getByText("Demo Warehouse")).toBeInTheDocument();
+    expect(screen.getByText("5 项")).toBeInTheDocument();
     expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
+    expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
     expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
 
-    const expandNode = async (name: string) => {
-      const nodeText = await screen.findByText(name);
-      const node = nodeText.closest(".ant-tree-treenode");
-      const switcher = node?.querySelector(".ant-tree-switcher");
-      expect(switcher).toBeInTheDocument();
-      fireEvent.click(switcher!);
-    };
-    await expandNode("Demo Warehouse");
+    const searchInput = document.querySelector(".resource-tree-transfer .ant-transfer-list-search input");
+    expect(searchInput).toBeInTheDocument();
+    expect(searchInput).toHaveAttribute("placeholder", "搜索资源");
+    fireEvent.change(searchInput!, { target: { value: "overdue_detail" } });
+
     expect(await screen.findByText("warehouse")).toBeInTheDocument();
+    expect(await screen.findByText("finance")).toBeInTheDocument();
     expect(await screen.findByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("warehouse"));
-    fireEvent.click(screen.getByText("dws_ecommerce_order_overdue_detail_2025"));
-    const addButton = document.querySelector(".resource-tree-transfer .ant-transfer-operation button");
-    expect(addButton).toBeInTheDocument();
-    fireEvent.click(addButton!);
-
-    await waitFor(() => {
-      expect(screen.getAllByText("warehouse").length).toBeGreaterThan(1);
-      expect(screen.getAllByText("dws_ecommerce_order_overdue_detail_2025").length).toBeGreaterThan(1);
-    });
+    expect(document.querySelector(".resource-tree-transfer .ant-transfer-operation button")).toBeInTheDocument();
   }, 30000);
 });

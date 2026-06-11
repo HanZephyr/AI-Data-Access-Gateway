@@ -229,6 +229,9 @@ const translations = {
     "policy.fieldPolicies": "Field Policies",
     "policy.availableResources": "Available resources",
     "policy.selectedResources": "Selected resources",
+    "policy.searchResources": "Search resources",
+    "policy.resourceItemUnit": "item",
+    "policy.resourceItemsUnit": "items",
     "section.fields": "Fields",
     "datasource.new": "New data source",
     "datasource.test": "Test",
@@ -584,6 +587,9 @@ const translations = {
     "policy.fieldPolicies": "字段权限策略",
     "policy.availableResources": "可选资源",
     "policy.selectedResources": "已选资源",
+    "policy.searchResources": "搜索资源",
+    "policy.resourceItemUnit": "项",
+    "policy.resourceItemsUnit": "项",
     "section.fields": "字段",
     "datasource.new": "新建数据源",
     "datasource.test": "测试连接",
@@ -937,6 +943,9 @@ const translations = {
     "policy.fieldPolicies": "欄位權限策略",
     "policy.availableResources": "可選資源",
     "policy.selectedResources": "已選資源",
+    "policy.searchResources": "搜尋資源",
+    "policy.resourceItemUnit": "項",
+    "policy.resourceItemsUnit": "項",
     "section.fields": "欄位",
     "datasource.new": "新增資料來源",
     "datasource.test": "測試連線",
@@ -4956,6 +4965,7 @@ function ResourceScopeTransfer({
   /** Tree transfer for selecting one or more datasource/resource policy scopes. */
 
   const selectedKeys = normalizeResourceScopeKeys(value);
+  const [resourceSearch, setResourceSearch] = useState("");
   const { treeData, transferItems } = useMemo(
     () => buildResourceScopeTransferData(datasources, resources),
     [datasources, resources],
@@ -4970,21 +4980,40 @@ function ResourceScopeTransfer({
       render={(item) => <span className="resource-transfer-item-title" title={item.title}>{item.title}</span>}
       onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
       listStyle={{ height: 360, maxHeight: 360 }}
+      showSearch
+      locale={{
+        searchPlaceholder: t("policy.searchResources"),
+        itemUnit: t("policy.resourceItemUnit"),
+        itemsUnit: t("policy.resourceItemsUnit"),
+      }}
+      filterOption={(input, item) => item.searchText.toLowerCase().includes(input.toLowerCase())}
+      onSearch={(direction, input) => {
+        if (direction === "left") {
+          setResourceSearch(input);
+        }
+      }}
       showSelectAll={false}
       disabled={loading}
     >
-      {({ direction, onItemSelect, selectedKeys: transferSelectedKeys }) => {
+      {({ direction, filteredItems, onItemSelect, selectedKeys: transferSelectedKeys }) => {
         if (direction !== "left") {
           return null;
         }
         const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
+        const filteredKeys = new Set(filteredItems.map((item) => String(item.key)));
+        const visibleTreeData = resourceSearch.trim()
+          ? filterResourceScopeTree(treeData, filteredKeys)
+          : treeData;
+        const expandedKeys = resourceSearch.trim() ? collectTreeKeys(visibleTreeData) : undefined;
         return (
           <Tree
+            key={resourceSearch.trim() ? "resource-filtered-tree" : "resource-tree"}
             blockNode
             checkable
             checkStrictly
             checkedKeys={checkedKeys}
-            treeData={markSelectedTreeNodes(treeData, selectedKeys)}
+            expandedKeys={expandedKeys}
+            treeData={markSelectedTreeNodes(visibleTreeData, selectedKeys)}
             onCheck={(_, info) => {
               const key = String(info.node.key);
               onItemSelect(key, !checkedKeys.includes(key));
@@ -5088,6 +5117,33 @@ function markSelectedTreeNodes(
     disabled: selected.has(String(node.key)),
     children: node.children ? markSelectedTreeNodes(node.children, selectedKeys) : undefined,
   }));
+}
+
+function filterResourceScopeTree(
+  nodes: TreeDataNode[],
+  matchingKeys: Set<string>,
+): TreeDataNode[] {
+  /** Keep matching tree nodes and their ancestors for transfer search results. */
+
+  return nodes.flatMap((node) => {
+    const children = node.children ? filterResourceScopeTree(node.children, matchingKeys) : [];
+    if (matchingKeys.has(String(node.key)) || children.length > 0) {
+      return [{
+        ...node,
+        children,
+      }];
+    }
+    return [];
+  });
+}
+
+function collectTreeKeys(nodes: TreeDataNode[]): string[] {
+  /** Collect keys so filtered results reveal their matching descendants. */
+
+  return nodes.flatMap((node) => [
+    String(node.key),
+    ...(node.children ? collectTreeKeys(node.children) : []),
+  ]);
 }
 
 function resourceTreeTitle(title: string) {
