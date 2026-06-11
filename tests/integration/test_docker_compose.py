@@ -62,12 +62,12 @@ def test_backend_compose_passes_optional_pypi_index_build_arg() -> None:
     assert build["args"]["PYPI_INDEX_URL"] == "${PYPI_INDEX_URL:-https://pypi.org/simple}"
 
 
-def test_production_compose_does_not_publish_backend_directly() -> None:
+def test_backend_compose_publishes_configurable_host_port_for_mcp_clients() -> None:
     compose = load_compose_example()
 
     backend = compose["services"]["backend"]
 
-    assert "ports" not in backend
+    assert backend["ports"] == ["${ADG_BACKEND_HOST_PORT:-8000}:${ADG_BACKEND_PORT:-8000}"]
 
 
 def test_backend_dockerfile_runs_as_non_root_user() -> None:
@@ -101,6 +101,12 @@ def test_env_example_documents_backend_port_override() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "ADG_BACKEND_PORT=8000" in env_example
+
+
+def test_env_example_documents_backend_host_port_override() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "ADG_BACKEND_HOST_PORT=8000" in env_example
 
 
 def test_web_compose_passes_optional_npm_registry_build_arg() -> None:

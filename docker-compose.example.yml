@@ -17,6 +17,8 @@ services:
       uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port ${ADG_BACKEND_PORT:-8000}"
     expose:
       - "${ADG_BACKEND_PORT:-8000}"
+    ports:
+      - "${ADG_BACKEND_HOST_PORT:-8000}:${ADG_BACKEND_PORT:-8000}"
     volumes:
       - adg-data:/app/data
     healthcheck:
