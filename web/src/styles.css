@@ -1040,14 +1040,50 @@ body {
 .resource-tree-transfer .ant-transfer-list {
   flex: 1 1 0;
   min-width: 0;
+  max-height: 360px;
 }
 
 .resource-tree-transfer .ant-transfer-list-body {
-  min-height: 300px;
+  height: 310px;
+  max-height: 310px;
+  overflow: auto;
 }
 
 .resource-tree-transfer .ant-tree {
   padding: 8px;
+}
+
+.resource-tree-transfer .ant-tree-treenode {
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.resource-tree-transfer .ant-tree-node-content-wrapper {
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+}
+
+.resource-tree-transfer .ant-tree-title,
+.resource-tree-transfer .resource-tree-node-title,
+.resource-tree-transfer .resource-transfer-item-title {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.resource-tree-transfer .ant-transfer-list-content-item {
+  align-items: flex-start;
+  height: auto;
+  min-height: 32px;
+}
+
+.resource-tree-transfer .ant-transfer-list-content-item-text {
+  min-width: 0;
+  white-space: normal;
 }
 
 .catalog-empty {

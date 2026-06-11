@@ -4957,8 +4957,8 @@ function ResourceScopeTransfer({
 
   const selectedKeys = normalizeResourceScopeKeys(value);
   const { treeData, transferItems } = useMemo(
-    () => buildResourceScopeTransferData(datasources, resources, t),
-    [datasources, resources, t],
+    () => buildResourceScopeTransferData(datasources, resources),
+    [datasources, resources],
   );
 
   return (
@@ -4967,8 +4967,9 @@ function ResourceScopeTransfer({
       dataSource={transferItems}
       targetKeys={selectedKeys}
       titles={[t("policy.availableResources"), t("policy.selectedResources")]}
-      render={(item) => item.title}
+      render={(item) => <span className="resource-transfer-item-title" title={item.title}>{item.title}</span>}
       onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
+      listStyle={{ height: 360, maxHeight: 360 }}
       showSelectAll={false}
       disabled={loading}
     >
@@ -4982,7 +4983,6 @@ function ResourceScopeTransfer({
             blockNode
             checkable
             checkStrictly
-            defaultExpandAll
             checkedKeys={checkedKeys}
             treeData={markSelectedTreeNodes(treeData, selectedKeys)}
             onCheck={(_, info) => {
@@ -5003,7 +5003,6 @@ function ResourceScopeTransfer({
 function buildResourceScopeTransferData(
   datasources: AnyRecord[],
   resources: AnyRecord[],
-  t: I18nContextValue["t"],
 ) {
   /** Build datasource roots and resource child nodes for the policy scope transfer. */
 
@@ -5018,7 +5017,7 @@ function buildResourceScopeTransferData(
     const title = String(datasource?.name || fallbackName || datasourceId);
     const node: TreeDataNode & { children: TreeDataNode[] } = {
       key: resourceScopeKey("datasource", datasourceId),
-      title,
+      title: resourceTreeTitle(title),
       children: [],
     };
     datasourceNodes.set(datasourceId, node);
@@ -5037,12 +5036,12 @@ function buildResourceScopeTransferData(
   const resourceNodes = new Map<string, TreeDataNode & { children: TreeDataNode[] }>();
   resources.forEach((resource) => {
     const resourceId = String(resource.id);
-    const label = resourceDisplayLabel(resource, t);
+    const label = resourceDisplayLabel(resource);
     const path = String(resource.path || "");
     const kind = String(resource.kind || "");
     const node: TreeDataNode & { children: TreeDataNode[] } = {
       key: resourceScopeKey("resource", resourceId),
-      title: label,
+      title: resourceTreeTitle(label),
       children: [],
     };
     resourceNodes.set(resourceId, node);
@@ -5091,12 +5090,16 @@ function markSelectedTreeNodes(
   }));
 }
 
-function resourceDisplayLabel(resource: AnyRecord, t: I18nContextValue["t"]) {
+function resourceTreeTitle(title: string) {
+  /** Wrap long tree node names without adding redundant type prefixes. */
+
+  return <span className="resource-tree-node-title" title={title}>{title}</span>;
+}
+
+function resourceDisplayLabel(resource: AnyRecord) {
   /** Human-facing label for a datasource resource node. */
 
-  const name = String(resource.display_name || resource.name || resource.id);
-  const kind = String(resource.kind || "");
-  return `${optionLabel(kind, t)}: ${name}`;
+  return String(resource.display_name || resource.name || resource.id);
 }
 
 function resourceScopeKey(type: "datasource" | "resource", id: string) {

@@ -62,6 +62,15 @@ const routeMap: Record<string, MockResponse> = {
         path: "warehouse.finance.orders",
         kind: "relational_table",
       },
+      {
+        id: "res_long_table",
+        datasource_id: "ds_warehouse",
+        parent_id: null,
+        display_name: "dws_ecommerce_order_overdue_detail_2025",
+        name: "dws_ecommerce_order_overdue_detail_2025",
+        path: "warehouse.dws_ecommerce_order_overdue_detail_2025",
+        kind: "relational_table",
+      },
     ],
   },
   "/admin/tags": {
@@ -254,20 +263,34 @@ describe("Policies page", () => {
       expect(document.querySelector(".resource-tree-transfer")).toBeInTheDocument();
     });
 
+    const transfer = document.querySelector(".resource-tree-transfer");
+    expect(transfer).toBeInTheDocument();
+    expect(document.querySelector(".resource-tree-transfer .ant-transfer-list")).toHaveStyle({ height: "360px" });
     expect(screen.getByText("Demo Warehouse")).toBeInTheDocument();
-    expect(screen.getByText("database: warehouse")).toBeInTheDocument();
-    expect(screen.getByText("schema: finance")).toBeInTheDocument();
-    expect(screen.getByText("table: Finance Orders")).toBeInTheDocument();
+    expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
+    expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("database: warehouse"));
-    fireEvent.click(screen.getByText("table: Finance Orders"));
+    const expandNode = async (name: string) => {
+      const nodeText = await screen.findByText(name);
+      const node = nodeText.closest(".ant-tree-treenode");
+      const switcher = node?.querySelector(".ant-tree-switcher");
+      expect(switcher).toBeInTheDocument();
+      fireEvent.click(switcher!);
+    };
+    await expandNode("Demo Warehouse");
+    expect(await screen.findByText("warehouse")).toBeInTheDocument();
+    expect(await screen.findByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("warehouse"));
+    fireEvent.click(screen.getByText("dws_ecommerce_order_overdue_detail_2025"));
     const addButton = document.querySelector(".resource-tree-transfer .ant-transfer-operation button");
     expect(addButton).toBeInTheDocument();
     fireEvent.click(addButton!);
 
     await waitFor(() => {
-      expect(screen.getAllByText("database: warehouse").length).toBeGreaterThan(1);
-      expect(screen.getAllByText("table: Finance Orders").length).toBeGreaterThan(1);
+      expect(screen.getAllByText("warehouse").length).toBeGreaterThan(1);
+      expect(screen.getAllByText("dws_ecommerce_order_overdue_detail_2025").length).toBeGreaterThan(1);
     });
   }, 30000);
 });
