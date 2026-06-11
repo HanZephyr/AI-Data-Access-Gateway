@@ -30,6 +30,13 @@ const routeMap: Record<string, MockResponse> = {
         datasource_kind: "relational",
         status: "active",
       },
+      {
+        id: "ds_doris",
+        name: "线上 Doris",
+        type: "doris",
+        datasource_kind: "relational",
+        status: "active",
+      },
     ],
   },
   "/admin/resources": {
@@ -69,6 +76,24 @@ const routeMap: Record<string, MockResponse> = {
         display_name: "dws_ecommerce_order_overdue_detail_2025",
         name: "dws_ecommerce_order_overdue_detail_2025",
         path: "warehouse.finance.dws_ecommerce_order_overdue_detail_2025",
+        kind: "relational_table",
+      },
+      {
+        id: "res_doris_database",
+        datasource_id: "ds_doris",
+        parent_id: null,
+        display_name: "ai_test",
+        name: "ai_test",
+        path: "ai_test",
+        kind: "database",
+      },
+      {
+        id: "res_doris_table",
+        datasource_id: "ds_doris",
+        parent_id: "res_doris_database",
+        display_name: "dwd_shop_life_cycle",
+        name: "dwd_shop_life_cycle",
+        path: "ai_test.dwd_shop_life_cycle",
         kind: "relational_table",
       },
     ],
@@ -267,11 +292,24 @@ describe("Policies page", () => {
     expect(transfer).toBeInTheDocument();
     expect(document.querySelector(".resource-tree-transfer .ant-transfer-list")).toHaveStyle({ height: "360px" });
     expect(screen.getByText("Demo Warehouse")).toBeInTheDocument();
-    expect(screen.getByText("5 项")).toBeInTheDocument();
+    expect(screen.getByText("线上 Doris")).toBeInTheDocument();
+    expect(screen.getByText("8 项")).toBeInTheDocument();
     expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
     expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
     expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /全部展开/ }));
+    expect(await screen.findByText("warehouse")).toBeInTheDocument();
+    expect(await screen.findByText("finance")).toBeInTheDocument();
+    expect(await screen.findByText("Finance Orders")).toBeInTheDocument();
+    expect(await screen.findByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+    expect(await screen.findByText("ai_test")).toBeInTheDocument();
+    expect(await screen.findByText("dwd_shop_life_cycle")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /全部折叠/ }));
+    expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
+    expect(screen.queryByText("ai_test")).not.toBeInTheDocument();
 
     const expandNode = async (name: string) => {
       const nodeText = await screen.findByText(name);
@@ -286,6 +324,11 @@ describe("Policies page", () => {
     const searchInput = document.querySelector(".resource-tree-transfer .ant-transfer-list-search input");
     expect(searchInput).toBeInTheDocument();
     expect(searchInput).toHaveAttribute("placeholder", "搜索资源");
+    fireEvent.change(searchInput!, { target: { value: "warehouse" } });
+    expect(await screen.findByText("warehouse")).toBeInTheDocument();
+    expect(screen.queryByText("finance")).not.toBeInTheDocument();
+    expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
+
     fireEvent.change(searchInput!, { target: { value: "overdue_detail" } });
 
     expect(await screen.findByText("warehouse")).toBeInTheDocument();

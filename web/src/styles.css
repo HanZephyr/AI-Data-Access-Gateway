@@ -1033,6 +1033,23 @@ body {
   grid-column: 1 / -1;
 }
 
+.resource-tree-transfer-wrap {
+  width: 100%;
+}
+
+.resource-tree-transfer-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.resource-tree-transfer-actions .ant-btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 86px;
+  padding-inline: 12px;
+}
+
 .resource-tree-transfer {
   width: 100%;
 }

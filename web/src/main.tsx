@@ -9,6 +9,7 @@ import {
   DownloadOutlined,
   EditOutlined,
   ExperimentOutlined,
+  ExpandAltOutlined,
   EyeOutlined,
   InboxOutlined,
   IdcardOutlined,
@@ -19,6 +20,7 @@ import {
   PlusOutlined,
   RightCircleOutlined,
   SafetyOutlined,
+  ShrinkOutlined,
   StopOutlined,
   SyncOutlined,
   TeamOutlined,
@@ -232,6 +234,8 @@ const translations = {
     "policy.searchResources": "Search resources",
     "policy.resourceItemUnit": "item",
     "policy.resourceItemsUnit": "items",
+    "policy.expandAllResources": "Expand all",
+    "policy.collapseAllResources": "Collapse all",
     "section.fields": "Fields",
     "datasource.new": "New data source",
     "datasource.test": "Test",
@@ -590,6 +594,8 @@ const translations = {
     "policy.searchResources": "搜索资源",
     "policy.resourceItemUnit": "项",
     "policy.resourceItemsUnit": "项",
+    "policy.expandAllResources": "全部展开",
+    "policy.collapseAllResources": "全部折叠",
     "section.fields": "字段",
     "datasource.new": "新建数据源",
     "datasource.test": "测试连接",
@@ -946,6 +952,8 @@ const translations = {
     "policy.searchResources": "搜尋資源",
     "policy.resourceItemUnit": "項",
     "policy.resourceItemsUnit": "項",
+    "policy.expandAllResources": "全部展開",
+    "policy.collapseAllResources": "全部摺疊",
     "section.fields": "欄位",
     "datasource.new": "新增資料來源",
     "datasource.test": "測試連線",
@@ -4973,75 +4981,97 @@ function ResourceScopeTransfer({
   );
 
   return (
-    <Transfer<ResourceScopeTransferItem>
-      className="resource-tree-transfer"
-      dataSource={transferItems}
-      targetKeys={selectedKeys}
-      titles={[t("policy.availableResources"), t("policy.selectedResources")]}
-      render={(item) => <span className="resource-transfer-item-title" title={item.title}>{item.title}</span>}
-      onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
-      listStyle={{ height: 360, maxHeight: 360 }}
-      showSearch
-      locale={{
-        searchPlaceholder: t("policy.searchResources"),
-        itemUnit: t("policy.resourceItemUnit"),
-        itemsUnit: t("policy.resourceItemsUnit"),
-      }}
-      filterOption={(input, item) => item.searchText.toLowerCase().includes(input.toLowerCase())}
-      onSearch={(direction, input) => {
-        if (direction === "left") {
-          setResourceSearch(input);
-        }
-      }}
-      showSelectAll={false}
-      disabled={loading}
-    >
-      {({ direction, filteredItems, onItemSelect, selectedKeys: transferSelectedKeys }) => {
-        if (direction !== "left") {
-          return null;
-        }
-        const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
-        const filteredKeys = new Set(filteredItems.map((item) => String(item.key)));
-        const isSearchingResources = Boolean(resourceSearch.trim());
-        const visibleTreeData = isSearchingResources
-          ? filterResourceScopeTree(treeData, filteredKeys)
-          : treeData;
-        const expandedKeys = isSearchingResources ? collectTreeKeys(visibleTreeData) : expandedResourceKeys;
-        return (
-          <Tree
-            key={isSearchingResources ? "resource-filtered-tree" : "resource-tree"}
-            blockNode
-            checkable
-            checkStrictly
-            checkedKeys={checkedKeys}
-            expandedKeys={expandedKeys}
-            treeData={markSelectedTreeNodes(visibleTreeData, selectedKeys)}
-            onExpand={(_, info) => {
-              if (!isSearchingResources) {
-                setExpandedResourceKeys((currentKeys) => {
-                  const nextKeys = new Set(currentKeys.map(String));
-                  const key = String(info.node.key);
-                  if (nextKeys.has(key)) {
-                    nextKeys.delete(key);
-                  } else {
-                    nextKeys.add(key);
-                  }
-                  return Array.from(nextKeys);
-                });
-              }
-            }}
-            onCheck={(_, info) => {
-              const key = String(info.node.key);
-              onItemSelect(key, !checkedKeys.includes(key));
-            }}
-            onSelect={(_, info) => {
-              const key = String(info.node.key);
-              onItemSelect(key, !checkedKeys.includes(key));
-            }}
-          />
-        );
-      }}
-    </Transfer>
+    <div className="resource-tree-transfer-wrap">
+      <div className="resource-tree-transfer-actions">
+        <Space size={8}>
+          <Button
+            icon={<ExpandAltOutlined />}
+            size="small"
+            onClick={() => setExpandedResourceKeys(collectTreeKeys(treeData))}
+            disabled={loading || treeData.length === 0}
+          >
+            {t("policy.expandAllResources")}
+          </Button>
+          <Button
+            icon={<ShrinkOutlined />}
+            size="small"
+            onClick={() => setExpandedResourceKeys([])}
+            disabled={loading || treeData.length === 0}
+          >
+            {t("policy.collapseAllResources")}
+          </Button>
+        </Space>
+      </div>
+      <Transfer<ResourceScopeTransferItem>
+        className="resource-tree-transfer"
+        dataSource={transferItems}
+        targetKeys={selectedKeys}
+        titles={[t("policy.availableResources"), t("policy.selectedResources")]}
+        render={(item) => <span className="resource-transfer-item-title" title={item.title}>{item.title}</span>}
+        onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
+        listStyle={{ height: 360, maxHeight: 360 }}
+        showSearch
+        locale={{
+          searchPlaceholder: t("policy.searchResources"),
+          itemUnit: t("policy.resourceItemUnit"),
+          itemsUnit: t("policy.resourceItemsUnit"),
+        }}
+        filterOption={(input, item) => item.searchText.toLowerCase().includes(input.toLowerCase())}
+        onSearch={(direction, input) => {
+          if (direction === "left") {
+            setResourceSearch(input);
+          }
+        }}
+        showSelectAll={false}
+        disabled={loading}
+      >
+        {({ direction, filteredItems, onItemSelect, selectedKeys: transferSelectedKeys }) => {
+          if (direction !== "left") {
+            return null;
+          }
+          const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
+          const filteredKeys = new Set(filteredItems.map((item) => String(item.key)));
+          const isSearchingResources = Boolean(resourceSearch.trim());
+          const visibleTreeData = isSearchingResources
+            ? filterResourceScopeTree(treeData, filteredKeys)
+            : treeData;
+          const expandedKeys = isSearchingResources ? collectTreeKeys(visibleTreeData) : expandedResourceKeys;
+          return (
+            <Tree
+              key={isSearchingResources ? "resource-filtered-tree" : "resource-tree"}
+              blockNode
+              checkable
+              checkStrictly
+              checkedKeys={checkedKeys}
+              expandedKeys={expandedKeys}
+              treeData={markSelectedTreeNodes(visibleTreeData, selectedKeys)}
+              onExpand={(_, info) => {
+                if (!isSearchingResources) {
+                  setExpandedResourceKeys((currentKeys) => {
+                    const nextKeys = new Set(currentKeys.map(String));
+                    const key = String(info.node.key);
+                    if (nextKeys.has(key)) {
+                      nextKeys.delete(key);
+                    } else {
+                      nextKeys.add(key);
+                    }
+                    return Array.from(nextKeys);
+                  });
+                }
+              }}
+              onCheck={(_, info) => {
+                const key = String(info.node.key);
+                onItemSelect(key, !checkedKeys.includes(key));
+              }}
+              onSelect={(_, info) => {
+                const key = String(info.node.key);
+                onItemSelect(key, !checkedKeys.includes(key));
+              }}
+            />
+          );
+        }}
+      </Transfer>
+    </div>
   );
 }
 
@@ -5082,7 +5112,6 @@ function buildResourceScopeTransferData(
   resources.forEach((resource) => {
     const resourceId = String(resource.id);
     const label = resourceDisplayLabel(resource);
-    const path = String(resource.path || "");
     const kind = String(resource.kind || "");
     const node: TreeDataNode & { children: TreeDataNode[] } = {
       key: resourceScopeKey("resource", resourceId),
@@ -5093,7 +5122,7 @@ function buildResourceScopeTransferData(
     transferItems.push({
       key: String(node.key),
       title: label,
-      searchText: `${label} ${path} ${kind} ${resourceId}`,
+      searchText: `${label} ${kind} ${resourceId}`,
     });
   });
 
