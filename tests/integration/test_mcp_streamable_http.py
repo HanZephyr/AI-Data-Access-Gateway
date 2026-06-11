@@ -88,27 +88,28 @@ async def test_streamable_mcp_server_lists_tools_and_calls_runtime_tool() -> Non
     app, _ = build_streamable_mcp_app()
 
     async with runtime_mcp_server.session_manager.run():
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://127.0.0.1:8000",
-            headers={"X-ADG-API-Key": "adg_runtime"},
-        ) as http_client:
-            async with streamable_http_client(
-                "http://127.0.0.1:8000/mcp",
-                http_client=http_client,
-            ) as (read_stream, write_stream, _):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
+        for base_url in ["http://127.0.0.1:8000", "http://101.200.0.241:8001"]:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url=base_url,
+                headers={"X-ADG-API-Key": "adg_runtime"},
+            ) as http_client:
+                async with streamable_http_client(
+                    f"{base_url}/mcp",
+                    http_client=http_client,
+                ) as (read_stream, write_stream, _):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
 
-                    tools = await session.list_tools()
-                    list_datasources_tool = next(
-                        tool for tool in tools.tools if tool.name == "list_datasources"
-                    )
-                    properties = list_datasources_tool.inputSchema.get("properties", {})
-                    assert "user_id" not in properties
-                    assert "roles" not in properties
-                    assert "groups" not in properties
+                        tools = await session.list_tools()
+                        list_datasources_tool = next(
+                            tool for tool in tools.tools if tool.name == "list_datasources"
+                        )
+                        properties = list_datasources_tool.inputSchema.get("properties", {})
+                        assert "user_id" not in properties
+                        assert "roles" not in properties
+                        assert "groups" not in properties
 
-                    result = await session.call_tool("list_datasources", {})
-                    assert result.structuredContent is not None
-                    assert result.structuredContent["datasources"][0]["id"] == "ds_1"
+                        result = await session.call_tool("list_datasources", {})
+                        assert result.structuredContent is not None
+                        assert result.structuredContent["datasources"][0]["id"] == "ds_1"

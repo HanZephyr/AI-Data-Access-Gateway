@@ -15,7 +15,7 @@ from adg.control_plane.db import SessionLocal
 from adg.gateway_runtime.tools import GatewayRuntimeService
 from adg.mcp_api.runtime_tools import RUNTIME_TOOL_DEFINITIONS, dispatch_runtime_tool_call
 
-runtime_mcp_server = FastMCP("AI Data Access Gateway")
+runtime_mcp_server = FastMCP("AI Data Access Gateway", host="0.0.0.0")
 McpContext = Context[Any, Any, Any]
 
 
