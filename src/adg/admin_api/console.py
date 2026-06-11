@@ -92,6 +92,7 @@ class ResourcePolicyRequest(BaseModel):
     subject_id: str
     effect: str
     action: str
+    datasource_id: str | None = None
     resource_id: str | None = None
     tag_id: str | None = None
     allow_decrypt: bool = False
@@ -105,6 +106,7 @@ class ResourcePolicyUpdateRequest(BaseModel):
     subject_id: str | None = None
     effect: str | None = None
     action: str | None = None
+    datasource_id: str | None = None
     resource_id: str | None = None
     tag_id: str | None = None
     allow_decrypt: bool | None = None
@@ -623,11 +625,9 @@ def create_resource_policy(
 ) -> dict[str, Any]:
     """Create a resource-level policy, validating optional resource references."""
 
-    if payload.resource_id is not None:
-        _require_resource(session, payload.resource_id)
-    if payload.tag_id is not None:
-        _require_tag(session, payload.tag_id)
-    policy = ResourcePolicy(**payload.model_dump())
+    data = payload.model_dump()
+    _validate_resource_policy_scope(session, data)
+    policy = ResourcePolicy(**data)
     session.add(policy)
     session.commit()
     session.refresh(policy)
@@ -657,10 +657,15 @@ def update_resource_policy(
 
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
-    if data.get("resource_id") is not None:
-        _require_resource(session, data["resource_id"])
-    if data.get("tag_id") is not None:
-        _require_tag(session, data["tag_id"])
+    if {"datasource_id", "resource_id", "tag_id"}.intersection(data):
+        scope_keys = {"datasource_id", "resource_id", "tag_id"}
+        merged_scope = {
+            "datasource_id": policy.datasource_id,
+            "resource_id": policy.resource_id,
+            "tag_id": policy.tag_id,
+            **{key: value for key, value in data.items() if key in scope_keys},
+        }
+        _validate_resource_policy_scope(session, merged_scope)
     _apply_updates(policy, data)
     session.commit()
     session.refresh(policy)
@@ -1575,6 +1580,8 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
         "subject_label": _subject_label(session, policy.subject_type, policy.subject_id),
         "effect": policy.effect,
         "action": policy.action,
+        "datasource_label": _datasource_label(session, policy.datasource_id),
+        "datasource_id": policy.datasource_id,
         "resource_label": _resource_label(session, policy.resource_id),
         "resource_id": policy.resource_id,
         "tag_id": policy.tag_id,
@@ -1677,6 +1684,15 @@ def _resource_label(session: Session, resource_id: str | None) -> str | None:
     return f"{resource.display_name or resource.name} / {resource.path}"
 
 
+def _datasource_label(session: Session, datasource_id: str | None) -> str | None:
+    """Resolve one datasource id into its display name when available."""
+
+    if datasource_id is None:
+        return None
+    datasource = session.get(Datasource, datasource_id)
+    return datasource.name if datasource is not None else datasource_id
+
+
 def _tag_name(session: Session, tag_id: str | None) -> str | None:
     """Resolve one tag id into its display name when available."""
 
@@ -1727,6 +1743,24 @@ def _require_datasource(session: Session, datasource_id: str) -> Datasource:
     if datasource is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Datasource not found")
     return datasource
+
+
+def _validate_resource_policy_scope(session: Session, data: dict[str, Any]) -> None:
+    """Validate mutually exclusive datasource, resource, and tag policy scopes."""
+
+    scope_keys = ("datasource_id", "resource_id", "tag_id")
+    selected = [key for key in scope_keys if data.get(key) is not None]
+    if len(selected) > 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose only one resource policy scope",
+        )
+    if data.get("datasource_id") is not None:
+        _require_datasource(session, str(data["datasource_id"]))
+    if data.get("resource_id") is not None:
+        _require_resource(session, str(data["resource_id"]))
+    if data.get("tag_id") is not None:
+        _require_tag(session, str(data["tag_id"]))
 
 
 def _require_org_node(session: Session, org_node_id: str) -> OrgNode:

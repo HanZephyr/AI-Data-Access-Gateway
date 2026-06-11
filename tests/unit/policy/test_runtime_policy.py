@@ -269,6 +269,51 @@ def test_schema_allow_is_inherited_by_child_table(db_session: Session) -> None:
     assert decision.reason == "allowed_by_policy"
 
 
+def test_datasource_allow_applies_only_to_resources_under_that_datasource(
+    db_session: Session,
+) -> None:
+    allowed_resource = add_resource(
+        db_session=db_session,
+        resource_id="res_allowed",
+        datasource_id="ds_allowed",
+        path="warehouse.public.customers",
+    )
+    other_resource = add_resource(
+        db_session=db_session,
+        resource_id="res_other",
+        datasource_id="ds_other",
+        path="sandbox.public.customers",
+    )
+    db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            datasource_id="ds_allowed",
+            status="active",
+        )
+    )
+
+    service = RuntimePolicyService(db_session)
+
+    allowed = service.check_resource_access(
+        identity=identity(),
+        resource=allowed_resource,
+        action="read",
+    )
+    denied = service.check_resource_access(
+        identity=identity(),
+        resource=other_resource,
+        action="read",
+    )
+
+    assert allowed.allowed is True
+    assert allowed.reason == "allowed_by_policy"
+    assert denied.allowed is False
+    assert denied.reason == "no_matching_allow"
+
+
 def test_table_deny_overrides_database_allow(db_session: Session) -> None:
     database = add_resource(
         db_session=db_session,

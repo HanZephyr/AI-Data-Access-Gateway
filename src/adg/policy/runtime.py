@@ -81,6 +81,7 @@ class RuntimePolicyService:
         "relational_view": 4,
         "schema": 3,
         "database": 2,
+        "datasource": 1,
     }
 
     def __init__(self, session: Session) -> None:
@@ -190,6 +191,8 @@ class RuntimePolicyService:
 
         if policy.resource_id is not None:
             return policy.resource_id == resource.id
+        if policy.datasource_id is not None:
+            return policy.datasource_id == resource.datasource_id
         if policy.tag_id is not None:
             return (
                 self._session.execute(
@@ -260,6 +263,8 @@ class RuntimePolicyService:
                 if current.id == policy.resource_id:
                     return self._RESOURCE_SPECIFICITY.get(current.kind, 1)
             return None
+        if policy.datasource_id is not None:
+            return 1 if policy.datasource_id == resource.datasource_id else None
         if policy.tag_id is not None:
             matches = (
                 self._session.execute(

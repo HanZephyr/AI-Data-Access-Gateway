@@ -20,10 +20,35 @@ type WindowWithAppRoot = Window & {
 
 const routeMap: Record<string, MockResponse> = {
   "/admin/system": { ok: true, json: { service_name: "AI Data Access Gateway" } },
-  "/admin/datasources": { ok: true, json: [] },
+  "/admin/datasources": {
+    ok: true,
+    json: [
+      {
+        id: "ds_warehouse",
+        name: "Demo Warehouse",
+        type: "postgres",
+        datasource_kind: "relational",
+        status: "active",
+      },
+    ],
+  },
   "/admin/resources": {
     ok: true,
     json: [
+      {
+        id: "res_database",
+        display_name: "warehouse",
+        name: "warehouse",
+        path: "warehouse",
+        kind: "database",
+      },
+      {
+        id: "res_schema",
+        display_name: "finance",
+        name: "finance",
+        path: "warehouse.finance",
+        kind: "schema",
+      },
       {
         id: "res_finance",
         display_name: "Finance Orders",
@@ -48,6 +73,8 @@ const routeMap: Record<string, MockResponse> = {
         effect: "allow",
         action: "read",
         allow_decrypt: true,
+        datasource_id: null,
+        datasource_label: null,
         tag_id: "tag_finance",
         tag_name: "Finance",
         resource_id: null,
@@ -209,5 +236,23 @@ describe("Policies page", () => {
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
+  }, 30000);
+
+  it("shows datasource and database scopes when creating resource policies", async () => {
+    await mountConsoleApp("policies");
+    await signInWithValidAdminKey();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Datasource").length).toBeGreaterThan(0);
+    });
+
+    const resourcePlaceholder = await screen.findByText("Search and select a resource");
+    fireEvent.mouseDown(resourcePlaceholder.closest(".ant-select-selector")!);
+
+    expect(await screen.findByText("database: warehouse / warehouse")).toBeInTheDocument();
+    expect(await screen.findByText("schema: finance / warehouse.finance")).toBeInTheDocument();
+    expect(await screen.findByText("table: Finance Orders / warehouse.finance.orders")).toBeInTheDocument();
   }, 30000);
 });

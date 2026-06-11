@@ -43,6 +43,16 @@ def build_console_app(base_url: str = "http://testserver") -> TestClient:
             )
         )
         session.add(
+            Datasource(
+                id="ds_2",
+                name="Sandbox",
+                type="postgres",
+                datasource_kind="relational",
+                config_json="{}",
+                status="active",
+            )
+        )
+        session.add(
             OrgNode(
                 id="org_finance",
                 name="Finance",
@@ -402,6 +412,52 @@ def test_admin_policy_and_masking_policy_management() -> None:
         client.delete(f"/admin/masking-policies/{masking_policy_id}", headers=auth()).status_code
         == 204
     )
+
+
+def test_admin_resource_policy_can_target_datasource_scope() -> None:
+    client = build_console_app()
+
+    policy = client.post(
+        "/admin/resource-policies",
+        json={
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "datasource_id": "ds_1",
+            "allow_decrypt": True,
+        },
+        headers=auth(),
+    )
+
+    assert policy.status_code == 201
+    assert policy.json()["datasource_id"] == "ds_1"
+    assert policy.json()["datasource_label"] == "Warehouse"
+    assert policy.json()["resource_id"] is None
+    assert policy.json()["tag_id"] is None
+
+    listed = client.get("/admin/resource-policies", headers=auth())
+
+    assert listed.status_code == 200
+    assert listed.json()[0]["datasource_label"] == "Warehouse"
+
+
+def test_admin_resource_policy_rejects_unknown_datasource_scope() -> None:
+    client = build_console_app()
+
+    policy = client.post(
+        "/admin/resource-policies",
+        json={
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "datasource_id": "missing-datasource",
+        },
+        headers=auth(),
+    )
+
+    assert policy.status_code == 404
 
 
 def test_admin_policy_and_masking_reject_unknown_resource() -> None:

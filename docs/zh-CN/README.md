@@ -8,7 +8,7 @@ AI Data Access Gateway 是一个面向 AI Agent 的开源安全数据访问网�
 
 项目由数据安全访问层和管理控制台组成。
 
-运行时数据访问层通过 SQL Guard、资源策略和字段策略限制查询，只允许受控的只读路径，并同时暴露 FastMCP Streamable HTTP `/mcp` 端点与更简单的 `/api/tools/{tool_name}` HTTP 工具接口；
+运行时数据访问层通过 SQL Guard、资源策略和字段策略限制查询，只允许受控的只读路径。资源策略可以作用于数据源、数据库、Schema、表或视图、标签或全局范围；字段策略与脱敏策略仍保持字段级控制。运行时同时暴露 FastMCP Streamable HTTP `/mcp` 端点与更简单的 `/api/tools/{tool_name}` HTTP 工具接口；
 
 管理控制台为单管理员信任模型服务，覆盖数据源维护、资源治理与审计查看等操作，负责数据源登记、目录身份映射、资源元数据、字段策略、脱敏配置与 API Key 管理、企业组织架构管理。
 

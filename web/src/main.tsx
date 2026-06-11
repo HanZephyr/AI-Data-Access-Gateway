@@ -129,6 +129,7 @@ type CatalogJumpTarget = {
 type McpPlatformKey = McpPlatformGuide["key"];
 type TranslationParams = Record<string, string | number>;
 type ImportPlatformKey = "feishu" | "wecom" | "dingtalk";
+type PolicyTargetMode = "resource" | "datasource" | "tag";
 
 const translations = {
   "en-US": {
@@ -178,6 +179,7 @@ const translations = {
     "common.no": "No",
     "common.confirm": "OK",
     "common.cancel": "Cancel",
+    "placeholder.datasourceSearch": "Search and select a datasource",
     "placeholder.resourceSearch": "Search and select a resource",
     "placeholder.tagSearch": "Search and select a tag",
     "placeholder.roleSearch": "Select one or more roles",
@@ -427,6 +429,7 @@ const translations = {
     "option.relational_view": "view",
     "column.id": "ID",
     "column.datasource_id": "Datasource",
+    "column.datasource_label": "Datasource",
     "column.resource_id": "Resource",
     "column.resource_label": "Resource",
     "column.api_key_id": "API key",
@@ -529,6 +532,7 @@ const translations = {
     "common.no": "否",
     "common.confirm": "确定",
     "common.cancel": "取消",
+    "placeholder.datasourceSearch": "搜索并选择数据源",
     "placeholder.resourceSearch": "搜索并选择资源",
     "placeholder.tagSearch": "搜索并选择标签",
     "placeholder.roleSearch": "选择一个或多个角色",
@@ -776,6 +780,7 @@ const translations = {
     "option.relational_view": "视图",
     "column.id": "ID",
     "column.datasource_id": "数据源",
+    "column.datasource_label": "数据源",
     "column.resource_id": "资源",
     "column.resource_label": "资源",
     "column.api_key_id": "API 密钥",
@@ -878,6 +883,7 @@ const translations = {
     "common.no": "否",
     "common.confirm": "確定",
     "common.cancel": "取消",
+    "placeholder.datasourceSearch": "搜尋並選擇資料來源",
     "placeholder.resourceSearch": "搜尋並選擇資源",
     "placeholder.tagSearch": "搜尋並選擇標籤",
     "placeholder.roleSearch": "選擇一個或多個角色",
@@ -1125,6 +1131,7 @@ const translations = {
     "option.relational_view": "檢視",
     "column.id": "ID",
     "column.datasource_id": "資料來源",
+    "column.datasource_label": "資料來源",
     "column.resource_id": "資源",
     "column.resource_label": "資源",
     "column.api_key_id": "API 金鑰",
@@ -3683,6 +3690,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const isField = kind === "field";
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
+  const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
   const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
   const tags = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
   const users = useData<DirectoryUserRecord[]>(() => api.request("/admin/users"), [api.apiKey]);
@@ -3691,8 +3699,8 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<AnyRecord | null>(null);
   const [editing, setEditing] = useState<AnyRecord | null>(null);
-  const [targetMode, setTargetMode] = useState<"resource" | "tag">("resource");
-  const [editingTargetMode, setEditingTargetMode] = useState<"resource" | "tag">("resource");
+  const [targetMode, setTargetMode] = useState<PolicyTargetMode>("resource");
+  const [editingTargetMode, setEditingTargetMode] = useState<PolicyTargetMode>("resource");
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const createSubjectType = Form.useWatch("subject_type", form) || "user";
@@ -3743,8 +3751,8 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const policyForm = (
     targetForm: FormInstance<AnyRecord>,
     currentSubjectType: string,
-    currentTargetMode: "resource" | "tag",
-    setCurrentTargetMode: React.Dispatch<React.SetStateAction<"resource" | "tag">>,
+    currentTargetMode: PolicyTargetMode,
+    setCurrentTargetMode: React.Dispatch<React.SetStateAction<PolicyTargetMode>>,
   ) => {
     const effectValue = Form.useWatch("effect", targetForm) || "allow";
     return (
@@ -3800,11 +3808,16 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 value={currentTargetMode}
                 options={[
                   { value: "resource", label: t("tab.resource") },
+                  { value: "datasource", label: columnLabel("datasource_id", t) },
                   { value: "tag", label: t("tab.tag") },
                 ]}
                 onChange={(value) => {
                   setCurrentTargetMode(value);
-                  targetForm.setFieldsValue({ resource_id: undefined, tag_id: undefined });
+                  targetForm.setFieldsValue({
+                    datasource_id: undefined,
+                    resource_id: undefined,
+                    tag_id: undefined,
+                  });
                 }}
               />
             </Form.Item>
@@ -3815,6 +3828,18 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
               >
                 <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+              </Form.Item>
+            ) : currentTargetMode === "datasource" ? (
+              <Form.Item
+                name="datasource_id"
+                label={columnLabel("datasource_id", t)}
+                rules={[{ required: true, message: t("common.required", { label: columnLabel("datasource_id", t) }) }]}
+              >
+                <DatasourceSelect
+                  datasources={datasources.data || []}
+                  loading={datasources.loading}
+                  t={t}
+                />
               </Form.Item>
             ) : (
               <Form.Item
@@ -3841,7 +3866,12 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
               label={t("field.resourceId")}
               rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
             >
-              <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+              <ResourceSelect
+                resources={resources.data || []}
+                loading={resources.loading}
+                selectableKinds={["relational_table", "relational_view"]}
+                t={t}
+              />
             </Form.Item>
             <Form.Item
               name="field_name"
@@ -3880,6 +3910,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 key: "allow_decrypt",
                 render: (value: boolean) => (value ? t("common.yes") : t("common.no")),
               }]),
+          ...(isField ? [] : [{ title: columnLabel("datasource_label", t), dataIndex: "datasource_label", key: "datasource_label" }]),
           ...(isField ? [] : [{ title: columnLabel("tag_name", t), dataIndex: "tag_name", key: "tag_name" }]),
           { title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" },
           ...(isField ? [{ title: columnLabel("field_name", t), dataIndex: "field_name", key: "field_name" }] : []),
@@ -3893,7 +3924,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
               icon={<EditOutlined />}
               onClick={() => {
                 setEditing(row);
-                setEditingTargetMode(row.tag_id ? "tag" : "resource");
+                setEditingTargetMode(row.datasource_id ? "datasource" : row.tag_id ? "tag" : "resource");
                 editForm.setFieldsValue(row);
               }}
             />
@@ -3985,7 +4016,12 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
         label={t("field.resourceId")}
         rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
       >
-        <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
+        <ResourceSelect
+          resources={resources.data || []}
+          loading={resources.loading}
+          selectableKinds={["relational_table", "relational_view"]}
+          t={t}
+        />
       </Form.Item>
       <Form.Item
         name="field_name"
@@ -4860,6 +4896,7 @@ function RecordDetails({
 function ResourceSelect({
   resources,
   loading,
+  selectableKinds,
   t,
   value,
   onChange,
@@ -4867,6 +4904,7 @@ function ResourceSelect({
 }: {
   resources: AnyRecord[];
   loading?: boolean;
+  selectableKinds?: string[];
   t: I18nContextValue["t"];
   value?: string;
   onChange?: (value?: string) => void;
@@ -4874,11 +4912,15 @@ function ResourceSelect({
 }) {
   /** Searchable resource picker used by policy and masking forms. */
 
-  const options = resources.map((resource) => {
+  const kindFilter = selectableKinds ? new Set(selectableKinds) : null;
+  const options = resources.filter((resource) => {
+    const kind = String(resource.kind || "");
+    return kindFilter === null || kindFilter.has(kind);
+  }).map((resource) => {
     const name = String(resource.display_name || resource.name || resource.id);
     const path = String(resource.path || "");
     const kind = String(resource.kind || "");
-    const label = [name, path].filter(Boolean).join(" / ");
+    const label = `${optionLabel(kind, t)}: ${[name, path].filter(Boolean).join(" / ")}`;
     return {
       value: resource.id,
       label,
@@ -4901,6 +4943,38 @@ function ResourceSelect({
           .toLowerCase()
           .includes(input.toLowerCase())
       }
+    />
+  );
+}
+
+function DatasourceSelect({
+  datasources,
+  loading,
+  t,
+  value,
+  onChange,
+}: {
+  datasources: AnyRecord[];
+  loading?: boolean;
+  t: I18nContextValue["t"];
+  value?: string;
+  onChange?: (value?: string) => void;
+}) {
+  /** Searchable datasource picker for datasource-scoped resource policies. */
+
+  return (
+    <Select
+      value={value}
+      onChange={onChange}
+      showSearch
+      allowClear
+      loading={loading}
+      placeholder={t("placeholder.datasourceSearch")}
+      options={datasources.map((datasource) => ({
+        value: datasource.id,
+        label: datasource.name || datasource.id,
+      }))}
+      optionFilterProp="label"
     />
   );
 }
@@ -4977,7 +5051,7 @@ function PolicySubjectSelect({
 
 function normalizePolicyValues(
   values: AnyRecord,
-  targetMode: "resource" | "tag",
+  targetMode: PolicyTargetMode,
   isField: boolean,
 ) {
   /** Normalize policy forms so resource and tag targeting remain mutually exclusive. */
@@ -4996,6 +5070,7 @@ function normalizePolicyValues(
     return payload;
   }
 
+  payload.datasource_id = targetMode === "datasource" ? values.datasource_id : null;
   payload.resource_id = targetMode === "resource" ? values.resource_id : null;
   payload.tag_id = targetMode === "tag" ? values.tag_id : null;
   payload.allow_decrypt = values.effect === "allow" && Boolean(values.allow_decrypt);

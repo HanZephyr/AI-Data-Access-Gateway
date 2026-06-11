@@ -46,6 +46,7 @@ class ResourcePolicy(Base):
     subject_id: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     effect: Mapped[str] = mapped_column(String(16), nullable=False)
     action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    datasource_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     resource_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     tag_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     allow_decrypt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
