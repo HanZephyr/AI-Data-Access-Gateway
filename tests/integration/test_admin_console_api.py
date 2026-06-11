@@ -127,6 +127,7 @@ def test_admin_resource_and_tag_management() -> None:
     resources = client.get("/admin/resources", headers=auth())
     assert resources.status_code == 200
     assert resources.json()[0]["id"] == "res_customers"
+    assert resources.json()[0]["parent_id"] is None
     assert "tenant_id" not in resources.json()[0]
 
     fields = client.get("/admin/resources/res_customers/fields", headers=auth())
@@ -440,6 +441,30 @@ def test_admin_resource_policy_can_target_datasource_scope() -> None:
 
     assert listed.status_code == 200
     assert listed.json()[0]["datasource_label"] == "Warehouse"
+
+
+def test_admin_resource_policy_batch_create_targets_multiple_scopes() -> None:
+    client = build_console_app()
+
+    policies = client.post(
+        "/admin/resource-policies/batch",
+        json={
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "datasource_ids": ["ds_2"],
+            "resource_ids": ["res_customers"],
+            "allow_decrypt": True,
+        },
+        headers=auth(),
+    )
+
+    assert policies.status_code == 201
+    body = policies.json()
+    assert len(body) == 2
+    assert {item["datasource_id"] for item in body} == {"ds_2", None}
+    assert {item["resource_id"] for item in body} == {"res_customers", None}
 
 
 def test_admin_resource_policy_rejects_unknown_datasource_scope() -> None:

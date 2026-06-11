@@ -1033,6 +1033,23 @@ body {
   grid-column: 1 / -1;
 }
 
+.resource-tree-transfer {
+  width: 100%;
+}
+
+.resource-tree-transfer .ant-transfer-list {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.resource-tree-transfer .ant-transfer-list-body {
+  min-height: 300px;
+}
+
+.resource-tree-transfer .ant-tree {
+  padding: 8px;
+}
+
 .catalog-empty {
   margin: auto;
 }
@@ -1239,6 +1256,16 @@ body {
 
   .config-form-grid .span-2 {
     grid-column: auto;
+  }
+
+  .resource-tree-transfer {
+    flex-direction: column;
+  }
+
+  .resource-tree-transfer .ant-transfer-operation {
+    align-self: center;
+    margin: 8px 0;
+    transform: rotate(90deg);
   }
 
   .catalog-tree,

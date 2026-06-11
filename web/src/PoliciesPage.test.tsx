@@ -37,6 +37,8 @@ const routeMap: Record<string, MockResponse> = {
     json: [
       {
         id: "res_database",
+        datasource_id: "ds_warehouse",
+        parent_id: null,
         display_name: "warehouse",
         name: "warehouse",
         path: "warehouse",
@@ -44,6 +46,8 @@ const routeMap: Record<string, MockResponse> = {
       },
       {
         id: "res_schema",
+        datasource_id: "ds_warehouse",
+        parent_id: "res_database",
         display_name: "finance",
         name: "finance",
         path: "warehouse.finance",
@@ -51,6 +55,8 @@ const routeMap: Record<string, MockResponse> = {
       },
       {
         id: "res_finance",
+        datasource_id: "ds_warehouse",
+        parent_id: "res_schema",
         display_name: "Finance Orders",
         name: "orders",
         path: "warehouse.finance.orders",
@@ -238,21 +244,30 @@ describe("Policies page", () => {
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
   }, 30000);
 
-  it("shows datasource and database scopes when creating resource policies", async () => {
+  it("renders datasource and resource scopes as a tree transfer", async () => {
     await mountConsoleApp("policies");
     await signInWithValidAdminKey();
 
     fireEvent.click(await screen.findByRole("button", { name: "Create" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("Datasource").length).toBeGreaterThan(0);
+      expect(document.querySelector(".resource-tree-transfer")).toBeInTheDocument();
     });
 
-    const resourcePlaceholder = await screen.findByText("Search and select a resource");
-    fireEvent.mouseDown(resourcePlaceholder.closest(".ant-select-selector")!);
+    expect(screen.getByText("Demo Warehouse")).toBeInTheDocument();
+    expect(screen.getByText("database: warehouse")).toBeInTheDocument();
+    expect(screen.getByText("schema: finance")).toBeInTheDocument();
+    expect(screen.getByText("table: Finance Orders")).toBeInTheDocument();
 
-    expect(await screen.findByText("database: warehouse / warehouse")).toBeInTheDocument();
-    expect(await screen.findByText("schema: finance / warehouse.finance")).toBeInTheDocument();
-    expect(await screen.findByText("table: Finance Orders / warehouse.finance.orders")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("database: warehouse"));
+    fireEvent.click(screen.getByText("table: Finance Orders"));
+    const addButton = document.querySelector(".resource-tree-transfer .ant-transfer-operation button");
+    expect(addButton).toBeInTheDocument();
+    fireEvent.click(addButton!);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("database: warehouse").length).toBeGreaterThan(1);
+      expect(screen.getAllByText("table: Finance Orders").length).toBeGreaterThan(1);
+    });
   }, 30000);
 });

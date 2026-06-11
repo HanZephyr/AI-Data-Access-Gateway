@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
@@ -95,6 +95,20 @@ class ResourcePolicyRequest(BaseModel):
     datasource_id: str | None = None
     resource_id: str | None = None
     tag_id: str | None = None
+    allow_decrypt: bool = False
+    status: str = "active"
+
+
+class ResourcePolicyBatchRequest(BaseModel):
+    """Payload for creating resource-level policies for multiple targets."""
+
+    subject_type: PolicySubjectType
+    subject_id: str
+    effect: str
+    action: str
+    datasource_ids: list[str] = Field(default_factory=list)
+    resource_ids: list[str] = Field(default_factory=list)
+    tag_ids: list[str] = Field(default_factory=list)
     allow_decrypt: bool = False
     status: str = "active"
 
@@ -632,6 +646,50 @@ def create_resource_policy(
     session.commit()
     session.refresh(policy)
     return _serialize_resource_policy(policy, session)
+
+
+@router.post("/resource-policies/batch", status_code=status.HTTP_201_CREATED)
+def create_resource_policies_batch(
+    payload: ResourcePolicyBatchRequest,
+    _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
+    session: Annotated[Session, Depends(get_session)],
+) -> list[dict[str, Any]]:
+    """Create one resource-level policy for each selected datasource, resource, or tag."""
+
+    target_specs = [
+        ("datasource_id", item_id) for item_id in _dedupe_ids(payload.datasource_ids)
+    ] + [
+        ("resource_id", item_id) for item_id in _dedupe_ids(payload.resource_ids)
+    ] + [
+        ("tag_id", item_id) for item_id in _dedupe_ids(payload.tag_ids)
+    ]
+    if not target_specs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one resource policy target is required",
+        )
+
+    common_data = payload.model_dump(
+        exclude={"datasource_ids", "resource_ids", "tag_ids"}
+    )
+    policies: list[ResourcePolicy] = []
+    for scope_key, target_id in target_specs:
+        data = {
+            **common_data,
+            "datasource_id": None,
+            "resource_id": None,
+            "tag_id": None,
+            scope_key: target_id,
+        }
+        _validate_resource_policy_scope(session, data)
+        policy = ResourcePolicy(**data)
+        session.add(policy)
+        policies.append(policy)
+
+    session.commit()
+    for policy in policies:
+        session.refresh(policy)
+    return [_serialize_resource_policy(policy, session) for policy in policies]
 
 
 @router.get("/resource-policies/{policy_id}")
@@ -1300,6 +1358,7 @@ def _serialize_resource(
     return {
         "id": resource.id,
         "datasource_id": resource.datasource_id,
+        "parent_id": resource.parent_id,
         "kind": resource.kind,
         "name": resource.name,
         "path": resource.path,
@@ -1761,6 +1820,20 @@ def _validate_resource_policy_scope(session: Session, data: dict[str, Any]) -> N
         _require_resource(session, str(data["resource_id"]))
     if data.get("tag_id") is not None:
         _require_tag(session, str(data["tag_id"]))
+
+
+def _dedupe_ids(item_ids: list[str]) -> list[str]:
+    """Return stable unique ids while ignoring empty strings."""
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item_id in item_ids:
+        normalized = item_id.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
 
 
 def _require_org_node(session: Session, org_node_id: str) -> OrgNode:

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   ApiOutlined,
@@ -49,11 +49,13 @@ import {
   Tabs,
   Tag,
   Tooltip,
+  Transfer,
   Tree,
   Upload,
   Typography,
   theme
 } from "antd";
+import type { TransferProps, TreeDataNode } from "antd";
 import type { FormInstance } from "antd/es/form";
 import type { ColumnsType } from "antd/es/table";
 import enUS from "antd/locale/en_US";
@@ -129,7 +131,7 @@ type CatalogJumpTarget = {
 type McpPlatformKey = McpPlatformGuide["key"];
 type TranslationParams = Record<string, string | number>;
 type ImportPlatformKey = "feishu" | "wecom" | "dingtalk";
-type PolicyTargetMode = "resource" | "datasource" | "tag";
+type PolicyTargetMode = "resource" | "tag";
 
 const translations = {
   "en-US": {
@@ -225,6 +227,8 @@ const translations = {
     "tab.tag": "Tag",
     "policy.resourcePolicies": "Resource Policies",
     "policy.fieldPolicies": "Field Policies",
+    "policy.availableResources": "Available resources",
+    "policy.selectedResources": "Selected resources",
     "section.fields": "Fields",
     "datasource.new": "New data source",
     "datasource.test": "Test",
@@ -578,6 +582,8 @@ const translations = {
     "tab.tag": "标签",
     "policy.resourcePolicies": "资源权限策略",
     "policy.fieldPolicies": "字段权限策略",
+    "policy.availableResources": "可选资源",
+    "policy.selectedResources": "已选资源",
     "section.fields": "字段",
     "datasource.new": "新建数据源",
     "datasource.test": "测试连接",
@@ -929,6 +935,8 @@ const translations = {
     "tab.tag": "標籤",
     "policy.resourcePolicies": "資源權限策略",
     "policy.fieldPolicies": "欄位權限策略",
+    "policy.availableResources": "可選資源",
+    "policy.selectedResources": "已選資源",
     "section.fields": "欄位",
     "datasource.new": "新增資料來源",
     "datasource.test": "測試連線",
@@ -3714,6 +3722,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
       effect: "allow",
       action: "read",
       allow_decrypt: false,
+      resource_scope_keys: [],
       status: "active",
     });
     setOpen(true);
@@ -3721,9 +3730,10 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
 
   const create = async () => {
     const values = await form.validateFields();
-    await api.request(`/admin/${kind}-policies`, {
+    const isBatchResourcePolicy = !isField && targetMode === "resource";
+    await api.request(isBatchResourcePolicy ? "/admin/resource-policies/batch" : `/admin/${kind}-policies`, {
       method: "POST",
-      body: JSON.stringify(normalizePolicyValues(values, targetMode, isField)),
+      body: JSON.stringify(normalizePolicyValues(values, targetMode, isField, { batch: isBatchResourcePolicy })),
     });
     messageApi.success(t("common.saved"));
     setOpen(false);
@@ -3733,6 +3743,33 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const update = async () => {
     if (!editing) return;
     const values = await editForm.validateFields();
+    if (!isField && editingTargetMode === "resource") {
+      const scopeKeys = normalizeResourceScopeKeys(values.resource_scope_keys);
+      const [primaryScopeKey, ...extraScopeKeys] = scopeKeys;
+      await api.request(`/admin/${kind}-policies/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(normalizePolicyValues(
+          { ...values, resource_scope_keys: primaryScopeKey ? [primaryScopeKey] : [] },
+          editingTargetMode,
+          isField,
+        )),
+      });
+      if (extraScopeKeys.length > 0) {
+        await api.request("/admin/resource-policies/batch", {
+          method: "POST",
+          body: JSON.stringify(normalizePolicyValues(
+            { ...values, resource_scope_keys: extraScopeKeys },
+            editingTargetMode,
+            isField,
+            { batch: true },
+          )),
+        });
+      }
+      messageApi.success(t("common.saved"));
+      setEditing(null);
+      state.reload();
+      return;
+    }
     await api.request(`/admin/${kind}-policies/${editing.id}`, {
       method: "PATCH",
       body: JSON.stringify(normalizePolicyValues(values, editingTargetMode, isField)),
@@ -3808,14 +3845,12 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 value={currentTargetMode}
                 options={[
                   { value: "resource", label: t("tab.resource") },
-                  { value: "datasource", label: columnLabel("datasource_id", t) },
                   { value: "tag", label: t("tab.tag") },
                 ]}
                 onChange={(value) => {
                   setCurrentTargetMode(value);
                   targetForm.setFieldsValue({
-                    datasource_id: undefined,
-                    resource_id: undefined,
+                    resource_scope_keys: [],
                     tag_id: undefined,
                   });
                 }}
@@ -3823,21 +3858,20 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
             </Form.Item>
             {currentTargetMode === "resource" ? (
               <Form.Item
-                name="resource_id"
+                name="resource_scope_keys"
                 label={t("field.resourceId")}
-                rules={[{ required: true, message: t("common.required", { label: t("field.resourceId") }) }]}
+                className="span-2"
+                rules={[{
+                  validator: (_, value) =>
+                    Array.isArray(value) && value.length > 0
+                      ? Promise.resolve()
+                      : Promise.reject(new Error(t("common.required", { label: t("field.resourceId") }))),
+                }]}
               >
-                <ResourceSelect resources={resources.data || []} loading={resources.loading} t={t} />
-              </Form.Item>
-            ) : currentTargetMode === "datasource" ? (
-              <Form.Item
-                name="datasource_id"
-                label={columnLabel("datasource_id", t)}
-                rules={[{ required: true, message: t("common.required", { label: columnLabel("datasource_id", t) }) }]}
-              >
-                <DatasourceSelect
+                <ResourceScopeTransfer
                   datasources={datasources.data || []}
-                  loading={datasources.loading}
+                  resources={resources.data || []}
+                  loading={datasources.loading || resources.loading}
                   t={t}
                 />
               </Form.Item>
@@ -3924,8 +3958,11 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
               icon={<EditOutlined />}
               onClick={() => {
                 setEditing(row);
-                setEditingTargetMode(row.datasource_id ? "datasource" : row.tag_id ? "tag" : "resource");
-                editForm.setFieldsValue(row);
+                setEditingTargetMode(row.tag_id ? "tag" : "resource");
+                editForm.setFieldsValue({
+                  ...row,
+                  resource_scope_keys: resourceScopeKeysFromPolicy(row),
+                });
               }}
             />
             <Popconfirm
@@ -3944,6 +3981,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
       <Drawer
         title={t("common.createTitle", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })}
         open={open}
+        width={isField ? undefined : 780}
         onClose={() => setOpen(false)}
         extra={<Button type="primary" onClick={() => void create()}>{t("common.save")}</Button>}
       >
@@ -3952,6 +3990,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
       <Drawer
         title={t("common.editTitle", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })}
         open={Boolean(editing)}
+        width={isField ? undefined : 780}
         onClose={() => setEditing(null)}
         extra={<Button type="primary" onClick={() => void update()}>{t("common.save")}</Button>}
       >
@@ -4893,6 +4932,221 @@ function RecordDetails({
   );
 }
 
+type ResourceScopeTransferItem = {
+  key: string;
+  title: string;
+  searchText: string;
+};
+
+function ResourceScopeTransfer({
+  datasources,
+  resources,
+  loading,
+  t,
+  value,
+  onChange,
+}: {
+  datasources: AnyRecord[];
+  resources: AnyRecord[];
+  loading?: boolean;
+  t: I18nContextValue["t"];
+  value?: string[];
+  onChange?: (value?: string[]) => void;
+}) {
+  /** Tree transfer for selecting one or more datasource/resource policy scopes. */
+
+  const selectedKeys = normalizeResourceScopeKeys(value);
+  const { treeData, transferItems } = useMemo(
+    () => buildResourceScopeTransferData(datasources, resources, t),
+    [datasources, resources, t],
+  );
+
+  return (
+    <Transfer<ResourceScopeTransferItem>
+      className="resource-tree-transfer"
+      dataSource={transferItems}
+      targetKeys={selectedKeys}
+      titles={[t("policy.availableResources"), t("policy.selectedResources")]}
+      render={(item) => item.title}
+      onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
+      showSelectAll={false}
+      disabled={loading}
+    >
+      {({ direction, onItemSelect, selectedKeys: transferSelectedKeys }) => {
+        if (direction !== "left") {
+          return null;
+        }
+        const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
+        return (
+          <Tree
+            blockNode
+            checkable
+            checkStrictly
+            defaultExpandAll
+            checkedKeys={checkedKeys}
+            treeData={markSelectedTreeNodes(treeData, selectedKeys)}
+            onCheck={(_, info) => {
+              const key = String(info.node.key);
+              onItemSelect(key, !checkedKeys.includes(key));
+            }}
+            onSelect={(_, info) => {
+              const key = String(info.node.key);
+              onItemSelect(key, !checkedKeys.includes(key));
+            }}
+          />
+        );
+      }}
+    </Transfer>
+  );
+}
+
+function buildResourceScopeTransferData(
+  datasources: AnyRecord[],
+  resources: AnyRecord[],
+  t: I18nContextValue["t"],
+) {
+  /** Build datasource roots and resource child nodes for the policy scope transfer. */
+
+  const datasourceNodes = new Map<string, TreeDataNode & { children: TreeDataNode[] }>();
+  const transferItems: ResourceScopeTransferItem[] = [];
+  const ensureDatasourceNode = (datasourceId: string, fallbackName?: string) => {
+    const existing = datasourceNodes.get(datasourceId);
+    if (existing) {
+      return existing;
+    }
+    const datasource = datasources.find((item) => item.id === datasourceId);
+    const title = String(datasource?.name || fallbackName || datasourceId);
+    const node: TreeDataNode & { children: TreeDataNode[] } = {
+      key: resourceScopeKey("datasource", datasourceId),
+      title,
+      children: [],
+    };
+    datasourceNodes.set(datasourceId, node);
+    transferItems.push({
+      key: String(node.key),
+      title,
+      searchText: `${title} ${datasourceId}`,
+    });
+    return node;
+  };
+
+  datasources.forEach((datasource) => {
+    ensureDatasourceNode(String(datasource.id), String(datasource.name || datasource.id));
+  });
+
+  const resourceNodes = new Map<string, TreeDataNode & { children: TreeDataNode[] }>();
+  resources.forEach((resource) => {
+    const resourceId = String(resource.id);
+    const label = resourceDisplayLabel(resource, t);
+    const path = String(resource.path || "");
+    const kind = String(resource.kind || "");
+    const node: TreeDataNode & { children: TreeDataNode[] } = {
+      key: resourceScopeKey("resource", resourceId),
+      title: label,
+      children: [],
+    };
+    resourceNodes.set(resourceId, node);
+    transferItems.push({
+      key: String(node.key),
+      title: label,
+      searchText: `${label} ${path} ${kind} ${resourceId}`,
+    });
+  });
+
+  resources.forEach((resource) => {
+    const resourceId = String(resource.id);
+    const node = resourceNodes.get(resourceId);
+    if (!node) {
+      return;
+    }
+    const parentId = resource.parent_id ? String(resource.parent_id) : "";
+    const parentNode = parentId ? resourceNodes.get(parentId) : undefined;
+    if (parentNode) {
+      parentNode.children.push(node);
+      return;
+    }
+    const datasourceId = String(resource.datasource_id || "");
+    if (datasourceId) {
+      ensureDatasourceNode(datasourceId).children.push(node);
+    }
+  });
+
+  return {
+    treeData: Array.from(datasourceNodes.values()),
+    transferItems,
+  };
+}
+
+function markSelectedTreeNodes(
+  nodes: TreeDataNode[],
+  selectedKeys: string[],
+): TreeDataNode[] {
+  /** Disable nodes already moved to the selected side, matching Ant Design's Tree Transfer pattern. */
+
+  const selected = new Set(selectedKeys);
+  return nodes.map((node) => ({
+    ...node,
+    disabled: selected.has(String(node.key)),
+    children: node.children ? markSelectedTreeNodes(node.children, selectedKeys) : undefined,
+  }));
+}
+
+function resourceDisplayLabel(resource: AnyRecord, t: I18nContextValue["t"]) {
+  /** Human-facing label for a datasource resource node. */
+
+  const name = String(resource.display_name || resource.name || resource.id);
+  const kind = String(resource.kind || "");
+  return `${optionLabel(kind, t)}: ${name}`;
+}
+
+function resourceScopeKey(type: "datasource" | "resource", id: string) {
+  /** Stable key namespace used by the mixed datasource/resource transfer. */
+
+  return `${type}:${id}`;
+}
+
+function normalizeResourceScopeKeys(value: unknown) {
+  /** Normalize Ant Design form values into transfer target keys. */
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map(String).filter((item) => item.startsWith("datasource:") || item.startsWith("resource:"));
+}
+
+function splitResourceScopeKeys(value: unknown) {
+  /** Split transfer target keys into backend batch payload arrays. */
+
+  const datasourceIds: string[] = [];
+  const resourceIds: string[] = [];
+  normalizeResourceScopeKeys(value).forEach((key) => {
+    const separatorIndex = key.indexOf(":");
+    const type = key.slice(0, separatorIndex);
+    const id = key.slice(separatorIndex + 1);
+    if (separatorIndex < 0 || !id) {
+      return;
+    }
+    if (type === "datasource") {
+      datasourceIds.push(id);
+    } else if (type === "resource") {
+      resourceIds.push(id);
+    }
+  });
+  return { datasourceIds, resourceIds };
+}
+
+function resourceScopeKeysFromPolicy(row: AnyRecord) {
+  /** Convert one policy row into tree transfer target keys for editing. */
+
+  if (row.datasource_id) {
+    return [resourceScopeKey("datasource", String(row.datasource_id))];
+  }
+  if (row.resource_id) {
+    return [resourceScopeKey("resource", String(row.resource_id))];
+  }
+  return [];
+}
+
 function ResourceSelect({
   resources,
   loading,
@@ -4943,38 +5197,6 @@ function ResourceSelect({
           .toLowerCase()
           .includes(input.toLowerCase())
       }
-    />
-  );
-}
-
-function DatasourceSelect({
-  datasources,
-  loading,
-  t,
-  value,
-  onChange,
-}: {
-  datasources: AnyRecord[];
-  loading?: boolean;
-  t: I18nContextValue["t"];
-  value?: string;
-  onChange?: (value?: string) => void;
-}) {
-  /** Searchable datasource picker for datasource-scoped resource policies. */
-
-  return (
-    <Select
-      value={value}
-      onChange={onChange}
-      showSearch
-      allowClear
-      loading={loading}
-      placeholder={t("placeholder.datasourceSearch")}
-      options={datasources.map((datasource) => ({
-        value: datasource.id,
-        label: datasource.name || datasource.id,
-      }))}
-      optionFilterProp="label"
     />
   );
 }
@@ -5053,6 +5275,7 @@ function normalizePolicyValues(
   values: AnyRecord,
   targetMode: PolicyTargetMode,
   isField: boolean,
+  options: { batch?: boolean } = {},
 ) {
   /** Normalize policy forms so resource and tag targeting remain mutually exclusive. */
 
@@ -5070,10 +5293,24 @@ function normalizePolicyValues(
     return payload;
   }
 
-  payload.datasource_id = targetMode === "datasource" ? values.datasource_id : null;
-  payload.resource_id = targetMode === "resource" ? values.resource_id : null;
-  payload.tag_id = targetMode === "tag" ? values.tag_id : null;
   payload.allow_decrypt = values.effect === "allow" && Boolean(values.allow_decrypt);
+  if (targetMode === "resource") {
+    const { datasourceIds, resourceIds } = splitResourceScopeKeys(values.resource_scope_keys);
+    if (options.batch) {
+      payload.datasource_ids = datasourceIds;
+      payload.resource_ids = resourceIds;
+      payload.tag_ids = [];
+    } else {
+      payload.datasource_id = datasourceIds[0] || null;
+      payload.resource_id = resourceIds[0] || null;
+      payload.tag_id = null;
+    }
+    return payload;
+  }
+
+  payload.datasource_id = null;
+  payload.resource_id = null;
+  payload.tag_id = values.tag_id;
   return payload;
 }
 
