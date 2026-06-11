@@ -298,8 +298,12 @@ describe("Policies page", () => {
     expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
     expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /全部展开/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /全部折叠/ })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "已选资源 全部展开" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "已选资源 全部折叠" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: /全部展开/ }));
+    fireEvent.click(screen.getByRole("button", { name: "可选资源 全部展开" }));
     expect(await screen.findByText("warehouse")).toBeInTheDocument();
     expect(await screen.findByText("finance")).toBeInTheDocument();
     expect(await screen.findByText("Finance Orders")).toBeInTheDocument();
@@ -307,7 +311,7 @@ describe("Policies page", () => {
     expect(await screen.findByText("ai_test")).toBeInTheDocument();
     expect(await screen.findByText("dwd_shop_life_cycle")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /全部折叠/ }));
+    fireEvent.click(screen.getByRole("button", { name: "可选资源 全部折叠" }));
     expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
     expect(screen.queryByText("ai_test")).not.toBeInTheDocument();
 

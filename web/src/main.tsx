@@ -4974,39 +4974,68 @@ function ResourceScopeTransfer({
 
   const selectedKeys = normalizeResourceScopeKeys(value);
   const [resourceSearch, setResourceSearch] = useState("");
+  const [selectedResourceSearch, setSelectedResourceSearch] = useState("");
   const [expandedResourceKeys, setExpandedResourceKeys] = useState<React.Key[]>([]);
+  const [expandedSelectedResourceKeys, setExpandedSelectedResourceKeys] = useState<React.Key[]>([]);
   const { treeData, transferItems } = useMemo(
     () => buildResourceScopeTransferData(datasources, resources),
     [datasources, resources],
   );
+  const selectedTreeData = filterResourceScopeTree(treeData, new Set(selectedKeys));
+  const renderResourceTransferTitle = (
+    title: string,
+    treeNodes: TreeDataNode[],
+    onExpandAll: () => void,
+    onCollapseAll: () => void,
+  ) => {
+    const disabled = loading || treeNodes.length === 0;
+    return (
+      <span className="resource-transfer-list-title">
+        <span className="resource-transfer-list-title-label">{title}</span>
+        <span className="resource-transfer-list-title-actions">
+          <Tooltip title={t("policy.expandAllResources")}>
+            <Button
+              aria-label={`${title} ${t("policy.expandAllResources")}`}
+              icon={<ExpandAltOutlined />}
+              size="small"
+              onClick={onExpandAll}
+              disabled={disabled}
+            />
+          </Tooltip>
+          <Tooltip title={t("policy.collapseAllResources")}>
+            <Button
+              aria-label={`${title} ${t("policy.collapseAllResources")}`}
+              icon={<ShrinkOutlined />}
+              size="small"
+              onClick={onCollapseAll}
+              disabled={disabled}
+            />
+          </Tooltip>
+        </span>
+      </span>
+    );
+  };
 
   return (
     <div className="resource-tree-transfer-wrap">
-      <div className="resource-tree-transfer-actions">
-        <Space size={8}>
-          <Button
-            icon={<ExpandAltOutlined />}
-            size="small"
-            onClick={() => setExpandedResourceKeys(collectTreeKeys(treeData))}
-            disabled={loading || treeData.length === 0}
-          >
-            {t("policy.expandAllResources")}
-          </Button>
-          <Button
-            icon={<ShrinkOutlined />}
-            size="small"
-            onClick={() => setExpandedResourceKeys([])}
-            disabled={loading || treeData.length === 0}
-          >
-            {t("policy.collapseAllResources")}
-          </Button>
-        </Space>
-      </div>
       <Transfer<ResourceScopeTransferItem>
         className="resource-tree-transfer"
         dataSource={transferItems}
         targetKeys={selectedKeys}
-        titles={[t("policy.availableResources"), t("policy.selectedResources")]}
+        titles={[
+          renderResourceTransferTitle(
+            t("policy.availableResources"),
+            treeData,
+            () => setExpandedResourceKeys(collectTreeKeys(treeData)),
+            () => setExpandedResourceKeys([]),
+          ),
+          renderResourceTransferTitle(
+            t("policy.selectedResources"),
+            selectedTreeData,
+            () => setExpandedSelectedResourceKeys(collectTreeKeys(selectedTreeData)),
+            () => setExpandedSelectedResourceKeys([]),
+          ),
+        ]}
         render={(item) => <span className="resource-transfer-item-title" title={item.title}>{item.title}</span>}
         onChange={(nextKeys) => onChange?.(nextKeys.map(String))}
         listStyle={{ height: 360, maxHeight: 360 }}
@@ -5020,34 +5049,47 @@ function ResourceScopeTransfer({
         onSearch={(direction, input) => {
           if (direction === "left") {
             setResourceSearch(input);
+          } else {
+            setSelectedResourceSearch(input);
           }
         }}
         showSelectAll={false}
         disabled={loading}
       >
         {({ direction, filteredItems, onItemSelect, selectedKeys: transferSelectedKeys }) => {
-          if (direction !== "left") {
-            return null;
-          }
-          const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
+          const isSourceList = direction === "left";
+          const baseTreeData = isSourceList ? treeData : selectedTreeData;
+          const searchValue = isSourceList ? resourceSearch : selectedResourceSearch;
+          const expandedState = isSourceList ? expandedResourceKeys : expandedSelectedResourceKeys;
+          const setExpandedState = isSourceList ? setExpandedResourceKeys : setExpandedSelectedResourceKeys;
+          const checkedKeys = isSourceList
+            ? [...transferSelectedKeys.map(String), ...selectedKeys]
+            : transferSelectedKeys.map(String);
           const filteredKeys = new Set(filteredItems.map((item) => String(item.key)));
-          const isSearchingResources = Boolean(resourceSearch.trim());
+          const isSearchingResources = Boolean(searchValue.trim());
           const visibleTreeData = isSearchingResources
-            ? filterResourceScopeTree(treeData, filteredKeys)
-            : treeData;
-          const expandedKeys = isSearchingResources ? collectTreeKeys(visibleTreeData) : expandedResourceKeys;
+            ? filterResourceScopeTree(baseTreeData, filteredKeys)
+            : baseTreeData;
+          const expandedKeys = isSearchingResources ? collectTreeKeys(visibleTreeData) : expandedState;
+          const selectableKeys = new Set(selectedKeys);
+          const renderedTreeData = isSourceList
+            ? markSelectedTreeNodes(visibleTreeData, selectedKeys)
+            : markUnselectedContextTreeNodes(visibleTreeData, selectableKeys);
+          if (!isSourceList && visibleTreeData.length === 0) {
+            return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+          }
           return (
             <Tree
-              key={isSearchingResources ? "resource-filtered-tree" : "resource-tree"}
+              key={`${direction}-${isSearchingResources ? "resource-filtered-tree" : "resource-tree"}`}
               blockNode
               checkable
               checkStrictly
               checkedKeys={checkedKeys}
               expandedKeys={expandedKeys}
-              treeData={markSelectedTreeNodes(visibleTreeData, selectedKeys)}
+              treeData={renderedTreeData}
               onExpand={(_, info) => {
                 if (!isSearchingResources) {
-                  setExpandedResourceKeys((currentKeys) => {
+                  setExpandedState((currentKeys) => {
                     const nextKeys = new Set(currentKeys.map(String));
                     const key = String(info.node.key);
                     if (nextKeys.has(key)) {
@@ -5061,10 +5103,16 @@ function ResourceScopeTransfer({
               }}
               onCheck={(_, info) => {
                 const key = String(info.node.key);
+                if (!isSourceList && !selectableKeys.has(key)) {
+                  return;
+                }
                 onItemSelect(key, !checkedKeys.includes(key));
               }}
               onSelect={(_, info) => {
                 const key = String(info.node.key);
+                if (!isSourceList && !selectableKeys.has(key)) {
+                  return;
+                }
                 onItemSelect(key, !checkedKeys.includes(key));
               }}
             />
@@ -5162,6 +5210,23 @@ function markSelectedTreeNodes(
     disabled: selected.has(String(node.key)),
     children: node.children ? markSelectedTreeNodes(node.children, selectedKeys) : undefined,
   }));
+}
+
+function markUnselectedContextTreeNodes(
+  nodes: TreeDataNode[],
+  selectedKeys: Set<string>,
+): TreeDataNode[] {
+  /** In the selected-side tree, ancestors are context only unless they are selected scopes themselves. */
+
+  return nodes.map((node) => {
+    const isSelected = selectedKeys.has(String(node.key));
+    return {
+      ...node,
+      disableCheckbox: !isSelected,
+      selectable: isSelected,
+      children: node.children ? markUnselectedContextTreeNodes(node.children, selectedKeys) : undefined,
+    };
+  });
 }
 
 function filterResourceScopeTree(
