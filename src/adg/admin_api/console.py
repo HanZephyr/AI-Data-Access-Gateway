@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 from typing import Annotated, Any, Literal, cast
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -9,7 +10,7 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from adg.app.dependencies import AuthenticatedApiKey, require_admin_api_key
-from adg.app.settings import get_settings
+from adg.app.settings import Settings, get_settings
 from adg.audit.models import AuditEvent
 from adg.audit.service import AuditService
 from adg.control_plane.db import get_session
@@ -1251,7 +1252,7 @@ def get_mcp_setup(
 ) -> dict[str, Any]:
     """Return minimal MCP HTTP facade setup information for operators."""
 
-    base_url = str(request.base_url).rstrip("/")
+    base_url = _build_mcp_public_base_url(request, get_settings())
     return {
         "server_url": f"{base_url}/mcp",
         "http_tool_url_template": f"{base_url}/api/tools/{{tool_name}}",
@@ -1265,6 +1266,24 @@ def get_mcp_setup(
         },
         "tools": serialize_runtime_tool_definitions(),
     }
+
+
+def _build_mcp_public_base_url(request: Request, settings: Settings) -> str:
+    """Build the externally reachable backend URL for MCP clients."""
+
+    base_url = str(request.base_url).rstrip("/")
+    if settings.backend_host_port is None:
+        return base_url
+
+    parsed = urlsplit(base_url)
+    if not parsed.hostname:
+        return base_url
+
+    host = parsed.hostname
+    host_part = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    port_part = "" if settings.backend_host_port in {80, 443} else f":{settings.backend_host_port}"
+    path = parsed.path.rstrip("/")
+    return urlunsplit((parsed.scheme, f"{host_part}{port_part}", path, "", ""))
 
 
 def _serialize_resource(

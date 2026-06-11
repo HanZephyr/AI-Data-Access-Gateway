@@ -68,6 +68,7 @@ def test_backend_compose_publishes_configurable_host_port_for_mcp_clients() -> N
     backend = compose["services"]["backend"]
 
     assert backend["ports"] == ["${ADG_BACKEND_HOST_PORT:-8000}:${ADG_BACKEND_PORT:-8000}"]
+    assert backend["environment"]["ADG_BACKEND_HOST_PORT"] == "${ADG_BACKEND_HOST_PORT:-8000}"
 
 
 def test_backend_dockerfile_runs_as_non_root_user() -> None:

@@ -11,6 +11,7 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.service_name == "AI Data Access Gateway"
     assert settings.api_key_header == "X-ADG-API-Key"
     assert settings.control_plane_database_url.startswith("sqlite:///")
+    assert settings.backend_host_port is None
 
 
 def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> None:
@@ -18,6 +19,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_CONTROL_PLANE_DATABASE_URL", "sqlite:///./test.db")
     monkeypatch.setenv("ADG_SECRET_KEY", "unit-test-secret")
     monkeypatch.setenv("ADG_CREDENTIAL_ENCRYPTION_KEY", "unit-test-credential-key")
+    monkeypatch.setenv("ADG_BACKEND_HOST_PORT", "8001")
 
     settings = Settings()
 
@@ -25,6 +27,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.control_plane_database_url == "sqlite:///./test.db"
     assert settings.secret_key == "unit-test-secret"
     assert settings.credential_encryption_key == "unit-test-credential-key"
+    assert settings.backend_host_port == 8001
 
 
 def test_settings_reject_default_secret_key_in_production(monkeypatch: MonkeyPatch) -> None:

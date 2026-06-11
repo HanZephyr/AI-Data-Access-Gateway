@@ -9,6 +9,7 @@ services:
       ADG_ENV: production
       ADG_CONTROL_PLANE_DATABASE_URL: sqlite:///./data/adg-control-plane.db
       ADG_BACKEND_PORT: ${ADG_BACKEND_PORT:-8000}
+      ADG_BACKEND_HOST_PORT: ${ADG_BACKEND_HOST_PORT:-8000}
       ADG_SECRET_KEY: ${ADG_SECRET_KEY:?Set ADG_SECRET_KEY before starting docker compose}
       ADG_CREDENTIAL_ENCRYPTION_KEY: ${ADG_CREDENTIAL_ENCRYPTION_KEY:?Set ADG_CREDENTIAL_ENCRYPTION_KEY before starting docker compose}
       PYTHONUNBUFFERED: "1"

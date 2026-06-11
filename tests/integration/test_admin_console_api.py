@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from adg.app.main import create_app
+from adg.app.settings import get_settings
 from adg.audit.service import AuditService
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
@@ -16,7 +17,7 @@ from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.security import hash_api_key
 
 
-def build_console_app() -> TestClient:
+def build_console_app(base_url: str = "http://testserver") -> TestClient:
     engine = create_engine_from_url("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -103,7 +104,7 @@ def build_console_app() -> TestClient:
             yield session
 
     app.dependency_overrides[get_session] = override_session
-    return TestClient(app)
+    return TestClient(app, base_url=base_url)
 
 
 def auth() -> dict[str, str]:
@@ -572,3 +573,48 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert "user_id" not in serialized
     assert "\"roles\"" not in serialized
     assert "groups" not in serialized
+
+
+def test_admin_mcp_setup_uses_backend_host_port_for_public_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADG_BACKEND_HOST_PORT", "8001")
+    get_settings.cache_clear()
+    try:
+        client = build_console_app()
+
+        setup = client.get("/admin/mcp/setup", headers=auth())
+
+        assert setup.status_code == 200
+        body = setup.json()
+        assert body["server_url"] == "http://testserver:8001/mcp"
+        assert body["http_tool_url_template"] == "http://testserver:8001/api/tools/{tool_name}"
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("base_url", "backend_host_port"),
+    [
+        ("http://gateway.example.com", "80"),
+        ("https://gateway.example.com", "443"),
+    ],
+)
+def test_admin_mcp_setup_omits_standard_public_ports(
+    monkeypatch: pytest.MonkeyPatch,
+    base_url: str,
+    backend_host_port: str,
+) -> None:
+    monkeypatch.setenv("ADG_BACKEND_HOST_PORT", backend_host_port)
+    get_settings.cache_clear()
+    try:
+        client = build_console_app(base_url=base_url)
+
+        setup = client.get("/admin/mcp/setup", headers=auth())
+
+        assert setup.status_code == 200
+        body = setup.json()
+        assert body["server_url"] == f"{base_url}/mcp"
+        assert body["http_tool_url_template"] == f"{base_url}/api/tools/{{tool_name}}"
+    finally:
+        get_settings.cache_clear()

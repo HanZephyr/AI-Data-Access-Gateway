@@ -28,6 +28,7 @@ class Settings(BaseSettings):
         min_length=16,
     )
     log_level: str = "INFO"
+    backend_host_port: int | None = Field(default=None, ge=1, le=65535)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
