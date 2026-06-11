@@ -4966,6 +4966,7 @@ function ResourceScopeTransfer({
 
   const selectedKeys = normalizeResourceScopeKeys(value);
   const [resourceSearch, setResourceSearch] = useState("");
+  const [expandedResourceKeys, setExpandedResourceKeys] = useState<React.Key[]>([]);
   const { treeData, transferItems } = useMemo(
     () => buildResourceScopeTransferData(datasources, resources),
     [datasources, resources],
@@ -5001,19 +5002,34 @@ function ResourceScopeTransfer({
         }
         const checkedKeys = [...transferSelectedKeys.map(String), ...selectedKeys];
         const filteredKeys = new Set(filteredItems.map((item) => String(item.key)));
-        const visibleTreeData = resourceSearch.trim()
+        const isSearchingResources = Boolean(resourceSearch.trim());
+        const visibleTreeData = isSearchingResources
           ? filterResourceScopeTree(treeData, filteredKeys)
           : treeData;
-        const expandedKeys = resourceSearch.trim() ? collectTreeKeys(visibleTreeData) : undefined;
+        const expandedKeys = isSearchingResources ? collectTreeKeys(visibleTreeData) : expandedResourceKeys;
         return (
           <Tree
-            key={resourceSearch.trim() ? "resource-filtered-tree" : "resource-tree"}
+            key={isSearchingResources ? "resource-filtered-tree" : "resource-tree"}
             blockNode
             checkable
             checkStrictly
             checkedKeys={checkedKeys}
             expandedKeys={expandedKeys}
             treeData={markSelectedTreeNodes(visibleTreeData, selectedKeys)}
+            onExpand={(_, info) => {
+              if (!isSearchingResources) {
+                setExpandedResourceKeys((currentKeys) => {
+                  const nextKeys = new Set(currentKeys.map(String));
+                  const key = String(info.node.key);
+                  if (nextKeys.has(key)) {
+                    nextKeys.delete(key);
+                  } else {
+                    nextKeys.add(key);
+                  }
+                  return Array.from(nextKeys);
+                });
+              }
+            }}
             onCheck={(_, info) => {
               const key = String(info.node.key);
               onItemSelect(key, !checkedKeys.includes(key));

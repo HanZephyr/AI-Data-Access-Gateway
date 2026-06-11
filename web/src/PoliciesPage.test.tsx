@@ -273,6 +273,16 @@ describe("Policies page", () => {
     expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
 
+    const expandNode = async (name: string) => {
+      const nodeText = await screen.findByText(name);
+      const node = nodeText.closest(".ant-tree-treenode");
+      const switcher = node?.querySelector(".ant-tree-switcher");
+      expect(switcher).toBeInTheDocument();
+      (switcher as HTMLElement).click();
+    };
+    await expandNode("Demo Warehouse");
+    expect(await screen.findByText("warehouse")).toBeInTheDocument();
+
     const searchInput = document.querySelector(".resource-tree-transfer .ant-transfer-list-search input");
     expect(searchInput).toBeInTheDocument();
     expect(searchInput).toHaveAttribute("placeholder", "搜索资源");
