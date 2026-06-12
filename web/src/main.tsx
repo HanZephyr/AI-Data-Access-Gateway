@@ -5234,12 +5234,51 @@ function ResourcePolicyScopeDetails({
   /** Read-only view of a grouped resource policy's selected authorization scopes. */
 
   const scopeKeys = resourceScopeKeysFromPolicy(policy);
+  const [expandedScopeKeys, setExpandedScopeKeys] = useState<React.Key[]>([]);
   const { treeData } = useMemo(
     () => buildResourceScopeTransferData(datasources, resources),
     [datasources, resources],
   );
+  useEffect(() => {
+    setExpandedScopeKeys([]);
+  }, [policy.id]);
   const selectedTreeData = filterResourceScopeTree(treeData, new Set(scopeKeys));
   const tagLabels = resourcePolicyTagLabels(policy, tags);
+  const toggleScopeKey = (key: React.Key) => {
+    setExpandedScopeKeys((currentKeys) => {
+      const keyString = String(key);
+      const currentKeyStrings = currentKeys.map(String);
+      if (currentKeyStrings.includes(keyString)) {
+        return currentKeys.filter((item) => String(item) !== keyString);
+      }
+      return [...currentKeys, key];
+    });
+  };
+  const renderScopeTreeTitle = (node: TreeDataNode) => {
+    const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+    if (!hasChildren) {
+      return node.title as React.ReactNode;
+    }
+    return (
+      <span
+        className="resource-policy-scope-tree-title"
+        onClick={(event) => {
+          event.stopPropagation();
+          toggleScopeKey(node.key);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleScopeKey(node.key);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        {node.title as React.ReactNode}
+      </span>
+    );
+  };
   if (selectedTreeData.length === 0 && tagLabels.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -5247,11 +5286,17 @@ function ResourcePolicyScopeDetails({
     <Space direction="vertical" size={12} className="resource-policy-scope-detail">
       {selectedTreeData.length > 0 ? (
         <Tree
+          key={`resource-policy-scope-${String(policy.id ?? scopeKeys.join("|"))}`}
           blockNode
           className="resource-policy-scope-tree"
-          expandedKeys={collectTreeKeys(selectedTreeData)}
+          autoExpandParent={false}
+          expandedKeys={expandedScopeKeys}
+          onExpand={(nextKeys) => {
+            setExpandedScopeKeys(nextKeys);
+          }}
           selectable={false}
           showLine
+          titleRender={renderScopeTreeTitle}
           treeData={selectedTreeData}
         />
       ) : null}

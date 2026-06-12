@@ -309,9 +309,48 @@ describe("Policies page", () => {
     expect(detailLabels).not.toContain("数据源");
     expect(detailLabels).not.toContain("资源");
     expect(drawerText).toContain("允许解密");
-    expect(document.querySelector(".resource-policy-scope-tree")).toBeInTheDocument();
+    const scopeTree = document.querySelector(".resource-policy-scope-tree");
+    expect(scopeTree).toBeInTheDocument();
+    if (!scopeTree) {
+      throw new Error("missing resource policy scope tree");
+    }
     expect(drawerText).toContain("线上 Doris");
-    expect(drawerText).toContain("dws_ecommerce_order_overdue_detail_2025");
+    const getScopeNodeTitle = (name: string) => {
+      const nodeText = Array.from(scopeTree.querySelectorAll(".resource-tree-node-title"))
+        .find((item) => item.textContent === name);
+      if (!(nodeText instanceof HTMLElement)) {
+        throw new Error(`missing scope tree node: ${name}`);
+      }
+      return nodeText;
+    };
+    const getScopeSwitcher = (name: string) => {
+      const nodeText = getScopeNodeTitle(name);
+      const node = nodeText.closest(".ant-tree-treenode");
+      const switcher = node?.querySelector(".ant-tree-switcher");
+      expect(switcher).toBeInTheDocument();
+      expect(switcher).not.toHaveClass("ant-tree-switcher-noop");
+      return switcher as HTMLElement;
+    };
+    const toggleScopeNode = (name: string) => {
+      const wrapper = getScopeNodeTitle(name).closest(".resource-policy-scope-tree-title");
+      expect(wrapper).toBeInTheDocument();
+      fireEvent.click(wrapper as HTMLElement);
+    };
+    await waitFor(() => {
+      const currentDrawerText = document.querySelector(".ant-drawer-content")?.textContent || "";
+      expect(currentDrawerText).toContain("Demo Warehouse");
+      expect(currentDrawerText).not.toContain("dws_ecommerce_order_overdue_detail_2025");
+      expect(getScopeSwitcher("Demo Warehouse")).toHaveClass("ant-tree-switcher_close");
+    });
+    toggleScopeNode("Demo Warehouse");
+    await waitFor(() => {
+      expect(scopeTree).toHaveTextContent("warehouse");
+      expect(getScopeSwitcher("Demo Warehouse")).toHaveClass("ant-tree-switcher_open");
+    });
+    toggleScopeNode("Demo Warehouse");
+    await waitFor(() => {
+      expect(getScopeSwitcher("Demo Warehouse")).toHaveClass("ant-tree-switcher_close");
+    });
     for (const rawKey of ["subject_label", "resource_label", "allow_decrypt"]) {
       if (drawerText.includes(rawKey)) {
         throw new Error(`unexpected raw detail key: ${rawKey}`);

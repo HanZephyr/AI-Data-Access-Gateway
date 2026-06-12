@@ -1155,6 +1155,15 @@ body {
   white-space: normal;
 }
 
+.resource-policy-scope-tree-title {
+  cursor: pointer;
+}
+
+.resource-policy-scope-tree-title:focus-visible {
+  outline: 2px solid rgba(10, 126, 116, 0.35);
+  outline-offset: 2px;
+}
+
 .resource-policy-scope-tags {
   display: flex;
   flex-direction: column;
