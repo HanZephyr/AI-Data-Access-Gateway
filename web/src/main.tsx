@@ -3966,6 +3966,35 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
     );
   };
 
+  const resourcePolicyDetailItems = !isField && selected
+    ? [{
+        key: "resource_policy_scopes",
+        label: columnLabel("scopes", t),
+        children: (
+          <ResourcePolicyScopeDetails
+            policy={selected}
+            datasources={datasources.data || []}
+            resources={resources.data || []}
+            tags={tags.data || []}
+            t={t}
+          />
+        ),
+      }]
+    : undefined;
+  const resourcePolicyDetailHiddenKeys = !isField
+    ? [
+        "datasource_id",
+        "datasource_label",
+        "datasource_count",
+        "resource_id",
+        "resource_label",
+        "resource_count",
+        "tag_id",
+        "tag_name",
+        "tag_count",
+      ]
+    : undefined;
+
   return (
     <Space direction="vertical" size={12} className="full">
       <Button type="primary" onClick={openCreate}>{t("common.create")}</Button>
@@ -4036,7 +4065,14 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
           </Space>
         )}
       />
-      <RecordDetails record={selected} title={t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies")} onClose={() => setSelected(null)} />
+      <RecordDetails
+        record={selected}
+        title={t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies")}
+        onClose={() => setSelected(null)}
+        extraItems={resourcePolicyDetailItems}
+        hiddenKeys={resourcePolicyDetailHiddenKeys}
+        width={isField ? undefined : 720}
+      />
       <Drawer
         title={t("common.createTitle", { title: t(isField ? "policy.fieldPolicies" : "policy.resourcePolicies") })}
         open={open}
@@ -4958,12 +4994,14 @@ function RecordDetails({
   title,
   onClose,
   extraItems,
+  hiddenKeys,
   width = 560
 }: {
   record: AnyRecord | null;
   title: string;
   onClose: () => void;
   extraItems?: Array<{ key: string; label: React.ReactNode; children: React.ReactNode }>;
+  hiddenKeys?: string[];
   width?: number;
 }) {
   /** Show all fields of a selected row in a copy-friendly details drawer. */
@@ -4982,6 +5020,7 @@ function RecordDetails({
     "action_values",
     "allow_decrypt_values",
     "status_values",
+    ...(hiddenKeys || []),
   ]);
   return (
     <Drawer title={t("common.detailsTitle", { title })} open={Boolean(record)} onClose={onClose} width={width}>
@@ -5176,6 +5215,55 @@ function ResourceScopeTransfer({
         }}
       </Transfer>
     </div>
+  );
+}
+
+function ResourcePolicyScopeDetails({
+  policy,
+  datasources,
+  resources,
+  tags,
+  t,
+}: {
+  policy: AnyRecord;
+  datasources: AnyRecord[];
+  resources: AnyRecord[];
+  tags: AnyRecord[];
+  t: I18nContextValue["t"];
+}) {
+  /** Read-only view of a grouped resource policy's selected authorization scopes. */
+
+  const scopeKeys = resourceScopeKeysFromPolicy(policy);
+  const { treeData } = useMemo(
+    () => buildResourceScopeTransferData(datasources, resources),
+    [datasources, resources],
+  );
+  const selectedTreeData = filterResourceScopeTree(treeData, new Set(scopeKeys));
+  const tagLabels = resourcePolicyTagLabels(policy, tags);
+  if (selectedTreeData.length === 0 && tagLabels.length === 0) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  }
+  return (
+    <Space direction="vertical" size={12} className="resource-policy-scope-detail">
+      {selectedTreeData.length > 0 ? (
+        <Tree
+          blockNode
+          className="resource-policy-scope-tree"
+          expandedKeys={collectTreeKeys(selectedTreeData)}
+          selectable={false}
+          showLine
+          treeData={selectedTreeData}
+        />
+      ) : null}
+      {tagLabels.length > 0 ? (
+        <div className="resource-policy-scope-tags">
+          <Typography.Text type="secondary">{t("tab.tag")}</Typography.Text>
+          <Space size={[4, 4]} wrap>
+            {tagLabels.map((label) => <Tag key={label}>{label}</Tag>)}
+          </Space>
+        </div>
+      ) : null}
+    </Space>
   );
 }
 
@@ -5423,6 +5511,35 @@ function resourcePolicyScopeCountText(
     return "-";
   }
   return `${count} ${count === 1 ? t("policy.resourceItemUnit") : t("policy.resourceItemsUnit")}`;
+}
+
+function resourcePolicyTagLabels(row: AnyRecord, tags: AnyRecord[]) {
+  /** Resolve tag-scope display names from grouped policy rows and loaded tag metadata. */
+
+  const ids: string[] = [];
+  const addTagId = (tagId: unknown) => {
+    if (tagId) {
+      ids.push(String(tagId));
+    }
+  };
+  if (Array.isArray(row.tag_ids)) {
+    row.tag_ids.forEach(addTagId);
+  }
+  if (Array.isArray(row.policy_items)) {
+    row.policy_items.forEach((policy: AnyRecord) => addTagId(policy.tag_id));
+  }
+  addTagId(row.tag_id);
+
+  const names = Array.isArray(row.tag_names)
+    ? row.tag_names.map(String).filter(Boolean)
+    : row.tag_name
+      ? [String(row.tag_name)]
+      : [];
+  const tagNameById = new Map(tags.map((tag) => [String(tag.id), String(tag.name || tag.id)]));
+  const labels = ids.length > 0
+    ? ids.map((id, index) => tagNameById.get(id) || names[index] || id)
+    : names;
+  return Array.from(new Set(labels));
 }
 
 function tagIdFromPolicy(row: AnyRecord) {

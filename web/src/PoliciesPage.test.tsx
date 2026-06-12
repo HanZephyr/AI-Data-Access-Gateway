@@ -302,10 +302,16 @@ describe("Policies page", () => {
 
     await screen.findByText("资源权限策略详情");
     const drawerText = document.querySelector(".ant-drawer-content")?.textContent || "";
+    const detailLabels = Array.from(document.querySelectorAll(".ant-descriptions-item-label"))
+      .map((item) => item.textContent || "");
     expect(drawerText).toContain("主体");
-    expect(drawerText).toContain("数据源");
-    expect(drawerText).toContain("资源");
+    expect(detailLabels).toContain("权限范围");
+    expect(detailLabels).not.toContain("数据源");
+    expect(detailLabels).not.toContain("资源");
     expect(drawerText).toContain("允许解密");
+    expect(document.querySelector(".resource-policy-scope-tree")).toBeInTheDocument();
+    expect(drawerText).toContain("线上 Doris");
+    expect(drawerText).toContain("dws_ecommerce_order_overdue_detail_2025");
     for (const rawKey of ["subject_label", "resource_label", "allow_decrypt"]) {
       if (drawerText.includes(rawKey)) {
         throw new Error(`unexpected raw detail key: ${rawKey}`);

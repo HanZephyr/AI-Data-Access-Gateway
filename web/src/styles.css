@@ -1124,6 +1124,43 @@ body {
   white-space: normal;
 }
 
+.resource-policy-scope-detail {
+  width: 100%;
+}
+
+.resource-policy-scope-tree {
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.resource-policy-scope-tree .ant-tree-treenode {
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.resource-policy-scope-tree .ant-tree-node-content-wrapper {
+  height: auto;
+  min-height: 24px;
+  white-space: normal;
+}
+
+.resource-policy-scope-tree .ant-tree-title,
+.resource-policy-scope-tree .resource-tree-node-title {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.resource-policy-scope-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .catalog-empty {
   margin: auto;
 }
