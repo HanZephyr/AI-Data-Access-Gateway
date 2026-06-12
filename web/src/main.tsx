@@ -3760,6 +3760,21 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const update = async () => {
     if (!editing) return;
     const values = await editForm.validateFields();
+    if (!isField && isGroupedResourcePolicyRow(editing)) {
+      await api.request(`/admin/${kind}-policies/${editing.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(normalizePolicyValues(
+          values,
+          editingTargetMode,
+          isField,
+          { batch: true },
+        )),
+      });
+      messageApi.success(t("common.saved"));
+      setEditing(null);
+      state.reload();
+      return;
+    }
     if (!isField && editingTargetMode === "resource") {
       const scopeKeys = normalizeResourceScopeKeys(values.resource_scope_keys);
       const [primaryScopeKey, ...extraScopeKeys] = scopeKeys;
@@ -3975,9 +3990,10 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
               icon={<EditOutlined />}
               onClick={() => {
                 setEditing(row);
-                setEditingTargetMode(row.tag_id ? "tag" : "resource");
+                setEditingTargetMode(resourcePolicyTargetMode(row));
                 editForm.setFieldsValue({
                   ...row,
+                  tag_id: tagIdFromPolicy(row),
                   resource_scope_keys: resourceScopeKeysFromPolicy(row),
                 });
               }}
@@ -4927,11 +4943,25 @@ function RecordDetails({
   /** Show all fields of a selected row in a copy-friendly details drawer. */
 
   const { t } = useI18n();
+  const hiddenDetailKeys = new Set([
+    "policy_items",
+    "policy_ids",
+    "datasource_ids",
+    "resource_ids",
+    "tag_ids",
+    "datasource_labels",
+    "resource_labels",
+    "tag_names",
+    "effect_values",
+    "action_values",
+    "allow_decrypt_values",
+    "status_values",
+  ]);
   return (
     <Drawer title={t("common.detailsTitle", { title })} open={Boolean(record)} onClose={onClose} width={width}>
       {record ? (
         <Descriptions bordered column={1} size="small">
-          {Object.entries(record).map(([key, value]) => (
+          {Object.entries(record).filter(([key]) => !hiddenDetailKeys.has(key)).map(([key, value]) => (
             <Descriptions.Item key={key} label={columnLabel(key, t)}>
               <Typography.Text copyable={typeof value === "string"}>
                 {typeof value === "object" && value !== null ? JSON.stringify(value) : typeof value === "string" ? optionLabel(value, t) : String(value ?? "")}
@@ -5305,15 +5335,68 @@ function splitResourceScopeKeys(value: unknown) {
 }
 
 function resourceScopeKeysFromPolicy(row: AnyRecord) {
-  /** Convert one policy row into tree transfer target keys for editing. */
+  /** Convert one grouped policy row into tree transfer target keys for editing. */
 
+  const keys: string[] = [];
+  const addDatasourceId = (datasourceId: unknown) => {
+    if (datasourceId) {
+      keys.push(resourceScopeKey("datasource", String(datasourceId)));
+    }
+  };
+  const addResourceId = (resourceId: unknown) => {
+    if (resourceId) {
+      keys.push(resourceScopeKey("resource", String(resourceId)));
+    }
+  };
+
+  if (Array.isArray(row.datasource_ids)) {
+    row.datasource_ids.forEach(addDatasourceId);
+  }
+  if (Array.isArray(row.resource_ids)) {
+    row.resource_ids.forEach(addResourceId);
+  }
+  if (Array.isArray(row.policy_items)) {
+    row.policy_items.forEach((policy: AnyRecord) => {
+      addDatasourceId(policy.datasource_id);
+      addResourceId(policy.resource_id);
+    });
+  }
   if (row.datasource_id) {
-    return [resourceScopeKey("datasource", String(row.datasource_id))];
+    addDatasourceId(row.datasource_id);
   }
   if (row.resource_id) {
-    return [resourceScopeKey("resource", String(row.resource_id))];
+    addResourceId(row.resource_id);
   }
-  return [];
+  return Array.from(new Set(keys));
+}
+
+function tagIdFromPolicy(row: AnyRecord) {
+  /** Resolve the primary tag value from grouped or legacy resource policy rows. */
+
+  if (Array.isArray(row.tag_ids) && row.tag_ids.length > 0) {
+    return String(row.tag_ids[0]);
+  }
+  if (Array.isArray(row.policy_items)) {
+    const policyWithTag = row.policy_items.find((policy: AnyRecord) => policy.tag_id);
+    if (policyWithTag?.tag_id) {
+      return String(policyWithTag.tag_id);
+    }
+  }
+  return row.tag_id;
+}
+
+function resourcePolicyTargetMode(row: AnyRecord): PolicyTargetMode {
+  /** Prefer resource-scope editing unless a grouped policy only contains tag scopes. */
+
+  const hasResourceScope = resourceScopeKeysFromPolicy(row).length > 0;
+  const hasTagScope = Boolean(tagIdFromPolicy(row));
+  return hasTagScope && !hasResourceScope ? "tag" : "resource";
+}
+
+function isGroupedResourcePolicyRow(row: AnyRecord) {
+  /** Backend grouped resource policy rows represent a whole subject, not one policy id. */
+
+  return Array.isArray(row.policy_ids) || Array.isArray(row.policy_items) || String(row.id || "").startsWith("subject:");
 }
 
 function ResourceSelect({
@@ -5474,6 +5557,13 @@ function normalizePolicyValues(
       payload.resource_id = resourceIds[0] || null;
       payload.tag_id = null;
     }
+    return payload;
+  }
+
+  if (options.batch) {
+    payload.datasource_ids = [];
+    payload.resource_ids = [];
+    payload.tag_ids = values.tag_id ? [values.tag_id] : [];
     return payload;
   }
 

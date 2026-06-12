@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import datetime
 from typing import Annotated, Any, Literal, cast
@@ -123,6 +124,9 @@ class ResourcePolicyUpdateRequest(BaseModel):
     datasource_id: str | None = None
     resource_id: str | None = None
     tag_id: str | None = None
+    datasource_ids: list[str] | None = None
+    resource_ids: list[str] | None = None
+    tag_ids: list[str] | None = None
     allow_decrypt: bool | None = None
     status: str | None = None
 
@@ -623,12 +627,19 @@ def list_resource_policies(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
 ) -> list[dict[str, Any]]:
-    """List resource-level policies with resource labels for display."""
+    """List resource-level policies grouped by subject for admin management."""
 
     policies = session.execute(
-        select(ResourcePolicy)
+        select(ResourcePolicy).order_by(
+            ResourcePolicy.subject_type,
+            ResourcePolicy.subject_id,
+            ResourcePolicy.id,
+        )
     ).scalars()
-    return [_serialize_resource_policy(policy, session) for policy in policies]
+    return [
+        _serialize_resource_policy_group(group, session)
+        for group in _group_resource_policies_by_subject(list(policies))
+    ]
 
 
 @router.post("/resource-policies", status_code=status.HTTP_201_CREATED)
@@ -700,6 +711,9 @@ def get_resource_policy(
 ) -> dict[str, Any]:
     """Fetch one resource-level policy."""
 
+    if _is_resource_policy_subject_group_id(policy_id):
+        policies = _get_resource_policy_subject_group(session, policy_id)
+        return _serialize_resource_policy_group(policies, session)
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     return _serialize_resource_policy(policy, session)
 
@@ -713,8 +727,16 @@ def update_resource_policy(
 ) -> dict[str, Any]:
     """Update a resource-level policy."""
 
+    if _is_resource_policy_subject_group_id(policy_id):
+        return _sync_resource_policy_subject_group(session, policy_id, payload)
+
     policy = _get_by_id(session, ResourcePolicy, policy_id, "Policy not found")
     data = payload.model_dump(exclude_unset=True)
+    data = {
+        key: value
+        for key, value in data.items()
+        if key not in {"datasource_ids", "resource_ids", "tag_ids"}
+    }
     if {"datasource_id", "resource_id", "tag_id"}.intersection(data):
         scope_keys = {"datasource_id", "resource_id", "tag_id"}
         merged_scope = {
@@ -737,6 +759,13 @@ def delete_resource_policy(
     session: Annotated[Session, Depends(get_session)],
 ) -> Response:
     """Delete a resource-level policy."""
+
+    if _is_resource_policy_subject_group_id(policy_id):
+        policies = _get_resource_policy_subject_group(session, policy_id)
+        for policy in policies:
+            session.delete(policy)
+        session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     _delete_by_id(session, ResourcePolicy, policy_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -1650,6 +1679,55 @@ def _serialize_resource_policy(policy: ResourcePolicy, session: Session) -> dict
     }
 
 
+def _serialize_resource_policy_group(
+    policies: list[ResourcePolicy],
+    session: Session,
+) -> dict[str, Any]:
+    """Convert one subject's resource policies into a grouped admin table row."""
+
+    if not policies:
+        raise ValueError("Cannot serialize an empty resource policy group")
+
+    first = policies[0]
+    policy_items = [_serialize_resource_policy(policy, session) for policy in policies]
+    datasource_ids = _dedupe_optional_ids([item["datasource_id"] for item in policy_items])
+    resource_ids = _dedupe_optional_ids([item["resource_id"] for item in policy_items])
+    tag_ids = _dedupe_optional_ids([item["tag_id"] for item in policy_items])
+    datasource_labels = _dedupe_optional_ids([item["datasource_label"] for item in policy_items])
+    resource_labels = _dedupe_optional_ids([item["resource_label"] for item in policy_items])
+    tag_names = _dedupe_optional_ids([item["tag_name"] for item in policy_items])
+
+    return {
+        "id": _resource_policy_subject_group_id(first.subject_type, first.subject_id),
+        "policy_ids": [policy.id for policy in policies],
+        "policy_count": len(policies),
+        "policy_items": policy_items,
+        "subject_type": first.subject_type,
+        "subject_id": first.subject_id,
+        "subject_label": _subject_label(session, first.subject_type, first.subject_id),
+        "effect": _group_scalar([policy.effect for policy in policies]),
+        "effect_values": _dedupe_ids([policy.effect for policy in policies]),
+        "action": _group_scalar([policy.action for policy in policies]),
+        "action_values": _dedupe_ids([policy.action for policy in policies]),
+        "datasource_ids": datasource_ids,
+        "datasource_id": datasource_ids[0] if len(datasource_ids) == 1 else None,
+        "datasource_label": _join_labels(datasource_labels),
+        "datasource_labels": datasource_labels,
+        "resource_ids": resource_ids,
+        "resource_id": resource_ids[0] if len(resource_ids) == 1 else None,
+        "resource_label": _join_labels(resource_labels),
+        "resource_labels": resource_labels,
+        "tag_ids": tag_ids,
+        "tag_id": tag_ids[0] if len(tag_ids) == 1 else None,
+        "tag_name": _join_labels(tag_names),
+        "tag_names": tag_names,
+        "allow_decrypt": all(policy.allow_decrypt for policy in policies),
+        "allow_decrypt_values": sorted({policy.allow_decrypt for policy in policies}),
+        "status": _group_scalar([policy.status for policy in policies]),
+        "status_values": _dedupe_ids([policy.status for policy in policies]),
+    }
+
+
 def _serialize_field_policy(policy: FieldPolicy, session: Session) -> dict[str, Any]:
     """Convert a field policy into a JSON-ready payload with display labels."""
 
@@ -1834,6 +1912,178 @@ def _dedupe_ids(item_ids: list[str]) -> list[str]:
         seen.add(normalized)
         deduped.append(normalized)
     return deduped
+
+
+def _dedupe_optional_ids(item_ids: list[Any]) -> list[str]:
+    """Return stable unique string values while ignoring nullish entries."""
+
+    return _dedupe_ids([str(item_id) for item_id in item_ids if item_id is not None])
+
+
+def _join_labels(labels: list[str]) -> str | None:
+    """Join a stable set of labels for grouped admin table columns."""
+
+    return ", ".join(labels) if labels else None
+
+
+def _group_scalar(values: list[str]) -> str:
+    """Return a scalar value for homogeneous groups, or mark mixed groups."""
+
+    unique_values = _dedupe_ids(values)
+    if len(unique_values) == 1:
+        return unique_values[0]
+    return "mixed"
+
+
+def _resource_policy_subject_group_id(subject_type: str, subject_id: str) -> str:
+    """Create an opaque stable id for one subject-level resource policy group."""
+
+    raw = json.dumps([subject_type, subject_id], separators=(",", ":")).encode()
+    encoded = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    return f"subject:{encoded}"
+
+
+def _is_resource_policy_subject_group_id(item_id: str) -> bool:
+    """Return whether an id points at a grouped subject-level policy row."""
+
+    return item_id.startswith("subject:")
+
+
+def _decode_resource_policy_subject_group_id(group_id: str) -> tuple[str, str]:
+    """Decode one subject-level resource policy group id."""
+
+    if not _is_resource_policy_subject_group_id(group_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy not found")
+    encoded = group_id.removeprefix("subject:")
+    padded = encoded + ("=" * (-len(encoded) % 4))
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(padded).decode())
+    except (ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Policy group not found",
+        ) from exc
+    if (
+        not isinstance(decoded, list)
+        or len(decoded) != 2
+        or not all(isinstance(item, str) for item in decoded)
+    ):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy group not found")
+    return decoded[0], decoded[1]
+
+
+def _group_resource_policies_by_subject(
+    policies: list[ResourcePolicy],
+) -> list[list[ResourcePolicy]]:
+    """Group resource policies by subject while preserving database order."""
+
+    groups: dict[tuple[str, str], list[ResourcePolicy]] = {}
+    for policy in policies:
+        groups.setdefault((policy.subject_type, policy.subject_id), []).append(policy)
+    return list(groups.values())
+
+
+def _get_resource_policy_subject_group(
+    session: Session,
+    group_id: str,
+) -> list[ResourcePolicy]:
+    """Load all resource policies belonging to one grouped subject row."""
+
+    subject_type, subject_id = _decode_resource_policy_subject_group_id(group_id)
+    policies = list(
+        session.execute(
+            select(ResourcePolicy)
+            .where(
+                ResourcePolicy.subject_type == subject_type,
+                ResourcePolicy.subject_id == subject_id,
+            )
+            .order_by(ResourcePolicy.id)
+        ).scalars()
+    )
+    if not policies:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Policy group not found")
+    return policies
+
+
+def _resource_policy_target_specs_from_sync_payload(
+    data: dict[str, Any],
+    existing_policies: list[ResourcePolicy],
+) -> list[tuple[str, str]]:
+    """Resolve datasource/resource/tag targets from a group sync payload."""
+
+    if any(key in data for key in ("datasource_ids", "resource_ids", "tag_ids")):
+        datasource_ids = data.get("datasource_ids") or []
+        resource_ids = data.get("resource_ids") or []
+        tag_ids = data.get("tag_ids") or []
+    elif any(key in data for key in ("datasource_id", "resource_id", "tag_id")):
+        datasource_ids = [data["datasource_id"]] if data.get("datasource_id") else []
+        resource_ids = [data["resource_id"]] if data.get("resource_id") else []
+        tag_ids = [data["tag_id"]] if data.get("tag_id") else []
+    else:
+        datasource_ids = [
+            policy.datasource_id
+            for policy in existing_policies
+            if policy.datasource_id
+        ]
+        resource_ids = [policy.resource_id for policy in existing_policies if policy.resource_id]
+        tag_ids = [policy.tag_id for policy in existing_policies if policy.tag_id]
+
+    target_specs = [
+        ("datasource_id", item_id) for item_id in _dedupe_optional_ids(datasource_ids)
+    ] + [
+        ("resource_id", item_id) for item_id in _dedupe_optional_ids(resource_ids)
+    ] + [
+        ("tag_id", item_id) for item_id in _dedupe_optional_ids(tag_ids)
+    ]
+    if not target_specs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one resource policy target is required",
+        )
+    return target_specs
+
+
+def _sync_resource_policy_subject_group(
+    session: Session,
+    group_id: str,
+    payload: ResourcePolicyUpdateRequest,
+) -> dict[str, Any]:
+    """Replace one subject's resource policies with the submitted batch scopes."""
+
+    existing_policies = _get_resource_policy_subject_group(session, group_id)
+    first = existing_policies[0]
+    data = payload.model_dump(exclude_unset=True)
+    target_specs = _resource_policy_target_specs_from_sync_payload(data, existing_policies)
+    common_data = {
+        "subject_type": data.get("subject_type", first.subject_type),
+        "subject_id": data.get("subject_id", first.subject_id),
+        "effect": data.get("effect", first.effect),
+        "action": data.get("action", first.action),
+        "allow_decrypt": data.get("allow_decrypt", first.allow_decrypt),
+        "status": data.get("status", first.status),
+    }
+
+    replacement_policies: list[ResourcePolicy] = []
+    for scope_key, target_id in target_specs:
+        replacement_data = {
+            **common_data,
+            "datasource_id": None,
+            "resource_id": None,
+            "tag_id": None,
+            scope_key: target_id,
+        }
+        _validate_resource_policy_scope(session, replacement_data)
+        replacement_policies.append(ResourcePolicy(**replacement_data))
+
+    for policy in existing_policies:
+        session.delete(policy)
+    for policy in replacement_policies:
+        session.add(policy)
+
+    session.commit()
+    for policy in replacement_policies:
+        session.refresh(policy)
+    return _serialize_resource_policy_group(replacement_policies, session)
 
 
 def _require_org_node(session: Session, org_node_id: str) -> OrgNode:

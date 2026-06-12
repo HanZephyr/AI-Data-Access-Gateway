@@ -466,6 +466,77 @@ def test_admin_resource_policy_batch_create_targets_multiple_scopes() -> None:
     assert {item["datasource_id"] for item in body} == {"ds_2", None}
     assert {item["resource_id"] for item in body} == {"res_customers", None}
 
+    listed = client.get("/admin/resource-policies", headers=auth())
+
+    assert listed.status_code == 200
+    groups = listed.json()
+    assert len(groups) == 1
+    assert groups[0]["subject_type"] == "role"
+    assert groups[0]["subject_id"] == "analyst"
+    assert groups[0]["policy_count"] == 2
+    assert groups[0]["datasource_ids"] == ["ds_2"]
+    assert groups[0]["resource_ids"] == ["res_customers"]
+    assert len(groups[0]["policy_items"]) == 2
+
+
+def test_admin_resource_policy_subject_group_sync_replaces_existing_scopes() -> None:
+    client = build_console_app()
+
+    created = client.post(
+        "/admin/resource-policies/batch",
+        json={
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "datasource_ids": ["ds_2"],
+            "resource_ids": ["res_customers"],
+            "allow_decrypt": True,
+        },
+        headers=auth(),
+    )
+    assert created.status_code == 201
+    group = client.get("/admin/resource-policies", headers=auth()).json()[0]
+    fetched = client.get(f"/admin/resource-policies/{group['id']}", headers=auth())
+
+    assert fetched.status_code == 200
+    assert fetched.json()["policy_count"] == 2
+
+    updated = client.patch(
+        f"/admin/resource-policies/{group['id']}",
+        json={
+            "subject_type": "role",
+            "subject_id": "analyst",
+            "effect": "allow",
+            "action": "read",
+            "resource_ids": ["res_customers"],
+            "datasource_ids": [],
+            "tag_ids": [],
+            "allow_decrypt": False,
+            "status": "disabled",
+        },
+        headers=auth(),
+    )
+
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["policy_count"] == 1
+    assert body["datasource_ids"] == []
+    assert body["resource_ids"] == ["res_customers"]
+    assert body["allow_decrypt"] is False
+    assert body["status"] == "disabled"
+
+    listed = client.get("/admin/resource-policies", headers=auth()).json()
+    assert len(listed) == 1
+    assert listed[0]["policy_count"] == 1
+    assert listed[0]["datasource_ids"] == []
+    assert listed[0]["resource_ids"] == ["res_customers"]
+
+    deleted = client.delete(f"/admin/resource-policies/{listed[0]['id']}", headers=auth())
+
+    assert deleted.status_code == 204
+    assert client.get("/admin/resource-policies", headers=auth()).json() == []
+
 
 def test_admin_resource_policy_rejects_unknown_datasource_scope() -> None:
     client = build_console_app()

@@ -18,6 +18,8 @@ type WindowWithAppRoot = Window & {
   __adgRootElement?: HTMLElement | null;
 };
 
+const POLICY_TEST_TIMEOUT_MS = 60000;
+
 const routeMap: Record<string, MockResponse> = {
   "/admin/system": { ok: true, json: { service_name: "AI Data Access Gateway" } },
   "/admin/datasources": {
@@ -106,20 +108,62 @@ const routeMap: Record<string, MockResponse> = {
     ok: true,
     json: [
       {
-        id: "policy_1",
+        id: "subject:WyJyb2xlIiwicm9sZV9hbmFseXN0Il0",
+        policy_ids: ["policy_datasource", "policy_resource"],
+        policy_count: 2,
         subject_type: "role",
         subject_id: "role_analyst",
         subject_label: "Analyst",
         effect: "allow",
         action: "read",
         allow_decrypt: true,
-        datasource_id: null,
-        datasource_label: null,
-        tag_id: "tag_finance",
-        tag_name: "Finance",
-        resource_id: null,
-        resource_label: null,
+        datasource_id: "ds_doris",
+        datasource_ids: ["ds_doris"],
+        datasource_label: "线上 Doris",
+        datasource_labels: ["线上 Doris"],
+        tag_id: null,
+        tag_ids: [],
+        tag_name: null,
+        tag_names: [],
+        resource_id: "res_long_table",
+        resource_ids: ["res_long_table"],
+        resource_label: "dws_ecommerce_order_overdue_detail_2025",
+        resource_labels: ["dws_ecommerce_order_overdue_detail_2025"],
         status: "active",
+        policy_items: [
+          {
+            id: "policy_datasource",
+            subject_type: "role",
+            subject_id: "role_analyst",
+            subject_label: "Analyst",
+            effect: "allow",
+            action: "read",
+            allow_decrypt: true,
+            datasource_id: "ds_doris",
+            datasource_label: "线上 Doris",
+            tag_id: null,
+            tag_name: null,
+            resource_id: null,
+            resource_label: null,
+            status: "active",
+          },
+          {
+            id: "policy_resource",
+            subject_type: "role",
+            subject_id: "role_analyst",
+            subject_label: "Analyst",
+            effect: "allow",
+            action: "read",
+            allow_decrypt: true,
+            datasource_id: null,
+            datasource_label: null,
+            tag_id: null,
+            tag_name: null,
+            resource_id: "res_long_table",
+            resource_label: "dws_ecommerce_order_overdue_detail_2025",
+            status: "active",
+          },
+        ],
       },
     ],
   },
@@ -254,14 +298,17 @@ describe("Policies page", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看" }));
 
     await screen.findByText("资源权限策略详情");
-    expect(screen.getAllByText("主体").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("标签 ID").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("标签名称").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("允许解密").length).toBeGreaterThan(0);
-    expect(screen.queryByText("subject_label")).not.toBeInTheDocument();
-    expect(screen.queryByText("tag_name")).not.toBeInTheDocument();
-    expect(screen.queryByText("allow_decrypt")).not.toBeInTheDocument();
-  }, 30000);
+    const drawerText = document.querySelector(".ant-drawer-content")?.textContent || "";
+    expect(drawerText).toContain("主体");
+    expect(drawerText).toContain("数据源");
+    expect(drawerText).toContain("资源");
+    expect(drawerText).toContain("允许解密");
+    for (const rawKey of ["subject_label", "resource_label", "allow_decrypt"]) {
+      if (drawerText.includes(rawKey)) {
+        throw new Error(`unexpected raw detail key: ${rawKey}`);
+      }
+    }
+  }, POLICY_TEST_TIMEOUT_MS);
 
   it("lets admins target a tag and pick a user or role instead of typing raw ids", async () => {
     await mountConsoleApp("policies");
@@ -276,7 +323,37 @@ describe("Policies page", () => {
       expect(screen.getAllByText("Allow decrypt").length).toBeGreaterThan(0);
     });
     expect(screen.queryByText("Priority")).not.toBeInTheDocument();
-  }, 30000);
+  }, POLICY_TEST_TIMEOUT_MS);
+
+  it("loads every grouped resource authorization when editing one subject row", async () => {
+    await mountConsoleApp("policies", "zh-CN");
+    await signInWithValidAdminKey();
+
+    await waitFor(() => {
+      expect(screen.getByText("Analyst")).toBeInTheDocument();
+      expect(screen.getByText("1 行")).toBeInTheDocument();
+      expect(screen.getByText("线上 Doris")).toBeInTheDocument();
+      expect(screen.getByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+    }, { timeout: 10000 });
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑" }));
+
+    await screen.findByText("编辑资源权限策略");
+    const transferLists = document.querySelectorAll(".resource-tree-transfer .ant-transfer-list");
+    expect(transferLists[1]?.textContent).toContain("2");
+    expect(transferLists[1]?.textContent).toContain("项");
+
+    const selectedExpandButton = Array.from(
+      document.querySelectorAll(".resource-tree-transfer .ant-transfer-list:nth-child(3) button"),
+    ).find((button) => button.getAttribute("aria-label") === "已选资源 全部展开");
+    expect(selectedExpandButton).toBeInstanceOf(HTMLElement);
+    fireEvent.click(selectedExpandButton as HTMLElement);
+
+    await waitFor(() => {
+      expect(transferLists[1]?.textContent).toContain("线上 Doris");
+      expect(transferLists[1]?.textContent).toContain("dws_ecommerce_order_overdue_detail_2025");
+    });
+  }, POLICY_TEST_TIMEOUT_MS);
 
   it("renders datasource and resource scopes as a tree transfer", async () => {
     await mountConsoleApp("policies", "zh-CN");
@@ -291,13 +368,13 @@ describe("Policies page", () => {
     const transfer = document.querySelector(".resource-tree-transfer");
     expect(transfer).toBeInTheDocument();
     expect(document.querySelector(".resource-tree-transfer .ant-transfer-list")).toHaveStyle({ height: "360px" });
-    expect(screen.getByText("Demo Warehouse")).toBeInTheDocument();
-    expect(screen.getByText("线上 Doris")).toBeInTheDocument();
+    expect(transfer?.textContent).toContain("Demo Warehouse");
+    expect(transfer?.textContent).toContain("线上 Doris");
     expect(screen.getByText("8 项")).toBeInTheDocument();
-    expect(screen.queryByText("warehouse")).not.toBeInTheDocument();
-    expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
-    expect(screen.queryByText(/database:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/table:/)).not.toBeInTheDocument();
+    expect(transfer?.textContent).not.toContain("warehouse");
+    expect(transfer?.textContent).not.toContain("dws_ecommerce_order_overdue_detail_2025");
+    expect(transfer?.textContent).not.toMatch(/database:/);
+    expect(transfer?.textContent).not.toMatch(/table:/);
     expect(screen.getAllByRole("button", { name: /全部展开/ })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /全部折叠/ })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "已选资源 全部展开" })).toBeDisabled();
@@ -307,7 +384,9 @@ describe("Policies page", () => {
     expect(await screen.findByText("warehouse")).toBeInTheDocument();
     expect(await screen.findByText("finance")).toBeInTheDocument();
     expect(await screen.findByText("Finance Orders")).toBeInTheDocument();
-    expect(await screen.findByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(transfer?.textContent).toContain("dws_ecommerce_order_overdue_detail_2025");
+    });
     expect(await screen.findByText("ai_test")).toBeInTheDocument();
     expect(await screen.findByText("dwd_shop_life_cycle")).toBeInTheDocument();
 
@@ -331,14 +410,16 @@ describe("Policies page", () => {
     fireEvent.change(searchInput!, { target: { value: "warehouse" } });
     expect(await screen.findByText("warehouse")).toBeInTheDocument();
     expect(screen.queryByText("finance")).not.toBeInTheDocument();
-    expect(screen.queryByText("dws_ecommerce_order_overdue_detail_2025")).not.toBeInTheDocument();
+    expect(transfer?.textContent).not.toContain("dws_ecommerce_order_overdue_detail_2025");
 
     fireEvent.change(searchInput!, { target: { value: "overdue_detail" } });
 
     expect(await screen.findByText("warehouse")).toBeInTheDocument();
     expect(await screen.findByText("finance")).toBeInTheDocument();
-    expect(await screen.findByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(transfer?.textContent).toContain("dws_ecommerce_order_overdue_detail_2025");
+    });
 
     expect(document.querySelector(".resource-tree-transfer .ant-transfer-operation button")).toBeInTheDocument();
-  }, 30000);
+  }, POLICY_TEST_TIMEOUT_MS);
 });
