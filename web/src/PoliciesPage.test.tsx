@@ -111,6 +111,9 @@ const routeMap: Record<string, MockResponse> = {
         id: "subject:WyJyb2xlIiwicm9sZV9hbmFseXN0Il0",
         policy_ids: ["policy_datasource", "policy_resource"],
         policy_count: 2,
+        datasource_count: 1,
+        resource_count: 1,
+        tag_count: 0,
         subject_type: "role",
         subject_id: "role_analyst",
         subject_label: "Analyst",
@@ -332,8 +335,11 @@ describe("Policies page", () => {
     await waitFor(() => {
       expect(screen.getByText("Analyst")).toBeInTheDocument();
       expect(screen.getByText("1 行")).toBeInTheDocument();
-      expect(screen.getByText("线上 Doris")).toBeInTheDocument();
-      expect(screen.getByText("dws_ecommerce_order_overdue_detail_2025")).toBeInTheDocument();
+      const policyTableText = document.querySelector(".ant-table")?.textContent || "";
+      expect(policyTableText).toContain("1 项");
+      expect((policyTableText.match(/1 项/g) || []).length).toBeGreaterThanOrEqual(2);
+      expect(policyTableText).not.toContain("线上 Doris");
+      expect(policyTableText).not.toContain("dws_ecommerce_order_overdue_detail_2025");
     }, { timeout: 10000 });
 
     fireEvent.click(screen.getByRole("button", { name: "编辑" }));

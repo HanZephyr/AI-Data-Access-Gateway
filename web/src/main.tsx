@@ -441,8 +441,10 @@ const translations = {
     "column.id": "ID",
     "column.datasource_id": "Datasource",
     "column.datasource_label": "Datasource",
+    "column.datasource_count": "Datasource count",
     "column.resource_id": "Resource",
     "column.resource_label": "Resource",
+    "column.resource_count": "Resource count",
     "column.api_key_id": "API key",
     "column.user_id": "User ID",
     "column.user_name": "User",
@@ -468,6 +470,7 @@ const translations = {
     "column.action": "Action",
     "column.tag_id": "Tag ID",
     "column.tag_name": "Tag name",
+    "column.tag_count": "Tag count",
     "column.priority": "Priority",
     "column.field_name": "Field",
     "column.allow_decrypt": "Allow decrypt",
@@ -799,8 +802,10 @@ const translations = {
     "column.id": "ID",
     "column.datasource_id": "数据源",
     "column.datasource_label": "数据源",
+    "column.datasource_count": "数据源数量",
     "column.resource_id": "资源",
     "column.resource_label": "资源",
+    "column.resource_count": "资源数量",
     "column.api_key_id": "API 密钥",
     "column.user_id": "用户 ID",
     "column.user_name": "用户",
@@ -826,6 +831,7 @@ const translations = {
     "column.action": "操作",
     "column.tag_id": "标签 ID",
     "column.tag_name": "标签名称",
+    "column.tag_count": "标签数量",
     "column.priority": "优先级",
     "column.field_name": "字段",
     "column.allow_decrypt": "允许解密",
@@ -1157,8 +1163,10 @@ const translations = {
     "column.id": "ID",
     "column.datasource_id": "資料來源",
     "column.datasource_label": "資料來源",
+    "column.datasource_count": "資料來源數量",
     "column.resource_id": "資源",
     "column.resource_label": "資源",
+    "column.resource_count": "資源數量",
     "column.api_key_id": "API 金鑰",
     "column.user_id": "使用者 ID",
     "column.user_name": "使用者",
@@ -1184,6 +1192,7 @@ const translations = {
     "column.action": "操作",
     "column.tag_id": "標籤 ID",
     "column.tag_name": "標籤名稱",
+    "column.tag_count": "標籤數量",
     "column.priority": "優先順序",
     "column.field_name": "欄位",
     "column.allow_decrypt": "允許解密",
@@ -3976,9 +3985,26 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
                 key: "allow_decrypt",
                 render: (value: boolean) => (value ? t("common.yes") : t("common.no")),
               }]),
-          ...(isField ? [] : [{ title: columnLabel("datasource_label", t), dataIndex: "datasource_label", key: "datasource_label" }]),
-          ...(isField ? [] : [{ title: columnLabel("tag_name", t), dataIndex: "tag_name", key: "tag_name" }]),
-          { title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" },
+          ...(isField ? [] : [{
+            title: columnLabel("datasource_label", t),
+            dataIndex: "datasource_count",
+            key: "datasource_count",
+            render: (_value: unknown, row: AnyRecord) => resourcePolicyScopeCountText(row, "datasource_count", "datasource_ids", "datasource_id", t),
+          }]),
+          ...(isField ? [] : [{
+            title: columnLabel("tag_name", t),
+            dataIndex: "tag_count",
+            key: "tag_count",
+            render: (_value: unknown, row: AnyRecord) => resourcePolicyScopeCountText(row, "tag_count", "tag_ids", "tag_id", t),
+          }]),
+          ...(isField
+            ? [{ title: columnLabel("resource_label", t), dataIndex: "resource_label", key: "resource_label" }]
+            : [{
+                title: columnLabel("resource_label", t),
+                dataIndex: "resource_count",
+                key: "resource_count",
+                render: (_value: unknown, row: AnyRecord) => resourcePolicyScopeCountText(row, "resource_count", "resource_ids", "resource_id", t),
+              }]),
           ...(isField ? [{ title: columnLabel("field_name", t), dataIndex: "field_name", key: "field_name" }] : []),
           { title: columnLabel("status", t), dataIndex: "status", key: "status", render: (value: string) => optionLabel(value, t) },
         ]}
@@ -5368,6 +5394,35 @@ function resourceScopeKeysFromPolicy(row: AnyRecord) {
     addResourceId(row.resource_id);
   }
   return Array.from(new Set(keys));
+}
+
+function resourcePolicyScopeCount(row: AnyRecord, countKey: string, idsKey: string, legacyIdKey: string) {
+  /** Prefer backend grouped counts, while keeping older payload shapes readable. */
+
+  const rawCount = row[countKey];
+  if (typeof rawCount === "number" && Number.isFinite(rawCount)) {
+    return rawCount;
+  }
+  if (Array.isArray(row[idsKey])) {
+    return row[idsKey].filter(Boolean).length;
+  }
+  return row[legacyIdKey] ? 1 : 0;
+}
+
+function resourcePolicyScopeCountText(
+  row: AnyRecord,
+  countKey: string,
+  idsKey: string,
+  legacyIdKey: string,
+  t: I18nContextValue["t"],
+) {
+  /** Render compact grouped-scope counts in policy tables instead of long name joins. */
+
+  const count = resourcePolicyScopeCount(row, countKey, idsKey, legacyIdKey);
+  if (count <= 0) {
+    return "-";
+  }
+  return `${count} ${count === 1 ? t("policy.resourceItemUnit") : t("policy.resourceItemsUnit")}`;
 }
 
 function tagIdFromPolicy(row: AnyRecord) {

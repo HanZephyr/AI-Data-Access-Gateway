@@ -474,6 +474,9 @@ def test_admin_resource_policy_batch_create_targets_multiple_scopes() -> None:
     assert groups[0]["subject_type"] == "role"
     assert groups[0]["subject_id"] == "analyst"
     assert groups[0]["policy_count"] == 2
+    assert groups[0]["datasource_count"] == 1
+    assert groups[0]["resource_count"] == 1
+    assert groups[0]["tag_count"] == 0
     assert groups[0]["datasource_ids"] == ["ds_2"]
     assert groups[0]["resource_ids"] == ["res_customers"]
     assert len(groups[0]["policy_items"]) == 2
@@ -521,6 +524,9 @@ def test_admin_resource_policy_subject_group_sync_replaces_existing_scopes() -> 
     assert updated.status_code == 200
     body = updated.json()
     assert body["policy_count"] == 1
+    assert body["datasource_count"] == 0
+    assert body["resource_count"] == 1
+    assert body["tag_count"] == 0
     assert body["datasource_ids"] == []
     assert body["resource_ids"] == ["res_customers"]
     assert body["allow_decrypt"] is False
