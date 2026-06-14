@@ -62,6 +62,47 @@ def test_guard_rejects_non_whitelisted_functions() -> None:
     assert "function_not_allowed:md5" in result.rejection_reasons
 
 
+def test_guard_allows_boolean_predicates() -> None:
+    result = SqlGuard().check(
+        "select id, total from public.orders "
+        "where (status = 'paid' and total > 100) or status = 'refunded'"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.used_functions == []
+    assert "AND" in result.normalized_sql
+    assert "OR" in result.normalized_sql
+
+
+def test_guard_allows_common_date_predicates() -> None:
+    result = SqlGuard().check(
+        "select id from public.orders "
+        "where created_at >= current_date - interval '30 days'"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.used_functions == []
+
+
+def test_guard_allows_date_literal_casts() -> None:
+    result = SqlGuard().check(
+        "select id from public.orders where created_at >= date '2026-05-15'"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.used_functions == []
+
+
+def test_guard_rejects_non_literal_casts() -> None:
+    result = SqlGuard().check("select cast(email as text) from public.customers")
+
+    assert result.allowed is False
+    assert "function_not_allowed:cast" in result.rejection_reasons
+
+
 def test_guard_allows_common_aggregate_functions() -> None:
     result = SqlGuard().check("select count(*), sum(total) from public.orders")
 

@@ -24,6 +24,24 @@ class SqlGuard:
     """Conservative SQL allowlist for read-only runtime query execution."""
 
     allowed_functions = {"count", "sum", "avg", "min", "max"}
+    _safe_temporal_cast_types = (
+        exp.DataType.Type.DATE,
+        exp.DataType.Type.DATE32,
+        exp.DataType.Type.DATETIME,
+        exp.DataType.Type.DATETIME2,
+        exp.DataType.Type.DATETIME64,
+        exp.DataType.Type.SMALLDATETIME,
+        exp.DataType.Type.TIME,
+        exp.DataType.Type.TIMETZ,
+        exp.DataType.Type.TIME_NS,
+        exp.DataType.Type.TIMESTAMP,
+        exp.DataType.Type.TIMESTAMPNTZ,
+        exp.DataType.Type.TIMESTAMPLTZ,
+        exp.DataType.Type.TIMESTAMPTZ,
+        exp.DataType.Type.TIMESTAMP_S,
+        exp.DataType.Type.TIMESTAMP_MS,
+        exp.DataType.Type.TIMESTAMP_NS,
+    )
 
     def __init__(self, *, default_limit: int = 100, max_limit: int = 1000) -> None:
         """Configure the default and maximum row limits applied to accepted queries."""
@@ -139,10 +157,40 @@ class SqlGuard:
 
         names: set[str] = set()
         for function in statement.find_all(exp.Func):
+            if self._is_safe_builtin_expression(function):
+                continue
             sql_name = function.sql_name().lower()
             if sql_name:
                 names.add(sql_name)
         return sorted(names)
+
+    def _is_safe_builtin_expression(self, function: exp.Func) -> bool:
+        """Skip sqlglot function-shaped nodes that are safe SQL operators or literals."""
+
+        if isinstance(
+            function,
+            (
+                exp.And,
+                exp.Or,
+                exp.CurrentDate,
+                exp.CurrentTime,
+                exp.CurrentTimestamp,
+            ),
+        ):
+            return True
+        if isinstance(function, exp.Cast):
+            return self._is_safe_temporal_literal_cast(function)
+        return False
+
+    def _is_safe_temporal_literal_cast(self, function: exp.Cast) -> bool:
+        """Allow DATE/TIME/TIMESTAMP literal syntax without opening arbitrary casts."""
+
+        target = function.to
+        return (
+            isinstance(function.this, exp.Literal)
+            and isinstance(target, exp.DataType)
+            and target.is_type(*self._safe_temporal_cast_types)
+        )
 
     def _has_wildcard_projection(self, statement: exp.Select) -> bool:
         """Reject wildcard projections so runtime callers must name fields explicitly."""
