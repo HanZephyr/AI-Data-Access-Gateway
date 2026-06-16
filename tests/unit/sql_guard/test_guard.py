@@ -1,3 +1,5 @@
+import pytest
+
 from adg.sql_guard.guard import SqlGuard
 
 
@@ -101,6 +103,60 @@ def test_guard_rejects_non_literal_casts() -> None:
 
     assert result.allowed is False
     assert "function_not_allowed:cast" in result.rejection_reasons
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "select order_detail_id, create_time "
+        "from prod_welfare.ods_t_after_sale_handle_record "
+        "where date(create_time) > '2024-09-30'",
+        "select id from public.orders where cast(created_at as date) >= '2026-05-15'",
+        "select id from public.orders where date_trunc('day', created_at) >= '2026-05-15'",
+        "select id from public.orders where year(created_at) = 2026 "
+        "and month(created_at) = 5 and day(created_at) = 15",
+        "select id from public.orders where date_format(created_at, '%Y-%m-%d') >= '2026-05-15'",
+        "select id from public.orders where to_date(created_at) >= '2026-05-15'",
+        "select id from public.orders where created_at >= date_sub(current_date, interval 30 day)",
+        "select id from public.orders where datediff(current_date, created_at) <= 30",
+        "select id from public.orders "
+        "where timestampdiff(day, created_at, current_timestamp) <= 30",
+        "select id from public.orders where from_unixtime(created_at_epoch) >= '2026-05-15'",
+        "select id from public.orders where unix_timestamp(created_at) >= 1778803200",
+    ],
+)
+def test_guard_allows_common_temporal_predicate_functions(query: str) -> None:
+    result = SqlGuard().check(query)
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+
+
+@pytest.mark.parametrize(
+    "query,rejection",
+    [
+        (
+            "select date(created_at) as created_day from public.orders",
+            "temporal_projection_not_allowed:date",
+        ),
+        (
+            "select date_format(created_at, '%Y-%m-%d') as created_day from public.orders",
+            "temporal_projection_not_allowed:date_format",
+        ),
+        (
+            "select cast(created_at as date) as created_day from public.orders",
+            "temporal_projection_not_allowed:cast",
+        ),
+    ],
+)
+def test_guard_rejects_temporal_column_projections(
+    query: str,
+    rejection: str,
+) -> None:
+    result = SqlGuard().check(query)
+
+    assert result.allowed is False
+    assert rejection in result.rejection_reasons
 
 
 def test_guard_allows_common_aggregate_functions() -> None:

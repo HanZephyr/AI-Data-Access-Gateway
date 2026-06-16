@@ -24,6 +24,42 @@ class SqlGuard:
     """Conservative SQL allowlist for read-only runtime query execution."""
 
     allowed_functions = {"count", "sum", "avg", "min", "max"}
+    _safe_temporal_function_types = (
+        exp.CurrentDate,
+        exp.CurrentTime,
+        exp.CurrentTimestamp,
+        exp.Date,
+        exp.DateAdd,
+        exp.DateDiff,
+        exp.DateSub,
+        exp.DateTrunc,
+        exp.DatetimeAdd,
+        exp.DatetimeDiff,
+        exp.DatetimeSub,
+        exp.DatetimeTrunc,
+        exp.Day,
+        exp.Hour,
+        exp.Minute,
+        exp.Month,
+        exp.Quarter,
+        exp.Second,
+        exp.TimeAdd,
+        exp.TimeDiff,
+        exp.TimeSub,
+        exp.TimeTrunc,
+        exp.TimestampAdd,
+        exp.TimestampDiff,
+        exp.TimestampSub,
+        exp.TimestampTrunc,
+        exp.Week,
+        exp.Year,
+    )
+    _safe_temporal_anonymous_functions = {
+        "date_format",
+        "from_unixtime",
+        "to_date",
+        "unix_timestamp",
+    }
     _safe_temporal_cast_types = (
         exp.DataType.Type.DATE,
         exp.DataType.Type.DATE32,
@@ -96,6 +132,7 @@ class SqlGuard:
         ]
         if self._has_wildcard_projection(statement):
             rejection_reasons.append("wildcard_projection_not_allowed")
+        rejection_reasons.extend(self._temporal_projection_rejections(statement))
         normalized_sql, warnings = self._with_effective_limit(statement)
 
         return SqlGuardResult(
@@ -159,7 +196,7 @@ class SqlGuard:
         for function in statement.find_all(exp.Func):
             if self._is_safe_builtin_expression(function):
                 continue
-            sql_name = function.sql_name().lower()
+            sql_name = self._function_name(function)
             if sql_name:
                 names.add(sql_name)
         return sorted(names)
@@ -172,25 +209,68 @@ class SqlGuard:
             (
                 exp.And,
                 exp.Or,
-                exp.CurrentDate,
-                exp.CurrentTime,
-                exp.CurrentTimestamp,
             ),
         ):
             return True
+        if self._is_safe_temporal_function(function):
+            return True
         if isinstance(function, exp.Cast):
-            return self._is_safe_temporal_literal_cast(function)
+            return self._is_safe_temporal_cast(function)
         return False
 
-    def _is_safe_temporal_literal_cast(self, function: exp.Cast) -> bool:
-        """Allow DATE/TIME/TIMESTAMP literal syntax without opening arbitrary casts."""
+    def _is_safe_temporal_function(self, function: exp.Func) -> bool:
+        """Allow common temporal helpers without opening arbitrary SQL functions."""
+
+        if isinstance(function, self._safe_temporal_function_types):
+            return True
+        return (
+            isinstance(function, exp.Anonymous)
+            and self._function_name(function) in self._safe_temporal_anonymous_functions
+        )
+
+    def _is_safe_temporal_cast(self, function: exp.Cast) -> bool:
+        """Allow DATE/TIME/TIMESTAMP casts while keeping projection safeguards separate."""
 
         target = function.to
         return (
-            isinstance(function.this, exp.Literal)
-            and isinstance(target, exp.DataType)
+            isinstance(target, exp.DataType)
             and target.is_type(*self._safe_temporal_cast_types)
         )
+
+    def _function_name(self, function: exp.Func) -> str:
+        """Return a stable lowercase function name, including sqlglot anonymous functions."""
+
+        if isinstance(function, exp.Anonymous):
+            return function.name.lower()
+        return function.sql_name().lower()
+
+    def _temporal_projection_rejections(self, statement: exp.Select) -> list[str]:
+        """Reject temporal column transforms in projections to preserve masking boundaries."""
+
+        rejections: set[str] = set()
+        for projection in statement.expressions:
+            for function in projection.find_all(exp.Func):
+                if (
+                    self._is_safe_temporal_projection_transform(function)
+                    and self._references_column(function)
+                ):
+                    rejections.add(
+                        f"temporal_projection_not_allowed:{self._function_name(function)}"
+                    )
+        return sorted(rejections)
+
+    def _is_safe_temporal_projection_transform(self, function: exp.Func) -> bool:
+        """Return whether a function is a temporal transform guarded in SELECT output."""
+
+        return self._is_safe_temporal_function(function) or isinstance(
+            function,
+            exp.Cast,
+        ) and self._is_safe_temporal_cast(function)
+
+    def _references_column(self, expression: exp.Expression) -> bool:
+        """Check whether an expression derives from at least one source column."""
+
+        return any(expression.find_all(exp.Column))
 
     def _has_wildcard_projection(self, statement: exp.Select) -> bool:
         """Reject wildcard projections so runtime callers must name fields explicitly."""
