@@ -12,9 +12,7 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.api_key_header == "X-ADG-API-Key"
     assert settings.control_plane_database_url.startswith("sqlite:///")
     assert settings.backend_host_port is None
-    assert settings.sql_allow_create is False
-    assert settings.sql_allow_update is False
-    assert settings.sql_allow_insert is False
+    assert settings.sql_execution_mode == "read_only"
     assert settings.sql_strict_validation is True
 
 
@@ -24,9 +22,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_SECRET_KEY", "unit-test-secret")
     monkeypatch.setenv("ADG_CREDENTIAL_ENCRYPTION_KEY", "unit-test-credential-key")
     monkeypatch.setenv("ADG_BACKEND_HOST_PORT", "8001")
-    monkeypatch.setenv("ADG_SQL_ALLOW_CREATE", "true")
-    monkeypatch.setenv("ADG_SQL_ALLOW_UPDATE", "true")
-    monkeypatch.setenv("ADG_SQL_ALLOW_INSERT", "true")
+    monkeypatch.setenv("ADG_SQL_EXECUTION_MODE", "dml")
     monkeypatch.setenv("ADG_SQL_STRICT_VALIDATION", "false")
 
     settings = Settings()
@@ -36,9 +32,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.secret_key == "unit-test-secret"
     assert settings.credential_encryption_key == "unit-test-credential-key"
     assert settings.backend_host_port == 8001
-    assert settings.sql_allow_create is True
-    assert settings.sql_allow_update is True
-    assert settings.sql_allow_insert is True
+    assert settings.sql_execution_mode == "dml"
     assert settings.sql_strict_validation is False
 
 

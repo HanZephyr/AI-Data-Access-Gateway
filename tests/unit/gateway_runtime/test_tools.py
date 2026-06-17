@@ -51,9 +51,7 @@ class FakeConnector:
 
 class RuntimeSettingsStub:
     secret_key = "unit-test-secret-key"
-    sql_allow_create = False
-    sql_allow_update = False
-    sql_allow_insert = False
+    sql_execution_mode = "read_only"
     sql_strict_validation = False
 
 

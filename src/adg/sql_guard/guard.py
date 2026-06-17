@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Literal, cast
 
 import sqlglot
 from sqlglot import exp
+
+type SqlExecutionMode = Literal["read_only", "dml", "schema", "admin"]
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,18 @@ class SqlGuardResult:
 class SqlGuard:
     """Configurable SQL allowlist for runtime query execution."""
 
+    _mode_allowed_statement_categories: dict[SqlExecutionMode, set[str]] = {
+        "read_only": {"read"},
+        "dml": {"read", "dml"},
+        "schema": {"read", "dml", "schema"},
+        "admin": {"read", "dml", "schema", "admin"},
+    }
+    _read_only_command_names = {"explain", "show"}
+    _dml_statement_keys = {"delete", "insert", "merge", "update"}
+    _schema_statement_keys = {"alter", "create", "drop", "truncate", "truncatetable"}
+    _schema_command_names = {"rename"}
+    _admin_statement_keys = {"copy", "grant", "revoke"}
+    _admin_command_names = {"call", "set"}
     allowed_functions = {"count", "sum", "avg", "min", "max"}
     _safe_temporal_function_types = (
         exp.CurrentDate,
@@ -84,18 +98,14 @@ class SqlGuard:
         *,
         default_limit: int = 100,
         max_limit: int = 1000,
-        allow_create: bool = False,
-        allow_update: bool = False,
-        allow_insert: bool = False,
+        execution_mode: SqlExecutionMode = "read_only",
         strict_validation: bool = True,
     ) -> None:
         """Configure statement permissions and strict validation for accepted queries."""
 
         self._default_limit = default_limit
         self._max_limit = max_limit
-        self._allow_create = allow_create
-        self._allow_update = allow_update
-        self._allow_insert = allow_insert
+        self._execution_mode = execution_mode
         self._strict_validation = strict_validation
 
     def check(self, sql: str) -> SqlGuardResult:
@@ -176,17 +186,39 @@ class SqlGuard:
     def _statement_rejection(self, statement: exp.Expression) -> str | None:
         """Return a first-layer statement-type rejection reason, if any."""
 
-        if isinstance(statement, exp.Select):
+        statement_category = self._statement_category(statement)
+        allowed_categories = self._mode_allowed_statement_categories[self._execution_mode]
+        if statement_category in allowed_categories:
             return None
+        return "statement_not_allowed"
+
+    def _statement_category(self, statement: exp.Expression) -> str:
+        """Classify a parsed statement into a coarse execution-mode category."""
 
         statement_type = statement.key.lower()
-        if statement_type == "create":
-            return None if self._allow_create else "create_not_allowed"
-        if statement_type == "update":
-            return None if self._allow_update else "update_not_allowed"
-        if statement_type == "insert":
-            return None if self._allow_insert else "insert_not_allowed"
-        return "statement_not_allowed"
+        if isinstance(statement, exp.Select) or statement_type == "describe":
+            return "read"
+        if isinstance(statement, exp.Command):
+            command_name = self._command_name(statement)
+            if command_name in self._read_only_command_names:
+                return "read"
+            if command_name in self._schema_command_names:
+                return "schema"
+            if command_name in self._admin_command_names:
+                return "admin"
+            return "unknown"
+        if statement_type in self._dml_statement_keys:
+            return "dml"
+        if statement_type in self._schema_statement_keys:
+            return "schema"
+        if statement_type in self._admin_statement_keys:
+            return "admin"
+        return "unknown"
+
+    def _command_name(self, statement: exp.Command) -> str:
+        """Return the normalized leading command name for sqlglot Command nodes."""
+
+        return str(statement.this).lower()
 
     def _with_effective_limit(self, statement: exp.Select) -> tuple[str, list[str]]:
         """Return SQL with a bounded LIMIT and warnings describing limit changes."""

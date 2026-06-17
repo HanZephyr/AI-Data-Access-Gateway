@@ -29,9 +29,7 @@ class Settings(BaseSettings):
     )
     log_level: str = "INFO"
     backend_host_port: int | None = Field(default=None, ge=1, le=65535)
-    sql_allow_create: bool = False
-    sql_allow_update: bool = False
-    sql_allow_insert: bool = False
+    sql_execution_mode: Literal["read_only", "dml", "schema", "admin"] = "read_only"
     sql_strict_validation: bool = True
 
     @model_validator(mode="after")

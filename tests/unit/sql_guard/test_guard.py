@@ -35,50 +35,93 @@ def test_guard_rejects_mutation_statement() -> None:
 
 
 @pytest.mark.parametrize(
-    "sql,rejection",
+    "sql",
     [
-        ("create table public.customers_archive (id int)", "create_not_allowed"),
-        ("update public.customers set name = 'Alice' where id = 1", "update_not_allowed"),
-        (
-            "insert into public.customers (id, name) values (1, 'Alice')",
-            "insert_not_allowed",
-        ),
+        "create table public.customers_archive (id int)",
+        "update public.customers set name = 'Alice' where id = 1",
+        "insert into public.customers (id, name) values (1, 'Alice')",
+        "delete from public.customers where id = 1",
+        "drop table public.customers",
+        "truncate table public.customers",
+        "alter table public.customers add column name text",
     ],
 )
-def test_guard_rejects_configurable_write_statements_by_default(
-    sql: str,
-    rejection: str,
-) -> None:
+def test_guard_rejects_write_statements_in_read_only_mode(sql: str) -> None:
     result = SqlGuard().check(sql)
 
     assert result.allowed is False
-    assert rejection in result.rejection_reasons
-
-
-def test_guard_allows_configured_write_statements_independently() -> None:
-    guard = SqlGuard(allow_update=True)
-
-    update = guard.check("update public.customers set name = 'Alice' where id = 1")
-    insert = guard.check("insert into public.customers (id, name) values (1, 'Alice')")
-
-    assert update.allowed is True
-    assert update.statement_type == "UPDATE"
-    assert update.normalized_sql == "UPDATE public.customers SET name = 'Alice' WHERE id = 1"
-    assert insert.allowed is False
-    assert "insert_not_allowed" in insert.rejection_reasons
+    assert "statement_not_allowed" in result.rejection_reasons
 
 
 @pytest.mark.parametrize(
     "sql",
     [
+        "update public.customers set name = 'Alice' where id = 1",
+        "insert into public.customers (id, name) values (1, 'Alice')",
         "delete from public.customers where id = 1",
-        "drop table public.customers",
+        "merge into public.customers using public.customer_updates "
+        "on customers.id = customer_updates.id "
+        "when matched then update set name = customer_updates.name",
     ],
 )
-def test_guard_keeps_unconfigured_write_statements_rejected_when_relaxed(
-    sql: str,
-) -> None:
-    result = SqlGuard(strict_validation=False).check(sql)
+def test_guard_dml_mode_allows_dml_statements(sql: str) -> None:
+    result = SqlGuard(execution_mode="dml").check(sql)
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "create table public.customers_archive (id int)",
+        "drop table public.customers_archive",
+        "alter table public.customers add column name text",
+        "truncate table public.customers",
+    ],
+)
+def test_guard_dml_mode_rejects_schema_statements(sql: str) -> None:
+    result = SqlGuard(execution_mode="dml").check(sql)
+
+    assert result.allowed is False
+    assert "statement_not_allowed" in result.rejection_reasons
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "create table public.customers_archive (id int)",
+        "drop table public.customers_archive",
+        "alter table public.customers add column name text",
+        "truncate table public.customers",
+    ],
+)
+def test_guard_schema_mode_allows_schema_statements(sql: str) -> None:
+    result = SqlGuard(execution_mode="schema").check(sql)
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "grant select on public.customers to analyst",
+        "revoke select on public.customers from analyst",
+        "set role all",
+        "call refresh_customer_cache()",
+        "copy public.customers from stdin",
+    ],
+)
+def test_guard_admin_mode_allows_admin_statements(sql: str) -> None:
+    result = SqlGuard(execution_mode="admin").check(sql)
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+
+
+def test_guard_schema_mode_rejects_admin_statements() -> None:
+    result = SqlGuard(execution_mode="schema").check("grant select on public.customers to analyst")
 
     assert result.allowed is False
     assert "statement_not_allowed" in result.rejection_reasons

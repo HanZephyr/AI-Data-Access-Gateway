@@ -324,9 +324,7 @@ class GatewayRuntimeService:
         guard_result = SqlGuard(
             default_limit=limit,
             max_limit=limit,
-            allow_create=settings.sql_allow_create,
-            allow_update=settings.sql_allow_update,
-            allow_insert=settings.sql_allow_insert,
+            execution_mode=settings.sql_execution_mode,
             strict_validation=settings.sql_strict_validation,
         ).check(query)
         if not guard_result.allowed or guard_result.normalized_sql is None:
