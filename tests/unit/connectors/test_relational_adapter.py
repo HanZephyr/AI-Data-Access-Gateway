@@ -79,6 +79,34 @@ class FakePostgresConnector(RelationalConnector):
     install_extra = "postgres"
 
 
+class FakeDmlResult:
+    returns_rows = False
+    rowcount = 3
+
+
+class FakeDmlConnection:
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    def __enter__(self) -> "FakeDmlConnection":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def execute(self, statement: object) -> FakeDmlResult:
+        self.statements.append(str(statement))
+        return FakeDmlResult()
+
+
+class FakeDmlEngine:
+    def __init__(self) -> None:
+        self.connection = FakeDmlConnection()
+
+    def begin(self) -> FakeDmlConnection:
+        return self.connection
+
+
 def test_relational_scan_metadata_discovers_all_accessible_databases_when_database_is_blank(
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -104,3 +132,24 @@ def test_relational_scan_metadata_discovers_all_accessible_databases_when_databa
     assert created_databases == [None, "analytics", "warehouse"]
     assert [database["name"] for database in databases] == ["analytics", "warehouse"]
     assert tables[0]["name"] == "analytics_orders"
+
+
+def test_relational_execute_query_returns_affected_rows_for_non_row_statements(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    fake_engine = FakeDmlEngine()
+
+    monkeypatch.setattr(relational, "create_engine", lambda url: fake_engine)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    result = FakePostgresConnector().execute_query(
+        {"host": "db.internal"},
+        "update public.customers set name = 'Alice' where id = 1",
+        100,
+    )
+
+    assert fake_engine.connection.statements == [
+        "update public.customers set name = 'Alice' where id = 1"
+    ]
+    assert result.columns == [{"name": "affected_rows", "data_type": "integer"}]
+    assert result.rows == [{"affected_rows": 3}]

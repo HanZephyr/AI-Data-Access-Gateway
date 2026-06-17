@@ -320,7 +320,15 @@ class GatewayRuntimeService:
                 )
                 return {"status": "rejected", "reason": decision.reason}
 
-        guard_result = SqlGuard(default_limit=limit, max_limit=limit).check(query)
+        settings = get_settings()
+        guard_result = SqlGuard(
+            default_limit=limit,
+            max_limit=limit,
+            allow_create=settings.sql_allow_create,
+            allow_update=settings.sql_allow_update,
+            allow_insert=settings.sql_allow_insert,
+            strict_validation=settings.sql_strict_validation,
+        ).check(query)
         if not guard_result.allowed or guard_result.normalized_sql is None:
             reason = ",".join(guard_result.rejection_reasons)
             self._record_rejection(

@@ -34,6 +34,56 @@ def test_guard_rejects_mutation_statement() -> None:
     assert "statement_not_allowed" in result.rejection_reasons
 
 
+@pytest.mark.parametrize(
+    "sql,rejection",
+    [
+        ("create table public.customers_archive (id int)", "create_not_allowed"),
+        ("update public.customers set name = 'Alice' where id = 1", "update_not_allowed"),
+        (
+            "insert into public.customers (id, name) values (1, 'Alice')",
+            "insert_not_allowed",
+        ),
+    ],
+)
+def test_guard_rejects_configurable_write_statements_by_default(
+    sql: str,
+    rejection: str,
+) -> None:
+    result = SqlGuard().check(sql)
+
+    assert result.allowed is False
+    assert rejection in result.rejection_reasons
+
+
+def test_guard_allows_configured_write_statements_independently() -> None:
+    guard = SqlGuard(allow_update=True)
+
+    update = guard.check("update public.customers set name = 'Alice' where id = 1")
+    insert = guard.check("insert into public.customers (id, name) values (1, 'Alice')")
+
+    assert update.allowed is True
+    assert update.statement_type == "UPDATE"
+    assert update.normalized_sql == "UPDATE public.customers SET name = 'Alice' WHERE id = 1"
+    assert insert.allowed is False
+    assert "insert_not_allowed" in insert.rejection_reasons
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "delete from public.customers where id = 1",
+        "drop table public.customers",
+    ],
+)
+def test_guard_keeps_unconfigured_write_statements_rejected_when_relaxed(
+    sql: str,
+) -> None:
+    result = SqlGuard(strict_validation=False).check(sql)
+
+    assert result.allowed is False
+    assert "statement_not_allowed" in result.rejection_reasons
+
+
 def test_guard_rejects_multiple_statements() -> None:
     result = SqlGuard().check("select id from public.customers; select id from public.orders")
 
@@ -62,6 +112,17 @@ def test_guard_rejects_non_whitelisted_functions() -> None:
 
     assert result.allowed is False
     assert "function_not_allowed:md5" in result.rejection_reasons
+
+
+def test_guard_relaxed_validation_allows_non_allowlisted_select_features() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "select *, md5(email) as email_hash from public.customers"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.used_functions == ["md5"]
+    assert "LIMIT 100" in result.normalized_sql
 
 
 def test_guard_allows_boolean_predicates() -> None:

@@ -21,7 +21,7 @@ class SqlGuardResult:
 
 
 class SqlGuard:
-    """Conservative SQL allowlist for read-only runtime query execution."""
+    """Configurable SQL allowlist for runtime query execution."""
 
     allowed_functions = {"count", "sum", "avg", "min", "max"}
     _safe_temporal_function_types = (
@@ -79,14 +79,27 @@ class SqlGuard:
         exp.DataType.Type.TIMESTAMP_NS,
     )
 
-    def __init__(self, *, default_limit: int = 100, max_limit: int = 1000) -> None:
-        """Configure the default and maximum row limits applied to accepted queries."""
+    def __init__(
+        self,
+        *,
+        default_limit: int = 100,
+        max_limit: int = 1000,
+        allow_create: bool = False,
+        allow_update: bool = False,
+        allow_insert: bool = False,
+        strict_validation: bool = True,
+    ) -> None:
+        """Configure statement permissions and strict validation for accepted queries."""
 
         self._default_limit = default_limit
         self._max_limit = max_limit
+        self._allow_create = allow_create
+        self._allow_update = allow_update
+        self._allow_insert = allow_insert
+        self._strict_validation = strict_validation
 
     def check(self, sql: str) -> SqlGuardResult:
-        """Parse, validate, and normalize a single read-only SQL statement."""
+        """Parse, validate, and normalize a single SQL statement."""
 
         try:
             statements = [
@@ -112,27 +125,40 @@ class SqlGuard:
 
         statement = statements[0]
         statement_type = statement.key.upper()
-        # V1 intentionally accepts only SELECT-shaped AST nodes; mutation and DDL are rejected.
-        if not isinstance(statement, exp.Select):
+        statement_rejection = self._statement_rejection(statement)
+        if statement_rejection is not None:
             return SqlGuardResult(
                 allowed=False,
                 normalized_sql=None,
                 statement_type=statement_type,
                 accessed_resources=self._accessed_resources(statement),
                 accessed_fields=self._accessed_fields(statement),
-                rejection_reasons=["statement_not_allowed"],
+                rejection_reasons=[statement_rejection],
+            )
+
+        if not isinstance(statement, exp.Select):
+            normalized_sql = statement.sql()
+            return SqlGuardResult(
+                allowed=True,
+                normalized_sql=normalized_sql,
+                statement_type=statement_type,
+                accessed_resources=self._accessed_resources(statement),
+                accessed_fields=self._accessed_fields(statement),
+                risk_level="medium",
             )
 
         used_functions = self._used_functions(statement)
-        # Function allowlisting keeps expensive or unsafe database functions out of runtime SQL.
-        rejection_reasons = [
-            f"function_not_allowed:{function_name}"
-            for function_name in used_functions
-            if function_name not in self.allowed_functions
-        ]
-        if self._has_wildcard_projection(statement):
-            rejection_reasons.append("wildcard_projection_not_allowed")
-        rejection_reasons.extend(self._temporal_projection_rejections(statement))
+        rejection_reasons: list[str] = []
+        if self._strict_validation:
+            # Function allowlisting keeps expensive or unsafe database functions out of runtime SQL.
+            rejection_reasons.extend(
+                f"function_not_allowed:{function_name}"
+                for function_name in used_functions
+                if function_name not in self.allowed_functions
+            )
+            if self._has_wildcard_projection(statement):
+                rejection_reasons.append("wildcard_projection_not_allowed")
+            rejection_reasons.extend(self._temporal_projection_rejections(statement))
         normalized_sql, warnings = self._with_effective_limit(statement)
 
         return SqlGuardResult(
@@ -146,6 +172,21 @@ class SqlGuard:
             rejection_reasons=rejection_reasons,
             warnings=warnings,
         )
+
+    def _statement_rejection(self, statement: exp.Expression) -> str | None:
+        """Return a first-layer statement-type rejection reason, if any."""
+
+        if isinstance(statement, exp.Select):
+            return None
+
+        statement_type = statement.key.lower()
+        if statement_type == "create":
+            return None if self._allow_create else "create_not_allowed"
+        if statement_type == "update":
+            return None if self._allow_update else "update_not_allowed"
+        if statement_type == "insert":
+            return None if self._allow_insert else "insert_not_allowed"
+        return "statement_not_allowed"
 
     def _with_effective_limit(self, statement: exp.Select) -> tuple[str, list[str]]:
         """Return SQL with a bounded LIMIT and warnings describing limit changes."""

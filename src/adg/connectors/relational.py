@@ -151,15 +151,21 @@ class RelationalConnector:
         return {"name": database_name, "schemas": schemas}
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
-        """Execute already-approved read-only SQL and return normalized rows."""
+        """Execute already-approved SQL and return normalized rows."""
 
         self._require_dependency()
         try:
             engine = create_engine(self._build_url(config))
-            with engine.connect() as connection:
+            with engine.begin() as connection:
                 result = connection.execute(text(sql))
-                rows = [dict(row) for row in result.mappings().fetchmany(limit)]
-                columns = [{"name": str(name), "data_type": "unknown"} for name in result.keys()]
+                if result.returns_rows:
+                    rows = [dict(row) for row in result.mappings().fetchmany(limit)]
+                    columns = [
+                        {"name": str(name), "data_type": "unknown"} for name in result.keys()
+                    ]
+                else:
+                    columns = [{"name": "affected_rows", "data_type": "integer"}]
+                    rows = [{"affected_rows": result.rowcount}]
         except ConnectorDependencyError:
             raise
         except Exception as error:

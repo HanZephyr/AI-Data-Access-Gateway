@@ -33,5 +33,5 @@ class MetadataConnector(Protocol):
         ...
 
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
-        """Execute already-authorized read-only SQL."""
+        """Execute already-authorized SQL."""
         ...

@@ -67,7 +67,7 @@ docker compose up --build
 docker compose exec backend init-admin
 ```
 
-`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用包镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL` 和/或 `NPM_REGISTRY_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple` 和 `https://registry.npmjs.org/`。Compose 方案会启动生产环境的后端与静态前端容器，其中后端 API 与 MCP 接口默认暴露在 `http://127.0.0.1:8000`，AI Agent 需要使用不同宿主机端口时可在 `.env` 中设置 `ADG_BACKEND_HOST_PORT`。管理控制台展示 MCP 接入地址时会使用 `ADG_BACKEND_HOST_PORT`，并且只在端口为 `80` 或 `443` 时省略端口号。Web 控制台默认暴露在 `http://127.0.0.1:8080`；如果该宿主机端口已被占用，可设置 `ADG_WEB_PORT`。只有需要修改后端容器内部监听端口时，才需要设置 `ADG_BACKEND_PORT`。
+`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用包镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL` 和/或 `NPM_REGISTRY_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple` 和 `https://registry.npmjs.org/`。Compose 方案会启动生产环境的后端与静态前端容器，其中后端 API 与 MCP 接口默认暴露在 `http://127.0.0.1:8000`，AI Agent 需要使用不同宿主机端口时可在 `.env` 中设置 `ADG_BACKEND_HOST_PORT`。管理控制台展示 MCP 接入地址时会使用 `ADG_BACKEND_HOST_PORT`，并且只在端口为 `80` 或 `443` 时省略端口号。Web 控制台默认暴露在 `http://127.0.0.1:8080`；如果该宿主机端口已被占用，可设置 `ADG_WEB_PORT`。只有需要修改后端容器内部监听端口时，才需要设置 `ADG_BACKEND_PORT`。SQL Guard 分为语句权限和严格校验两层：`ADG_SQL_ALLOW_CREATE`、`ADG_SQL_ALLOW_UPDATE`、`ADG_SQL_ALLOW_INSERT` 默认都是 `false`，`ADG_SQL_STRICT_VALIDATION` 默认是 `true`，用于控制函数与投影等严格限制。
 
 ## 贡献者验证命令
 

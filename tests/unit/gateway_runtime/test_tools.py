@@ -1,5 +1,6 @@
 from typing import cast
 
+from pytest import MonkeyPatch
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -46,6 +47,14 @@ class FakeConnector:
             columns=[{"name": "id", "data_type": "integer"}],
             rows=[{"id": 1}, {"id": 2}][:limit],
         )
+
+
+class RuntimeSettingsStub:
+    secret_key = "unit-test-secret-key"
+    sql_allow_create = False
+    sql_allow_update = False
+    sql_allow_insert = False
+    sql_strict_validation = False
 
 
 def identity() -> IdentityContext:
@@ -424,6 +433,32 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "allowed"
+
+
+def test_execute_query_uses_relaxed_sql_validation_from_settings(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    monkeypatch.setattr(
+        "adg.gateway_runtime.tools.get_settings",
+        lambda: RuntimeSettingsStub(),
+    )
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select *, md5(email) as email_hash from public.customers",
+        limit=1,
+    )
+
+    assert response["status"] == "success"
+    assert FakeConnector.last_sql is not None
+    assert "MD5(email)" in FakeConnector.last_sql
 
 
 def test_execute_query_rejects_denied_field_and_skips_connector(
