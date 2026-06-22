@@ -12,7 +12,7 @@ related_docs:
   - docs/superpowers/acceptance/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/plans/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/memory/modules/milestone-2-datasource-foundation.md
-last_verified_commit: 3807655
+last_verified_commit: 9b0b509
 status: active
 ---
 
@@ -21,7 +21,7 @@ status: active
 ## Responsibilities
 
 - Provide transport-neutral runtime tool handlers for datasource, tag, resource, preview, and query workflows.
-- Expose `POST /mcp/tools/{tool_name}` as an authenticated MCP-style HTTP facade.
+- Expose FastMCP Streamable HTTP at `/mcp` and a simpler authenticated HTTP tool API at `POST /api/tools/{tool_name}`.
 - Enforce runtime resource and field policies over Milestone 2 resource snapshots.
 - Parse SQL through a conservative AST-based guard before read-only connector execution.
 - Record runtime audit events for discovery, successful execution, connector failures, SQL rejection, and permission rejection.
@@ -29,7 +29,9 @@ status: active
 ## Entry points
 
 - Runtime service: `src/adg/gateway_runtime/tools.py`
-- HTTP facade: `src/adg/mcp_api/tools.py`
+- FastAPI mount and `/mcp` path normalization: `src/adg/app/main.py`
+- FastMCP Streamable HTTP server: `src/adg/mcp_server/server.py`
+- Simplified HTTP tool API: `src/adg/mcp_api/tools.py`
 - Policy service: `src/adg/policy/runtime.py`
 - SQL Guard: `src/adg/sql_guard/guard.py`
 - Governance models: `src/adg/control_plane/models/governance.py`
@@ -39,8 +41,8 @@ status: active
 
 ## Invariants
 
-- Runtime tool calls use `require_api_key`, not `require_admin_api_key`; admin scope is not required for MCP-style callers.
-- Request payload identity context is trusted only after API key authentication.
+- Runtime tool calls use runtime API key authentication, not `require_admin_api_key`; admin scope is not required for MCP or direct HTTP tool callers.
+- Runtime identity comes from the authenticated API key's bound user. Tool request payloads must not be trusted for `user_id`, `roles`, or `groups`; direct HTTP tool dispatch rejects those fields.
 - Runtime policy evaluation defaults to allow only when no active policies exist for the requested action.
 - When active policies exist for an action, matching allow is required and matching deny wins.
 - Field policies only narrow access after parent resource access has been granted.
@@ -55,7 +57,7 @@ status: active
 
 ## Extension points
 
-- A later stdio/SSE MCP protocol server should call `GatewayRuntimeService` rather than duplicate tool authorization logic.
+- A later MCP transport should call `GatewayRuntimeService` and shared runtime dispatch rather than duplicate tool authorization logic.
 - Milestone 4 masking should attach after policy checks and before rows are returned.
 - Milestone 5 web console can manage the governance tables added here.
 - Additional connector types can implement the shared `execute_query` contract without changing runtime tool dispatch.
@@ -63,7 +65,8 @@ status: active
 
 ## Common pitfalls
 
-- Treating `POST /mcp/tools/{tool_name}` as full MCP protocol support. It is a deterministic HTTP facade for the runtime tools.
+- Treating historical `POST /mcp/tools/{tool_name}` as a current runtime entrypoint. It is obsolete; current callers should use FastMCP Streamable HTTP `/mcp` or the simpler `POST /api/tools/{tool_name}` API.
+- Forgetting to proxy current runtime entrypoints from the web host. Production Nginx and the local Vite dev server must forward `/mcp` and `/api/tools/` to the backend.
 - Letting unknown SQL tables execute because the declared resource scope is non-empty. SQL Guard extraction must resolve to known resource snapshots.
 - Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.
 - Putting SQL safety checks in connectors. Connectors execute already-approved read-only SQL; SQL Guard and policy checks belong in runtime services.
