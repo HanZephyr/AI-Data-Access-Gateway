@@ -205,6 +205,13 @@ def test_web_nginx_proxy_uses_configurable_backend_port() -> None:
     assert "backend:8000" not in nginx_conf
 
 
+def test_web_nginx_proxies_http_tool_api_to_backend() -> None:
+    nginx_conf = Path("web/nginx.conf").read_text(encoding="utf-8")
+
+    assert "location /api/tools/ {" in nginx_conf
+    assert "proxy_pass http://backend:${ADG_BACKEND_PORT}/api/tools/;" in nginx_conf
+
+
 def test_env_example_documents_optional_npm_registry() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
