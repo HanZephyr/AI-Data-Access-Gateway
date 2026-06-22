@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from sqlalchemy import URL, create_engine, inspect, text
 from sqlalchemy.engine import Connection
 
+from adg.app.settings import get_settings
 from adg.connectors import runtime_engine_cache
 from adg.connectors.base import MetadataColumn, MetadataSnapshot, QueryResult
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
@@ -156,7 +157,11 @@ class RelationalConnector:
 
         self._require_dependency()
         try:
-            engine = runtime_engine_cache.get_engine(self.connector_type, self._build_url(config))
+            engine = runtime_engine_cache.get_engine(
+                self.connector_type,
+                self._build_url(config),
+                connect_args=self._runtime_connect_args(),
+            )
             with engine.begin() as connection:
                 result = connection.execute(text(sql))
                 if result.returns_rows:
@@ -173,6 +178,18 @@ class RelationalConnector:
             raise ConnectorOperationError(str(error)) from error
 
         return QueryResult(columns=columns, rows=rows)
+
+    def _runtime_connect_args(self) -> dict[str, object]:
+        """Return DBAPI timeout options for runtime query connections."""
+
+        settings = get_settings()
+        connect_args: dict[str, object] = {
+            "connect_timeout": settings.runtime_datasource_connect_timeout_seconds,
+        }
+        if self.sqlalchemy_drivername.startswith("mysql+"):
+            connect_args["read_timeout"] = settings.runtime_datasource_read_timeout_seconds
+            connect_args["write_timeout"] = settings.runtime_datasource_write_timeout_seconds
+        return connect_args
 
     def _build_relation_payload(
         self,

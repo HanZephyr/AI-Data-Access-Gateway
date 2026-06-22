@@ -81,6 +81,13 @@ class FakePostgresConnector(RelationalConnector):
     install_extra = "postgres"
 
 
+class FakeMySqlConnector(RelationalConnector):
+    connector_type = "fake-mysql"
+    sqlalchemy_drivername = "mysql+pymysql"
+    dependency_name = "pymysql"
+    install_extra = "mysql"
+
+
 class FakeDmlResult:
     returns_rows = False
     rowcount = 3
@@ -145,7 +152,11 @@ def test_relational_execute_query_returns_affected_rows_for_non_row_statements(
 ) -> None:
     fake_engine = FakeDmlEngine()
 
-    monkeypatch.setattr(runtime_engine_cache, "get_engine", lambda connector_type, url: fake_engine)
+    monkeypatch.setattr(
+        runtime_engine_cache,
+        "get_engine",
+        lambda connector_type, url, connect_args=None: fake_engine,
+    )
     monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
 
     result = FakePostgresConnector().execute_query(
@@ -200,7 +211,11 @@ def test_relational_test_connection_and_scan_metadata_use_one_shot_engines(
 ) -> None:
     created_databases: list[str | None] = []
 
-    def fail_if_runtime_cache_is_used(connector_type: str, url: object) -> object:
+    def fail_if_runtime_cache_is_used(
+        connector_type: str,
+        url: object,
+        connect_args: dict[str, object] | None = None,
+    ) -> object:
         raise AssertionError("runtime cache must not be used")
 
     def fake_create_engine(url: object) -> FakeEngine:
@@ -221,3 +236,73 @@ def test_relational_test_connection_and_scan_metadata_use_one_shot_engines(
     connector.scan_metadata({"host": "db.internal"})
 
     assert created_databases == ["warehouse", None, "analytics", "warehouse"]
+
+
+def test_relational_execute_query_passes_postgres_connect_timeout(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    fake_engine = FakeDmlEngine()
+    captured_connect_args: list[dict[str, object] | None] = []
+
+    class RuntimeTimeoutSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 7
+        runtime_datasource_read_timeout_seconds = 45
+        runtime_datasource_write_timeout_seconds = 46
+
+    def fake_get_engine(
+        connector_type: str,
+        url: object,
+        connect_args: dict[str, object] | None = None,
+    ) -> FakeDmlEngine:
+        captured_connect_args.append(connect_args)
+        return fake_engine
+
+    monkeypatch.setattr(relational, "get_settings", lambda: RuntimeTimeoutSettingsStub())
+    monkeypatch.setattr(runtime_engine_cache, "get_engine", fake_get_engine)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    FakePostgresConnector().execute_query(
+        {"host": "db.internal"},
+        "update public.customers set name = 'Alice' where id = 1",
+        100,
+    )
+
+    assert captured_connect_args == [{"connect_timeout": 7}]
+
+
+def test_relational_execute_query_passes_mysql_wire_timeouts(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    fake_engine = FakeDmlEngine()
+    captured_connect_args: list[dict[str, object] | None] = []
+
+    class RuntimeTimeoutSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 7
+        runtime_datasource_read_timeout_seconds = 45
+        runtime_datasource_write_timeout_seconds = 46
+
+    def fake_get_engine(
+        connector_type: str,
+        url: object,
+        connect_args: dict[str, object] | None = None,
+    ) -> FakeDmlEngine:
+        captured_connect_args.append(connect_args)
+        return fake_engine
+
+    monkeypatch.setattr(relational, "get_settings", lambda: RuntimeTimeoutSettingsStub())
+    monkeypatch.setattr(runtime_engine_cache, "get_engine", fake_get_engine)
+    monkeypatch.setattr(FakeMySqlConnector, "_require_dependency", lambda self: None)
+
+    FakeMySqlConnector().execute_query(
+        {"host": "db.internal"},
+        "update customers set name = 'Alice' where id = 1",
+        100,
+    )
+
+    assert captured_connect_args == [
+        {
+            "connect_timeout": 7,
+            "read_timeout": 45,
+            "write_timeout": 46,
+        }
+    ]

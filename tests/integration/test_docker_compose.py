@@ -57,6 +57,22 @@ def test_backend_compose_passes_runtime_datasource_pool_settings() -> None:
     )
 
 
+def test_backend_compose_passes_runtime_datasource_timeout_settings() -> None:
+    compose = load_compose_example()
+
+    environment = compose["services"]["backend"]["environment"]
+
+    assert environment["ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS"] == (
+        "${ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS:-10}"
+    )
+    assert environment["ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS"] == (
+        "${ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS:-120}"
+    )
+    assert environment["ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS"] == (
+        "${ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS:-120}"
+    )
+
+
 def test_backend_dockerfile_supports_configurable_runtime_port() -> None:
     dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 
@@ -127,6 +143,14 @@ def test_env_example_documents_backend_host_port_override() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "ADG_BACKEND_HOST_PORT=8000" in env_example
+
+
+def test_env_example_documents_runtime_datasource_timeout_settings() -> None:
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS=10" in env_example
+    assert "ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS=120" in env_example
+    assert "ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS=120" in env_example
 
 
 def test_web_compose_passes_optional_npm_registry_build_arg() -> None:

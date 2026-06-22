@@ -18,6 +18,9 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.runtime_datasource_pool_idle_ttl_seconds == 300
     assert settings.runtime_datasource_pool_size == 5
     assert settings.runtime_datasource_pool_max_overflow == 0
+    assert settings.runtime_datasource_connect_timeout_seconds == 10
+    assert settings.runtime_datasource_read_timeout_seconds == 120
+    assert settings.runtime_datasource_write_timeout_seconds == 120
 
 
 def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> None:
@@ -32,6 +35,9 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS", "60")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_SIZE", "3")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW", "2")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS", "7")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS", "46")
 
     settings = Settings()
 
@@ -46,6 +52,9 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.runtime_datasource_pool_idle_ttl_seconds == 60
     assert settings.runtime_datasource_pool_size == 3
     assert settings.runtime_datasource_pool_max_overflow == 2
+    assert settings.runtime_datasource_connect_timeout_seconds == 7
+    assert settings.runtime_datasource_read_timeout_seconds == 45
+    assert settings.runtime_datasource_write_timeout_seconds == 46
 
 
 def test_settings_reject_default_secret_key_in_production(monkeypatch: MonkeyPatch) -> None:
@@ -75,4 +84,9 @@ def test_settings_reject_invalid_runtime_pool_values(monkeypatch: MonkeyPatch) -
     monkeypatch.delenv("ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS", "0")
     with pytest.raises(ValueError, match="runtime_datasource_pool_idle_ttl_seconds"):
+        Settings()
+
+    monkeypatch.delenv("ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS", "0")
+    with pytest.raises(ValueError, match="runtime_datasource_connect_timeout_seconds"):
         Settings()

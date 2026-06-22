@@ -72,12 +72,25 @@ def test_cache_reuses_same_engine_for_same_connector_and_url() -> None:
 
 
 def test_cache_key_uses_safe_fingerprint_without_plaintext_password() -> None:
-    key = build_cache_key("postgres", make_url(password="very-secret-password"))
+    key = build_cache_key(
+        "postgres",
+        make_url(password="very-secret-password"),
+        connect_args={"connect_timeout": 10},
+    )
 
     assert key.startswith("postgres:")
     assert "very-secret-password" not in key
     assert "alice" not in key
     assert "db.internal" not in key
+
+
+def test_cache_key_changes_when_connect_args_change() -> None:
+    url = make_url()
+
+    key_one = build_cache_key("postgres", url, connect_args={"connect_timeout": 10})
+    key_two = build_cache_key("postgres", url, connect_args={"connect_timeout": 20})
+
+    assert key_one != key_two
 
 
 def test_cache_evicts_least_recently_used_engine_when_size_is_exceeded() -> None:
@@ -183,10 +196,11 @@ def test_runtime_create_engine_uses_pre_ping_and_pool_limits() -> None:
         engine_factory=cast(EngineFactory, engine_factory),
     )
 
-    cache.get_engine("postgres", make_url())
+    cache.get_engine("postgres", make_url(), connect_args={"connect_timeout": 10})
 
     assert captured_kwargs == {
         "pool_pre_ping": True,
         "pool_size": 5,
         "max_overflow": 0,
+        "connect_args": {"connect_timeout": 10},
     }

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from threading import RLock
 from typing import Protocol
@@ -32,11 +33,26 @@ class CacheEntry:
     last_used_at: float
 
 
-def build_cache_key(connector_type: str, url: URL) -> str:
+ConnectArgs = Mapping[str, object]
+
+
+def build_cache_key(
+    connector_type: str,
+    url: URL,
+    *,
+    connect_args: ConnectArgs | None = None,
+) -> str:
     """Build a stable cache key without exposing datasource credentials."""
 
+    payload = {
+        "url": url.render_as_string(hide_password=False),
+        "connect_args": {
+            str(key): repr(value)
+            for key, value in sorted((connect_args or {}).items(), key=lambda item: str(item[0]))
+        },
+    }
     fingerprint = hashlib.sha256(
-        url.render_as_string(hide_password=False).encode("utf-8")
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     return f"{connector_type}:{fingerprint}"
 
@@ -61,10 +77,16 @@ class RuntimeEngineCache:
         with self._lock:
             return len(self._entries)
 
-    def get_engine(self, connector_type: str, url: URL) -> Engine:
+    def get_engine(
+        self,
+        connector_type: str,
+        url: URL,
+        *,
+        connect_args: ConnectArgs | None = None,
+    ) -> Engine:
         settings = self._settings_provider()
         now = self._clock()
-        key = build_cache_key(connector_type, url)
+        key = build_cache_key(connector_type, url, connect_args=connect_args)
 
         with self._lock:
             self._dispose_expired_locked(now, settings.runtime_datasource_pool_idle_ttl_seconds)
@@ -75,7 +97,7 @@ class RuntimeEngineCache:
                 self._entries.move_to_end(key)
                 return entry.engine
 
-            engine = self._create_engine(url, settings)
+            engine = self._create_engine(url, settings, connect_args=connect_args)
             self._entries[key] = CacheEntry(engine=engine, last_used_at=now)
             self._entries.move_to_end(key)
             self._enforce_cache_size_locked(settings.runtime_datasource_pool_cache_size)
@@ -89,13 +111,20 @@ class RuntimeEngineCache:
         for entry in entries:
             entry.engine.dispose()
 
-    def _create_engine(self, url: URL, settings: RuntimePoolSettings) -> Engine:
+    def _create_engine(
+        self,
+        url: URL,
+        settings: RuntimePoolSettings,
+        *,
+        connect_args: ConnectArgs | None,
+    ) -> Engine:
         factory = self._engine_factory or create_engine
         return factory(
             url,
             pool_pre_ping=True,
             pool_size=settings.runtime_datasource_pool_size,
             max_overflow=settings.runtime_datasource_pool_max_overflow,
+            connect_args=dict(connect_args or {}),
         )
 
     def _dispose_expired_locked(self, now: float, idle_ttl_seconds: int) -> None:
@@ -117,8 +146,13 @@ class RuntimeEngineCache:
 _runtime_engine_cache = RuntimeEngineCache()
 
 
-def get_engine(connector_type: str, url: URL) -> Engine:
-    return _runtime_engine_cache.get_engine(connector_type, url)
+def get_engine(
+    connector_type: str,
+    url: URL,
+    *,
+    connect_args: ConnectArgs | None = None,
+) -> Engine:
+    return _runtime_engine_cache.get_engine(connector_type, url, connect_args=connect_args)
 
 
 def dispose_all() -> None:
