@@ -12,7 +12,7 @@ related_docs:
   - docs/superpowers/acceptance/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/plans/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/memory/modules/milestone-2-datasource-foundation.md
-last_verified_commit: ec92fcd
+last_verified_commit: 3807655
 status: active
 ---
 
@@ -24,7 +24,7 @@ status: active
 - Expose `POST /mcp/tools/{tool_name}` as an authenticated MCP-style HTTP facade.
 - Enforce runtime resource and field policies over Milestone 2 resource snapshots.
 - Parse SQL through a conservative AST-based guard before read-only connector execution.
-- Record runtime audit events for discovery, successful execution, SQL rejection, and permission rejection.
+- Record runtime audit events for discovery, successful execution, connector failures, SQL rejection, and permission rejection.
 
 ## Entry points
 
@@ -49,6 +49,9 @@ status: active
 - Declared `resource_ids` are an intent scope; actual SQL resource extraction remains authoritative.
 - Runtime relational queries reuse process-local SQLAlchemy engines through an LRU/idle-TTL cache only after policy and SQL Guard checks have passed.
 - Runtime datasource pool settings must be exposed through both application settings and Docker Compose backend environment variables; Compose `.env` values are not injected into containers unless explicitly mapped.
+- Runtime datasource timeout settings are DBAPI connection arguments for relational runtime queries: PostgreSQL receives `connect_timeout`, while MySQL/Doris receive `connect_timeout`, `read_timeout`, and `write_timeout`.
+- Connector dependency or execution failures after SQL and policy checks return structured `status: "error"` responses with `error.type` and `error.message`, and must not include empty `rows`, `columns`, or `masking` result fields.
+- Connector failures are audited with `decision="error"`, the normalized SQL, the generated `query_id`, the actual resource ids, and metadata containing `error_type` and `error_message`.
 
 ## Extension points
 
@@ -56,7 +59,7 @@ status: active
 - Milestone 4 masking should attach after policy checks and before rows are returned.
 - Milestone 5 web console can manage the governance tables added here.
 - Additional connector types can implement the shared `execute_query` contract without changing runtime tool dispatch.
-- Future timeout work should layer on top of runtime query execution without treating the engine cache as query cancellation or retry logic.
+- Query timeout settings should not be treated as query cancellation, retries, or engine-cache eviction logic.
 
 ## Common pitfalls
 
@@ -65,3 +68,4 @@ status: active
 - Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.
 - Putting SQL safety checks in connectors. Connectors execute already-approved read-only SQL; SQL Guard and policy checks belong in runtime services.
 - Treating the runtime engine cache as a global deployment-wide pool. It is per process, so multi-worker deployments multiply the effective maximum database connections.
+- Representing connector failures as empty result sets or zero values. Runtime callers must branch on `status`; an `error` response is a failed query, not a successful query with no rows.
