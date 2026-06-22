@@ -8,7 +8,7 @@ AI Data Access Gateway is an open-source secure data access gateway for AI agent
 
 The project consists of a data security access layer and an admin console.
 
-The runtime data access layer uses SQL Guard, resource policies, and field policies to constrain queries to controlled read-only paths. Resource policies can target data sources, databases, schemas, tables or views, tags, or global scope; field and masking policies remain field-level controls. It exposes both a FastMCP Streamable HTTP `/mcp` endpoint and a simpler `/api/tools/{tool_name}` HTTP tool API.
+The runtime data access layer uses SQL Guard, resource policies, and field policies to constrain queries to controlled read-only paths. Resource policies can target data sources, databases, schemas, tables or views, tags, or global scope; field and masking policies remain field-level controls. It exposes both a FastMCP Streamable HTTP `/mcp` endpoint and a simpler `/api/tools/{tool_name}` HTTP tool API. Connector dependency or execution failures return structured `status: "error"` responses with an `error.type` and `error.message`, while policy and SQL Guard denials continue to return `status: "rejected"`.
 
 The admin console serves a single-admin trust model. It covers data source maintenance, resource governance, and audit review, and manages data source registration, directory identity mapping, resource metadata, field policies, masking configuration, API Key management, and enterprise organization structure management.
 

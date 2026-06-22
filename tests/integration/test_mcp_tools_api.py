@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from adg.app.main import create_app
 from adg.audit.models import AuditEvent
+from adg.connectors.base import MetadataSnapshot, QueryResult
+from adg.connectors.errors import ConnectorOperationError
+from adg.connectors.registry import DEFAULT_CONNECTOR_REGISTRY
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
@@ -16,7 +19,23 @@ from adg.control_plane.models.resource import Resource
 from adg.shared.security import hash_api_key
 
 
-def build_mcp_app() -> tuple[TestClient, sessionmaker[Session]]:
+class FailingPostgresConnector:
+    connector_type = "postgres"
+
+    def test_connection(self, config: dict[str, object]) -> None:
+        return None
+
+    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
+        return {"databases": []}
+
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        raise ConnectorOperationError("Lost connection to MySQL server during query")
+
+
+def build_mcp_app(
+    *,
+    raise_server_exceptions: bool = True,
+) -> tuple[TestClient, sessionmaker[Session]]:
     engine = create_engine_from_url("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -104,7 +123,10 @@ def build_mcp_app() -> tuple[TestClient, sessionmaker[Session]]:
             yield session
 
     app.dependency_overrides[get_session] = override_session
-    return TestClient(app), session_factory
+    return TestClient(
+        app,
+        raise_server_exceptions=raise_server_exceptions,
+    ), session_factory
 
 
 def test_mcp_tool_route_accepts_non_admin_api_key() -> None:
@@ -256,6 +278,42 @@ def test_mcp_tool_route_commits_runtime_audit_events() -> None:
         event = session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "metadata_discovery"
     assert event.user_id == "user_1"
+
+
+def test_mcp_tool_route_returns_structured_error_for_connector_failure() -> None:
+    original_connector = DEFAULT_CONNECTOR_REGISTRY.get("postgres")
+    DEFAULT_CONNECTOR_REGISTRY.register("postgres", FailingPostgresConnector)
+    try:
+        client, session_factory = build_mcp_app(raise_server_exceptions=False)
+
+        response = client.post(
+            "/api/tools/execute_query",
+            json={
+                "datasource_id": "ds_1",
+                "resource_ids": ["res_customers"],
+                "query": "select id from public.customers",
+                "limit": 1,
+            },
+            headers={"X-ADG-API-Key": "adg_runtime"},
+        )
+    finally:
+        DEFAULT_CONNECTOR_REGISTRY.register("postgres", original_connector)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "error"
+    assert "columns" not in body
+    assert "rows" not in body
+    assert "masking" not in body
+    assert body["error"] == {
+        "type": "connector_operation_error",
+        "message": "Lost connection to MySQL server during query",
+    }
+    with session_factory() as session:
+        event = session.execute(select(AuditEvent)).scalar_one()
+    assert event.event_type == "query_execution"
+    assert event.decision == "error"
+    assert event.reason == "connector_operation_error"
 
 
 def test_mcp_tool_route_rejects_api_key_without_runtime_scope() -> None:

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from adg.audit.models import AuditEvent
 from adg.connectors.base import MetadataConnector, MetadataSnapshot, QueryResult
+from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
 from adg.connectors.registry import ConnectorRegistry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import FieldPolicy, ResourcePolicy, ResourceTag, Tag
@@ -47,6 +48,16 @@ class FakeConnector:
             columns=[{"name": "id", "data_type": "integer"}],
             rows=[{"id": 1}, {"id": 2}][:limit],
         )
+
+
+class FailingOperationConnector(FakeConnector):
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        raise ConnectorOperationError("Lost connection to MySQL server during query")
+
+
+class FailingDependencyConnector(FakeConnector):
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        raise ConnectorDependencyError("Connector 'postgres' requires optional extra 'postgres'")
 
 
 class RuntimeSettingsStub:
@@ -125,6 +136,16 @@ def runtime(db_session: Session) -> GatewayRuntimeService:
         connector_registry=ConnectorRegistry(
             {"fake": cast(type[MetadataConnector], FakeConnector)}
         ),
+    )
+
+
+def runtime_with_connector(
+    db_session: Session,
+    connector: type[MetadataConnector],
+) -> GatewayRuntimeService:
+    return GatewayRuntimeService(
+        db_session,
+        connector_registry=ConnectorRegistry({"fake": connector}),
     )
 
 
@@ -431,6 +452,73 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "allowed"
+
+
+def test_execute_query_returns_structured_error_when_connector_fails(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+
+    response = runtime_with_connector(
+        db_session,
+        FailingOperationConnector,
+    ).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from public.customers",
+        limit=1,
+    )
+
+    assert response["status"] == "error"
+    assert response["query_id"].startswith("qry_")
+    assert "columns" not in response
+    assert "rows" not in response
+    assert "masking" not in response
+    assert response["error"] == {
+        "type": "connector_operation_error",
+        "message": "Lost connection to MySQL server during query",
+    }
+    event = db_session.execute(select(AuditEvent)).scalar_one()
+    assert event.event_type == "query_execution"
+    assert event.decision == "error"
+    assert event.reason == "connector_operation_error"
+    assert event.query_id == response["query_id"]
+    assert event.audit_metadata["error_type"] == "connector_operation_error"
+
+
+def test_execute_query_returns_structured_error_when_connector_dependency_is_missing(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+
+    response = runtime_with_connector(
+        db_session,
+        FailingDependencyConnector,
+    ).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from public.customers",
+        limit=1,
+    )
+
+    assert response["status"] == "error"
+    assert "columns" not in response
+    assert "rows" not in response
+    assert response["error"] == {
+        "type": "connector_dependency_error",
+        "message": "Connector 'postgres' requires optional extra 'postgres'",
+    }
+    event = db_session.execute(select(AuditEvent)).scalar_one()
+    assert event.decision == "error"
+    assert event.reason == "connector_dependency_error"
 
 
 def test_execute_query_uses_relaxed_sql_validation_from_settings(

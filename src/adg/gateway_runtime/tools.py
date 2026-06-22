@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from adg.app.settings import get_settings
 from adg.audit.service import AuditService
 from adg.connectors.base import QueryResult
+from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
 from adg.connectors.registry import ConnectorRegistry, get_connector_registry
 from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import ResourceTag, Tag
@@ -405,9 +406,38 @@ class GatewayRuntimeService:
             )
             return {"status": "rejected", "reason": reason}
 
-        connector = self._connector_registry.create(datasource.type)
         query_id = f"qry_{uuid4()}"
-        result = connector.execute_query(datasource.config(), guard_result.normalized_sql, limit)
+        try:
+            connector = self._connector_registry.create(datasource.type)
+            result = connector.execute_query(
+                datasource.config(),
+                guard_result.normalized_sql,
+                limit,
+            )
+        except (ConnectorDependencyError, ConnectorOperationError) as error:
+            error_type = self._connector_error_type(error)
+            self._record_connector_error(
+                identity=identity,
+                api_key_id=api_key_id,
+                event_type=event_type,
+                datasource_id=datasource_id,
+                resource_ids=sorted(actual_ids),
+                query_id=query_id,
+                sql_text=guard_result.normalized_sql,
+                error_type=error_type,
+                error_message=str(error),
+                warnings=guard_result.warnings,
+                accessed_fields=guard_result.accessed_fields,
+            )
+            return {
+                "query_id": query_id,
+                "status": "error",
+                "warnings": guard_result.warnings,
+                "error": {
+                    "type": error_type,
+                    "message": str(error),
+                },
+            }
         result = self._enrich_result_column_types(result=result, resources=actual_resources)
         result, masked_columns = self._masking.apply_to_result(
             identity=identity,
@@ -441,6 +471,16 @@ class GatewayRuntimeService:
             "masking": {"masked_columns": masked_columns},
             "warnings": guard_result.warnings,
         }
+
+    def _connector_error_type(
+        self,
+        error: ConnectorDependencyError | ConnectorOperationError,
+    ) -> str:
+        """Return a stable client-facing runtime connector error code."""
+
+        if isinstance(error, ConnectorDependencyError):
+            return "connector_dependency_error"
+        return "connector_operation_error"
 
     def _visible_resources(
         self,
@@ -712,5 +752,41 @@ class GatewayRuntimeService:
             sql_text=sql_text,
             reason=reason,
             metadata={},
+        )
+        self._session.flush()
+
+    def _record_connector_error(
+        self,
+        *,
+        identity: IdentityContext,
+        api_key_id: str,
+        event_type: str,
+        datasource_id: str,
+        resource_ids: list[str],
+        query_id: str,
+        sql_text: str,
+        error_type: str,
+        error_message: str,
+        warnings: list[str],
+        accessed_fields: list[str],
+    ) -> None:
+        """Audit connector failures after SQL and policy checks have allowed execution."""
+
+        self._audit.record_event(
+            user_id=identity.user_id,
+            api_key_id=api_key_id,
+            event_type=event_type,
+            decision="error",
+            datasource_id=datasource_id,
+            resource_ids=resource_ids,
+            query_id=query_id,
+            sql_text=sql_text,
+            reason=error_type,
+            metadata={
+                "warnings": warnings,
+                "accessed_fields": accessed_fields,
+                "error_type": error_type,
+                "error_message": error_message,
+            },
         )
         self._session.flush()
