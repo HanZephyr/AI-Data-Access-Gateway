@@ -38,6 +38,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: web
         run: npm ci
+      - name: Run full dependency audit
+        working-directory: web
+        run: npm audit --registry=https://registry.npmjs.org
       - name: Run production dependency audit
         working-directory: web
         run: npm audit --omit=dev --registry=https://registry.npmjs.org
