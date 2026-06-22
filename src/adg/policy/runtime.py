@@ -157,6 +157,56 @@ class RuntimePolicyService:
                 )
             ).scalars()
         )
+        return self._field_policy_decision(policies=policies, identity=identity)
+
+    def first_inaccessible_field(
+        self,
+        *,
+        identity: IdentityContext,
+        resources: list[Resource],
+        field_names: list[str],
+        action: str,
+    ) -> str | None:
+        """Return the first field denied by active field policies using one policy query."""
+
+        self._session.flush()
+        if not resources or not field_names:
+            return None
+
+        resource_ids = [resource.id for resource in resources]
+        policies = list(
+            self._session.execute(
+                select(FieldPolicy).where(
+                    FieldPolicy.status == "active",
+                    FieldPolicy.action == action,
+                    FieldPolicy.resource_id.in_(resource_ids),
+                    FieldPolicy.field_name.in_(field_names),
+                )
+            ).scalars()
+        )
+        policies_by_scope: dict[tuple[str, str], list[FieldPolicy]] = {}
+        for policy in policies:
+            key = (policy.resource_id, policy.field_name)
+            policies_by_scope.setdefault(key, []).append(policy)
+
+        for resource in resources:
+            for field_name in field_names:
+                decision = self._field_policy_decision(
+                    policies=policies_by_scope.get((resource.id, field_name), []),
+                    identity=identity,
+                )
+                if not decision.allowed:
+                    return field_name
+        return None
+
+    def _field_policy_decision(
+        self,
+        *,
+        policies: list[FieldPolicy],
+        identity: IdentityContext,
+    ) -> PolicyDecision:
+        """Evaluate already-loaded policies for one field scope."""
+
         subject_policies = [
             policy for policy in policies if self._subject_matches(policy, identity)
         ]

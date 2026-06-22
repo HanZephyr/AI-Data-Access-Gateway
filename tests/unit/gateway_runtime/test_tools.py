@@ -1,7 +1,8 @@
 from typing import cast
 
 from pytest import MonkeyPatch
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from adg.audit.models import AuditEvent
@@ -608,6 +609,42 @@ def test_execute_query_rejects_disabled_field_and_skips_connector(
     assert response["status"] == "rejected"
     assert response["reason"] == "field_disabled:email"
     assert FakeConnector.last_sql is None
+
+
+def test_execute_query_checks_field_policies_in_one_batch(db_session: Session) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    engine = cast(Engine, db_session.get_bind())
+    field_policy_select_count = 0
+
+    def count_field_policy_selects(
+        conn: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        nonlocal field_policy_select_count
+        if "field_policies" in statement.lower():
+            field_policy_select_count += 1
+
+    event.listen(engine, "before_cursor_execute", count_field_policy_selects)
+    try:
+        response = runtime(db_session).execute_query(
+            identity=identity(),
+            api_key_id="key_1",
+            datasource_id="ds_1",
+            resource_ids=[resource.id],
+            query="select id, email from public.customers",
+            limit=1,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count_field_policy_selects)
+
+    assert response["status"] == "success"
+    assert field_policy_select_count == 1
 
 
 def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None:

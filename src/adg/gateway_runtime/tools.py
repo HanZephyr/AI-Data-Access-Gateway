@@ -633,17 +633,12 @@ class GatewayRuntimeService:
     ) -> str | None:
         """Find the first referenced field denied by active runtime field policy."""
 
-        for resource in resources:
-            for field_name in accessed_fields:
-                decision = self._policy.check_field_access(
-                    identity=identity,
-                    resource=resource,
-                    field_name=field_name,
-                    action="read",
-                )
-                if not decision.allowed:
-                    return field_name
-        return None
+        return self._policy.first_inaccessible_field(
+            identity=identity,
+            resources=resources,
+            field_names=accessed_fields,
+            action="read",
+        )
 
     def _preview_select_columns(
         self,
