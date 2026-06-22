@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import yaml  # type: ignore[import-untyped]
 
 COMPOSE_EXAMPLE = Path("docker-compose.example.yml")
+CANONICAL_NPM_REGISTRY = "https://registry.npmjs.org/"
 
 
 def load_compose_example() -> dict[str, Any]:
@@ -240,3 +242,26 @@ def test_web_package_declares_auditable_dependency_scripts() -> None:
     assert "@vitejs/plugin-react" in dev_dependencies
     assert "typescript" in dev_dependencies
     assert "vite" in dev_dependencies
+
+
+def test_web_package_lock_uses_canonical_npm_registry_tarball_urls() -> None:
+    package_lock = json.loads(Path("web/package-lock.json").read_text(encoding="utf-8"))
+
+    npmmirror_urls: list[str] = []
+    non_canonical_registry_urls: list[str] = []
+    for package_name, package_entry in package_lock["packages"].items():
+        resolved = package_entry.get("resolved")
+        if not isinstance(resolved, str):
+            continue
+
+        if "registry.npmmirror.com" in resolved:
+            npmmirror_urls.append(f"{package_name}: {resolved}")
+
+        parsed_resolved = urlparse(resolved)
+        if parsed_resolved.netloc.startswith("registry.") and not resolved.startswith(
+            CANONICAL_NPM_REGISTRY
+        ):
+            non_canonical_registry_urls.append(f"{package_name}: {resolved}")
+
+    assert npmmirror_urls == []
+    assert non_canonical_registry_urls == []
