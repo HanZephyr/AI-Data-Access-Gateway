@@ -2,7 +2,7 @@ from typing import Any, cast
 
 from pytest import MonkeyPatch
 
-from adg.connectors import relational
+from adg.connectors import relational, runtime_engine_cache
 from adg.connectors.relational import RelationalConnector
 
 
@@ -39,6 +39,8 @@ class FakeConnection:
         return None
 
     def exec_driver_sql(self, sql: str) -> FakeResult:
+        if sql == "select 1":
+            return FakeResult(["1"])
         assert "pg_database" in sql
         return FakeResult(["analytics", "warehouse"])
 
@@ -102,9 +104,13 @@ class FakeDmlConnection:
 class FakeDmlEngine:
     def __init__(self) -> None:
         self.connection = FakeDmlConnection()
+        self.disposed = False
 
     def begin(self) -> FakeDmlConnection:
         return self.connection
+
+    def dispose(self) -> None:
+        self.disposed = True
 
 
 def test_relational_scan_metadata_discovers_all_accessible_databases_when_database_is_blank(
@@ -139,7 +145,7 @@ def test_relational_execute_query_returns_affected_rows_for_non_row_statements(
 ) -> None:
     fake_engine = FakeDmlEngine()
 
-    monkeypatch.setattr(relational, "create_engine", lambda url: fake_engine)
+    monkeypatch.setattr(runtime_engine_cache, "get_engine", lambda connector_type, url: fake_engine)
     monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
 
     result = FakePostgresConnector().execute_query(
@@ -153,3 +159,65 @@ def test_relational_execute_query_returns_affected_rows_for_non_row_statements(
     ]
     assert result.columns == [{"name": "affected_rows", "data_type": "integer"}]
     assert result.rows == [{"affected_rows": 3}]
+
+
+def test_relational_execute_query_reuses_cached_engine_for_same_config(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    fake_engine = FakeDmlEngine()
+    created_urls: list[object] = []
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeDmlEngine:
+        created_urls.append(url)
+        return fake_engine
+
+    runtime_engine_cache.dispose_all()
+    monkeypatch.setattr(runtime_engine_cache, "create_engine", fake_create_engine)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    try:
+        connector = FakePostgresConnector()
+        config: dict[str, object] = {
+            "host": "db.internal",
+            "username": "alice",
+            "password": "secret",
+            "database": "warehouse",
+        }
+        connector.execute_query(config, "update public.customers set name = 'A'", 100)
+        connector.execute_query(config, "update public.customers set name = 'B'", 100)
+    finally:
+        runtime_engine_cache.dispose_all()
+
+    assert len(created_urls) == 1
+    assert fake_engine.connection.statements == [
+        "update public.customers set name = 'A'",
+        "update public.customers set name = 'B'",
+    ]
+
+
+def test_relational_test_connection_and_scan_metadata_use_one_shot_engines(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    created_databases: list[str | None] = []
+
+    def fail_if_runtime_cache_is_used(connector_type: str, url: object) -> object:
+        raise AssertionError("runtime cache must not be used")
+
+    def fake_create_engine(url: object) -> FakeEngine:
+        database = getattr(url, "database", None)
+        created_databases.append(database)
+        return FakeEngine(database)
+
+    def fake_inspect(connection: FakeConnection) -> FakeInspector:
+        return FakeInspector(connection)
+
+    monkeypatch.setattr(runtime_engine_cache, "get_engine", fail_if_runtime_cache_is_used)
+    monkeypatch.setattr(relational, "create_engine", fake_create_engine)
+    monkeypatch.setattr(relational, "inspect", fake_inspect)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    connector = FakePostgresConnector()
+    connector.test_connection({"host": "db.internal", "database": "warehouse"})
+    connector.scan_metadata({"host": "db.internal"})
+
+    assert created_databases == ["warehouse", None, "analytics", "warehouse"]

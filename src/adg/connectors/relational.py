@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from sqlalchemy import URL, create_engine, inspect, text
 from sqlalchemy.engine import Connection
 
+from adg.connectors import runtime_engine_cache
 from adg.connectors.base import MetadataColumn, MetadataSnapshot, QueryResult
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
 
@@ -155,7 +156,7 @@ class RelationalConnector:
 
         self._require_dependency()
         try:
-            engine = create_engine(self._build_url(config))
+            engine = runtime_engine_cache.get_engine(self.connector_type, self._build_url(config))
             with engine.begin() as connection:
                 result = connection.execute(text(sql))
                 if result.returns_rows:

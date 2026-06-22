@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     backend_host_port: int | None = Field(default=None, ge=1, le=65535)
     sql_execution_mode: Literal["read_only", "dml", "schema", "admin"] = "read_only"
     sql_strict_validation: bool = True
+    runtime_datasource_pool_cache_size: int = Field(default=32, ge=1)
+    runtime_datasource_pool_idle_ttl_seconds: int = Field(default=300, gt=0)
+    runtime_datasource_pool_size: int = Field(default=5, ge=1)
+    runtime_datasource_pool_max_overflow: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

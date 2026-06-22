@@ -14,6 +14,10 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.backend_host_port is None
     assert settings.sql_execution_mode == "read_only"
     assert settings.sql_strict_validation is True
+    assert settings.runtime_datasource_pool_cache_size == 32
+    assert settings.runtime_datasource_pool_idle_ttl_seconds == 300
+    assert settings.runtime_datasource_pool_size == 5
+    assert settings.runtime_datasource_pool_max_overflow == 0
 
 
 def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> None:
@@ -24,6 +28,10 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_BACKEND_HOST_PORT", "8001")
     monkeypatch.setenv("ADG_SQL_EXECUTION_MODE", "dml")
     monkeypatch.setenv("ADG_SQL_STRICT_VALIDATION", "false")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE", "8")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS", "60")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_SIZE", "3")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW", "2")
 
     settings = Settings()
 
@@ -34,6 +42,10 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.backend_host_port == 8001
     assert settings.sql_execution_mode == "dml"
     assert settings.sql_strict_validation is False
+    assert settings.runtime_datasource_pool_cache_size == 8
+    assert settings.runtime_datasource_pool_idle_ttl_seconds == 60
+    assert settings.runtime_datasource_pool_size == 3
+    assert settings.runtime_datasource_pool_max_overflow == 2
 
 
 def test_settings_reject_default_secret_key_in_production(monkeypatch: MonkeyPatch) -> None:
@@ -52,4 +64,15 @@ def test_settings_require_credential_encryption_key_in_production(
     monkeypatch.delenv("ADG_CREDENTIAL_ENCRYPTION_KEY", raising=False)
 
     with pytest.raises(ValueError, match="ADG_CREDENTIAL_ENCRYPTION_KEY"):
+        Settings()
+
+
+def test_settings_reject_invalid_runtime_pool_values(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE", "-1")
+    with pytest.raises(ValueError, match="runtime_datasource_pool_cache_size"):
+        Settings()
+
+    monkeypatch.delenv("ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE")
+    monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS", "0")
+    with pytest.raises(ValueError, match="runtime_datasource_pool_idle_ttl_seconds"):
         Settings()

@@ -38,6 +38,25 @@ def test_backend_compose_allows_configurable_internal_port() -> None:
     assert "--port ${ADG_BACKEND_PORT:-8000}" in backend["command"]
 
 
+def test_backend_compose_passes_runtime_datasource_pool_settings() -> None:
+    compose = load_compose_example()
+
+    environment = compose["services"]["backend"]["environment"]
+
+    assert environment["ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE"] == (
+        "${ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE:-32}"
+    )
+    assert environment["ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS"] == (
+        "${ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS:-300}"
+    )
+    assert environment["ADG_RUNTIME_DATASOURCE_POOL_SIZE"] == (
+        "${ADG_RUNTIME_DATASOURCE_POOL_SIZE:-5}"
+    )
+    assert environment["ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW"] == (
+        "${ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW:-0}"
+    )
+
+
 def test_backend_dockerfile_supports_configurable_runtime_port() -> None:
     dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
 

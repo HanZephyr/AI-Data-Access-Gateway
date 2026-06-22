@@ -9,6 +9,7 @@ from adg.admin_api.console import router as admin_console_router
 from adg.admin_api.datasources import router as admin_datasource_router
 from adg.admin_api.system import router as admin_system_router
 from adg.app.settings import get_settings
+from adg.connectors import runtime_engine_cache
 from adg.control_plane.db import SessionLocal
 from adg.control_plane.db import get_session as get_db_session
 from adg.internal_api.decrypt import router as internal_decrypt_router
@@ -26,7 +27,10 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
         async with runtime_mcp_server.session_manager.run():
-            yield
+            try:
+                yield
+            finally:
+                runtime_engine_cache.dispose_all()
 
     app = FastAPI(title=settings.service_name, lifespan=lifespan)
     app.state.session_factory = factory
