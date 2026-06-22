@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         "/admin": backendTarget,
+        "/api/tools": backendTarget,
         "/mcp": backendTarget,
         "/runtime": backendTarget
       }

@@ -378,7 +378,7 @@ const translations = {
     "mcp.summaryTitle": "Remote MCP endpoint",
     "mcp.summaryDescription": "Connect external MCP clients with each user's unique runtime-scoped API key. ADG derives runtime identity from the user bound to that key.",
     "mcp.serverUrl": "MCP server URL",
-    "mcp.toolUrl": "Legacy HTTP facade",
+    "mcp.toolUrl": "HTTP tool API",
     "mcp.transport": "Transport",
     "mcp.transportValue": "Streamable HTTP",
     "mcp.authMode": "Authentication",
