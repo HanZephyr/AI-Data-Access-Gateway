@@ -10,7 +10,7 @@ related_docs:
   - docs/superpowers/specs/2026-04-24-milestone-2-datasource-foundation-design.md
   - docs/superpowers/plans/2026-04-24-milestone-2-datasource-foundation.md
   - docs/superpowers/memory/modules/milestone-1-control-plane-foundation.md
-last_verified_commit: 910c534
+last_verified_commit: ec92fcd
 status: active
 ---
 
@@ -28,6 +28,7 @@ status: active
 - Admin datasource router: `src/adg/admin_api/datasources.py`
 - Connector registry: `src/adg/connectors/registry.py`
 - Relational connector base: `src/adg/connectors/relational.py`
+- Runtime datasource engine cache: `src/adg/connectors/runtime_engine_cache.py`
 - Datasource model: `src/adg/control_plane/models/datasource.py`
 - Resource snapshot models: `src/adg/control_plane/models/resource.py`
 - Datasource service: `src/adg/control_plane/services/datasource_service.py`
@@ -41,6 +42,7 @@ status: active
 - `MetadataScanService.replace_snapshot()` must delete old field rows before resource rows, then insert the new snapshot in one transaction to avoid stale metadata.
 - Connector resolution must fail with a stable domain error for unsupported connector types.
 - Thin relational adapters are not the query runtime; in Milestone 2 they only support connection testing and metadata scanning.
+- Admin connection tests and metadata scans intentionally create one-shot SQLAlchemy engines; the runtime datasource engine cache is reserved for MCP/runtime query execution.
 - PostgreSQL, MySQL, and Doris driver availability is optional and missing-driver failures must name the required install extra.
 - Relational snapshots use stable kinds: `database`, `schema`, `relational_table`, and `relational_view`.
 
@@ -54,5 +56,6 @@ status: active
 
 - Treating datasource `config_json` as encrypted storage. Milestone 2 persists plain JSON text and does not yet implement secret management.
 - Assuming connector adapters should already execute user queries. Query execution is still deferred to Milestone 3.
+- Reusing runtime pooled engines for admin test/scan flows. Those admin operations should stay isolated from the runtime query cache.
 - Appending snapshots without clearing old rows. This leaves stale schema artifacts behind and breaks later resource resolution.
 - Hard-coding connector-specific behavior in the admin router. Connector branching belongs in the registry and adapter layer.

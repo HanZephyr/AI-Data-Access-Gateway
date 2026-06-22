@@ -12,7 +12,7 @@ related_docs:
   - docs/superpowers/acceptance/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/plans/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/memory/modules/milestone-2-datasource-foundation.md
-last_verified_commit: f9b49a3
+last_verified_commit: ec92fcd
 status: active
 ---
 
@@ -35,6 +35,7 @@ status: active
 - Governance models: `src/adg/control_plane/models/governance.py`
 - Query connector contract: `src/adg/connectors/base.py`
 - Relational query execution: `src/adg/connectors/relational.py`
+- Runtime datasource engine cache: `src/adg/connectors/runtime_engine_cache.py`
 
 ## Invariants
 
@@ -46,6 +47,8 @@ status: active
 - SQL Guard accepts only one `SELECT`/`WITH` style read-only statement and rejects mutation, DDL, transaction, multi-statement, and non-whitelisted function use.
 - SQL resources extracted from SQL must map to known resource snapshots. Unknown or ambiguous SQL resources must be rejected before connector execution.
 - Declared `resource_ids` are an intent scope; actual SQL resource extraction remains authoritative.
+- Runtime relational queries reuse process-local SQLAlchemy engines through an LRU/idle-TTL cache only after policy and SQL Guard checks have passed.
+- Runtime datasource pool settings must be exposed through both application settings and Docker Compose backend environment variables; Compose `.env` values are not injected into containers unless explicitly mapped.
 
 ## Extension points
 
@@ -53,6 +56,7 @@ status: active
 - Milestone 4 masking should attach after policy checks and before rows are returned.
 - Milestone 5 web console can manage the governance tables added here.
 - Additional connector types can implement the shared `execute_query` contract without changing runtime tool dispatch.
+- Future timeout work should layer on top of runtime query execution without treating the engine cache as query cancellation or retry logic.
 
 ## Common pitfalls
 
@@ -60,3 +64,4 @@ status: active
 - Letting unknown SQL tables execute because the declared resource scope is non-empty. SQL Guard extraction must resolve to known resource snapshots.
 - Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.
 - Putting SQL safety checks in connectors. Connectors execute already-approved read-only SQL; SQL Guard and policy checks belong in runtime services.
+- Treating the runtime engine cache as a global deployment-wide pool. It is per process, so multi-worker deployments multiply the effective maximum database connections.
