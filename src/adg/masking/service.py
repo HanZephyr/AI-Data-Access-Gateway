@@ -1,4 +1,3 @@
-import base64
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
@@ -12,6 +11,13 @@ from adg.connectors.base import QueryResult
 from adg.control_plane.models.masking import DecryptContext, MaskingPolicy
 from adg.control_plane.models.resource import Resource
 from adg.policy.runtime import IdentityContext
+from adg.shared.crypto import (
+    decrypt_fernet_envelope,
+    decrypt_legacy_fernet_token,
+    encrypt_fernet_envelope,
+    envelope_from_json,
+    envelope_to_json,
+)
 from adg.shared.errors import ValidationError
 from adg.shared.ids import uuidv7
 
@@ -19,12 +25,20 @@ from adg.shared.ids import uuidv7
 class MaskingService:
     """Applies masking policies and manages reversible decrypt contexts."""
 
-    def __init__(self, session: Session, *, secret_key: str) -> None:
-        """Create a masking service using the configured service-level secret."""
+    def __init__(
+        self,
+        session: Session,
+        *,
+        secret_key: str,
+        masking_encryption_key: str | None = None,
+        kdf_iterations: int = 390_000,
+    ) -> None:
+        """Create a masking service using service-level encryption keys."""
 
         self._session = session
         self._secret_key = secret_key
-        self._service_fernet = Fernet(self._derive_fernet_key(secret_key))
+        self._masking_encryption_key = masking_encryption_key or secret_key
+        self._kdf_iterations = kdf_iterations
 
     def apply_to_result(
         self,
@@ -112,14 +126,19 @@ class MaskingService:
         temporary_key = Fernet.generate_key()
         temporary_fernet = Fernet(temporary_key)
         ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()
-        # The per-query key is encrypted with the service key before being stored.
         context = DecryptContext(
             id=context_id,
             query_id=query_id,
             user_id=user_id,
             datasource_id=datasource_id,
             resource_ids_json=json.dumps(resource_ids or [], separators=(",", ":")),
-            key_ciphertext=self._service_fernet.encrypt(temporary_key).decode(),
+            key_ciphertext=envelope_to_json(
+                encrypt_fernet_envelope(
+                    temporary_key,
+                    secret=self._masking_encryption_key,
+                    iterations=self._kdf_iterations,
+                )
+            ),
             allowed_fields_json=json.dumps([field_name], separators=(",", ":")),
             expires_at=expires_at or datetime.now(UTC) + timedelta(minutes=15),
         )
@@ -135,10 +154,7 @@ class MaskingService:
     ) -> list[str]:
         """Decrypt a batch of reversible ADG markers for the requesting user."""
 
-        return [
-            self._decrypt_marker(user_id=user_id, marker=value)
-            for value in values
-        ]
+        return [self._decrypt_marker(user_id=user_id, marker=value) for value in values]
 
     def get_decrypt_contexts(
         self,
@@ -157,7 +173,7 @@ class MaskingService:
         context = self._get_decrypt_context(user_id=user_id, marker=marker)
 
         try:
-            temporary_key = self._service_fernet.decrypt(context.key_ciphertext.encode())
+            temporary_key = self._decrypt_context_key(context.key_ciphertext)
             plaintext = Fernet(temporary_key).decrypt(ciphertext.encode()).decode()
         except InvalidToken as error:
             raise ValidationError("Decrypt value is invalid") from error
@@ -184,10 +200,20 @@ class MaskingService:
             raise ValidationError("Invalid reversible value marker")
         return parts[2], parts[3]
 
-    def _derive_fernet_key(self, secret_key: str) -> bytes:
-        """Derive a Fernet-compatible key from the configured application secret."""
+    def _decrypt_context_key(self, key_ciphertext: str) -> bytes:
+        """Decrypt a reversible masking context key from v2 or legacy storage."""
 
-        return base64.urlsafe_b64encode(hashlib.sha256(secret_key.encode()).digest())
+        envelope = envelope_from_json(key_ciphertext)
+        if envelope is not None:
+            return decrypt_fernet_envelope(
+                envelope,
+                secret=self._masking_encryption_key,
+                legacy_secrets=(self._secret_key,),
+            )
+        return decrypt_legacy_fernet_token(
+            key_ciphertext,
+            secrets=(self._masking_encryption_key, self._secret_key),
+        )
 
     def _normalize_time(self, value: datetime) -> datetime:
         """Treat stored naive timestamps as UTC for consistent TTL checks."""

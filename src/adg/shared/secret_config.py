@@ -1,20 +1,28 @@
-import base64
-import hashlib
-from typing import Final, Literal, TypedDict, TypeGuard
+from typing import Final, Literal, Required, TypedDict, TypeGuard
 
 from cryptography.fernet import Fernet
 
 from adg.app.settings import get_settings
+from adg.shared.crypto import (
+    FERNET_ENVELOPE_KIND,
+    decrypt_fernet_envelope,
+    derive_legacy_fernet_key,
+    encrypt_fernet_envelope,
+)
 
-SECRET_ENVELOPE_KIND: Final[str] = "encrypted_secret"
+SECRET_ENVELOPE_KIND: Final[str] = FERNET_ENVELOPE_KIND
 SECRET_PLACEHOLDER_KIND: Final[str] = "secret_placeholder"
 SECRET_FIELD_NAMES: Final[frozenset[str]] = frozenset({"password"})
 _OMIT = object()
 
 
-class EncryptedSecret(TypedDict):
-    kind: Literal["encrypted_secret"]
-    ciphertext: str
+class EncryptedSecret(TypedDict, total=False):
+    kind: Required[Literal["encrypted_secret"]]
+    ciphertext: Required[str]
+    version: int
+    kdf: str
+    salt: str
+    iterations: int
 
 
 class SecretPlaceholder(TypedDict):
@@ -25,14 +33,19 @@ class SecretPlaceholder(TypedDict):
 class SecretConfigService:
     """Protects persisted datasource secrets and reveals them only for runtime use."""
 
-    def __init__(self, *, credential_encryption_key: str) -> None:
-        self._fernet = Fernet(self._derive_fernet_key(credential_encryption_key))
+    def __init__(self, *, credential_encryption_key: str, kdf_iterations: int = 390_000) -> None:
+        self._credential_encryption_key = credential_encryption_key
+        self._kdf_iterations = kdf_iterations
 
     @classmethod
     def from_settings(cls) -> "SecretConfigService":
         """Build the service from the process-wide application settings."""
 
-        return cls(credential_encryption_key=get_settings().credential_encryption_key)
+        settings = get_settings()
+        return cls(
+            credential_encryption_key=settings.credential_encryption_key,
+            kdf_iterations=settings.secret_kdf_iterations,
+        )
 
     def protect_persisted_config(
         self,
@@ -97,23 +110,26 @@ class SecretConfigService:
         previous: object,
     ) -> object:
         if self._is_encrypted_secret(value):
-            return value
+            return self._reuse_previous_secret(value)
         if self._should_preserve_secret(value):
             return self._reuse_previous_secret(previous)
         return self._encrypt_secret(str(value))
 
     def _reuse_previous_secret(self, value: object) -> object:
         if self._is_encrypted_secret(value):
-            return value
+            if value.get("version") == 2:
+                return value
+            return self._encrypt_secret(str(self._reveal_secret_value(value)))
         if self._is_plain_secret(value):
             return self._encrypt_secret(str(value))
         return _OMIT
 
     def _reveal_secret_value(self, value: object) -> object:
         if self._is_encrypted_secret(value):
-            ciphertext = value.get("ciphertext")
-            if isinstance(ciphertext, str):
-                return self._fernet.decrypt(ciphertext.encode()).decode()
+            return decrypt_fernet_envelope(
+                value,
+                secret=self._credential_encryption_key,
+            ).decode()
         return value
 
     def _redact_secret_value(self, value: object) -> object:
@@ -125,14 +141,31 @@ class SecretConfigService:
         return value
 
     def _encrypt_secret(self, value: str) -> EncryptedSecret:
+        envelope = encrypt_fernet_envelope(
+            value.encode(),
+            secret=self._credential_encryption_key,
+            iterations=self._kdf_iterations,
+        )
+        version = envelope["version"]
+        iterations = envelope["iterations"]
+        if not isinstance(version, int) or not isinstance(iterations, int):
+            raise TypeError("Invalid encrypted secret envelope")
         return {
             "kind": "encrypted_secret",
-            "ciphertext": self._fernet.encrypt(value.encode()).decode(),
+            "ciphertext": str(envelope["ciphertext"]),
+            "version": version,
+            "kdf": str(envelope["kdf"]),
+            "salt": str(envelope["salt"]),
+            "iterations": iterations,
         }
 
-    def _derive_fernet_key(self, credential_encryption_key: str) -> bytes:
-        digest = hashlib.sha256(credential_encryption_key.encode()).digest()
-        return base64.urlsafe_b64encode(digest)
+    def _encrypt_secret_legacy_for_tests(self, value: str) -> EncryptedSecret:
+        return {
+            "kind": "encrypted_secret",
+            "ciphertext": Fernet(
+                derive_legacy_fernet_key(self._credential_encryption_key)
+            ).encrypt(value.encode()).decode(),
+        }
 
     def _should_preserve_secret(self, value: object) -> bool:
         if value is None:

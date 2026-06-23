@@ -1,3 +1,7 @@
+import inspect
+from collections.abc import Callable
+from typing import Any, cast
+
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -13,6 +17,7 @@ from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.directory import Role, User, UserRole
 from adg.control_plane.models.governance import ResourcePolicy
 from adg.control_plane.models.resource import Resource
+from adg.mcp_server import server as mcp_server_module
 from adg.mcp_server.server import runtime_mcp_server
 from adg.shared.security import hash_api_key
 
@@ -113,3 +118,35 @@ async def test_streamable_mcp_server_lists_tools_and_calls_runtime_tool() -> Non
                         result = await session.call_tool("list_datasources", {})
                         assert result.structuredContent is not None
                         assert result.structuredContent["datasources"][0]["id"] == "ds_1"
+
+
+@pytest.mark.anyio
+async def test_mcp_tool_handlers_are_async_and_run_runtime_work_in_threadpool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, tuple[Any, ...]]] = []
+
+    def fake_run_runtime_tool(
+        ctx: object,
+        tool_name: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {"tool_name": tool_name, "payload": payload, "ctx": ctx is fake_ctx}
+
+    async def fake_run_sync(
+        function: Callable[..., object],
+        *args: object,
+    ) -> dict[str, Any]:
+        calls.append((function.__name__, args))
+        return cast(dict[str, Any], function(*args))
+
+    fake_ctx = object()
+    monkeypatch.setattr(mcp_server_module, "_run_runtime_tool", fake_run_runtime_tool)
+    monkeypatch.setattr(mcp_server_module, "_run_in_threadpool", fake_run_sync)
+
+    assert inspect.iscoroutinefunction(mcp_server_module.list_datasources)
+
+    result = await mcp_server_module.list_datasources(fake_ctx)
+
+    assert result == {"tool_name": "list_datasources", "payload": {}, "ctx": True}
+    assert calls == [("fake_run_runtime_tool", (fake_ctx, "list_datasources", {}))]

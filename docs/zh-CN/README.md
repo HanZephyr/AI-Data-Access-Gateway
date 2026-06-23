@@ -8,7 +8,7 @@ AI Data Access Gateway 是一个面向 AI Agent 的开源安全数据访问网�
 
 项目由数据安全访问层和管理控制台组成。
 
-运行时数据访问层通过 SQL Guard、资源策略和字段策略限制查询，只允许受控的只读路径。资源策略可以作用于数据源、数据库、Schema、表或视图、标签或全局范围；字段策略与脱敏策略仍保持字段级控制。面向 AI Agent 的主入口是 FastMCP Streamable HTTP `/mcp` 端点；`POST /api/tools/{tool_name}` 是面向传统服务集成的补充普通 HTTP 工具接口，不是 MCP 传输入口。连接器依赖或执行失败会返回结构化的 `status: "error"` 响应，并包含 `error.type` 与 `error.message`；权限策略和 SQL Guard 拒绝仍返回 `status: "rejected"`。
+运行时数据访问层通过 SQL Guard、资源策略和字段策略限制查询，只允许受控的只读路径。资源策略可以作用于数据源、数据库、Schema、表或视图、标签或全局范围；字段策略与脱敏策略仍保持字段级控制。面向 AI Agent 的主入口是 FastMCP Streamable HTTP `/mcp` 端点；`POST /api/tools/{tool_name}` 是面向传统服务集成的补充普通 HTTP 工具接口，不是 MCP 传输入口。连接器依赖或执行失败会返回结构化的 `status: "error"` 响应，并包含稳定的 `error.type`、脱敏后的 `error.message` 与用于日志关联的 `query_id`；原始连接器、驱动、主机和 SQLAlchemy 异常文本不会进入运行时响应或审计 metadata。权限策略和 SQL Guard 拒绝仍返回 `status: "rejected"`。
 
 管理控制台为单管理员信任模型服务，覆盖数据源维护、资源治理与审计查看等操作，负责数据源登记、目录身份映射、资源元数据、字段策略、脱敏配置与 API Key 管理、企业组织架构管理。
 
@@ -40,6 +40,7 @@ $env:ADG_ENV="production"
 $env:ADG_CONTROL_PLANE_DATABASE_URL="sqlite:///./data/adg-control-plane.db"
 $env:ADG_SECRET_KEY="<generate-a-long-random-secret>"
 $env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
+$env:ADG_MASKING_ENCRYPTION_KEY="<generate-a-third-long-random-secret>"
 uv run --no-dev --extra all alembic upgrade head
 uv run --no-dev --extra all init-admin --database-url sqlite:///./data/adg-control-plane.db
 uv run --no-dev --extra all uvicorn adg.app.main:create_app --factory --host 0.0.0.0 --port 8000
@@ -63,11 +64,12 @@ npm run build
 Copy-Item docker-compose.example.yml docker-compose.yml
 $env:ADG_SECRET_KEY="<generate-a-long-random-secret>"
 $env:ADG_CREDENTIAL_ENCRYPTION_KEY="<generate-a-second-long-random-secret>"
+$env:ADG_MASKING_ENCRYPTION_KEY="<generate-a-third-long-random-secret>"
 docker compose up --build
 docker compose exec backend init-admin
 ```
 
-`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用包镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL` 和/或 `NPM_REGISTRY_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple` 和 `https://registry.npmjs.org/`。Compose 方案会启动生产环境的后端与静态前端容器，其中后端 API 与 MCP 接口默认暴露在 `http://127.0.0.1:8000`，AI Agent 需要使用不同宿主机端口时可在 `.env` 中设置 `ADG_BACKEND_HOST_PORT`。管理控制台展示 MCP 接入地址时会使用 `ADG_BACKEND_HOST_PORT`，并且只在端口为 `80` 或 `443` 时省略端口号。Web 控制台默认暴露在 `http://127.0.0.1:8080`；如果该宿主机端口已被占用，可设置 `ADG_WEB_PORT`。只有需要修改后端容器内部监听端口时，才需要设置 `ADG_BACKEND_PORT`。SQL Guard 分为执行模式和严格校验两层：`ADG_SQL_EXECUTION_MODE` 默认是 `read_only`，可设置为 `dml`、`schema` 或 `admin` 以放开更高风险的语句类别；`ADG_SQL_STRICT_VALIDATION` 默认是 `true`，用于控制函数与投影等严格限制。运行时数据源查询会通过进程内 LRU/空闲 TTL 缓存复用 SQLAlchemy Engine，可使用 `ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE`（默认 `32`）、`ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS`（默认 `300`）、`ADG_RUNTIME_DATASOURCE_POOL_SIZE`（默认 `5`）和 `ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW`（默认 `0`）调整。运行时查询连接还会设置 DBAPI 超时：`ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS`（默认 `10`）、`ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS`（默认 `120`，MySQL/Doris）和 `ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS`（默认 `120`，MySQL/Doris）。
+`docker-compose.example.yml` 是纳入版本控制的模板文件。请先复制为 `docker-compose.yml`，再在复制出来的文件里调整端口、卷挂载或环境相关配置。如需使用包镜像源，请在 `.env` 中设置 `PYPI_INDEX_URL` 和/或 `NPM_REGISTRY_URL`；如果未设置，Docker 构建会使用 `https://pypi.org/simple` 和 `https://registry.npmjs.org/`。Compose 方案会启动生产环境的后端与静态前端容器，其中后端 API 与 MCP 接口默认暴露在 `http://127.0.0.1:8000`，AI Agent 需要使用不同宿主机端口时可在 `.env` 中设置 `ADG_BACKEND_HOST_PORT`。管理控制台展示 MCP 接入地址时会使用 `ADG_BACKEND_HOST_PORT`，并且只在端口为 `80` 或 `443` 时省略端口号。Web 控制台默认暴露在 `http://127.0.0.1:8080`；如果该宿主机端口已被占用，可设置 `ADG_WEB_PORT`。只有需要修改后端容器内部监听端口时，才需要设置 `ADG_BACKEND_PORT`。SQL Guard 分为执行模式和严格校验两层：`ADG_SQL_EXECUTION_MODE` 默认是 `read_only`，可设置为 `dml`、`schema` 或 `admin` 以放开更高风险的语句类别；`ADG_SQL_STRICT_VALIDATION` 默认是 `true`，用于控制函数与投影等严格限制。管理端资源、资源树和审计列表接口返回包含 `items`、`total`、`limit` 和 `offset` 的分页对象；可用 `ADG_ADMIN_PAGE_DEFAULT_LIMIT`（默认 `50`）和 `ADG_ADMIN_PAGE_MAX_LIMIT`（默认 `500`）调整默认分页。API Key 认证失败限流默认启用并使用进程内内存计数；可通过 `ADG_AUTH_RATE_LIMIT_ENABLED`、`ADG_AUTH_RATE_LIMIT_STORAGE`、`ADG_AUTH_RATE_LIMIT_WINDOW_SECONDS`、`ADG_AUTH_RATE_LIMIT_MAX_FAILURES` 和 `ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS` 配置。多进程共享计数可设置 `ADG_AUTH_RATE_LIMIT_STORAGE=redis` 和 `ADG_AUTH_RATE_LIMIT_REDIS_URL`，并安装可选 `redis` extra。运行时数据源查询会通过进程内 LRU/空闲 TTL 缓存复用 SQLAlchemy Engine，可使用 `ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE`（默认 `32`）、`ADG_RUNTIME_DATASOURCE_POOL_IDLE_TTL_SECONDS`（默认 `300`）、`ADG_RUNTIME_DATASOURCE_POOL_SIZE`（默认 `5`）和 `ADG_RUNTIME_DATASOURCE_POOL_MAX_OVERFLOW`（默认 `0`）调整。运行时查询、数据源连接测试和元数据扫描连接都会设置 DBAPI 超时：`ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS`（默认 `10`）、`ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS`（默认 `120`，MySQL/Doris）和 `ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS`（默认 `120`，MySQL/Doris）。数据源凭据和 reversible 脱敏上下文使用版本化 Fernet envelope，并通过 PBKDF2-HMAC-SHA256 派生密钥；可用 `ADG_SECRET_KDF_ITERATIONS`（默认 `390000`）调整迭代次数。生产环境必须将 `ADG_SECRET_KEY`、`ADG_CREDENTIAL_ENCRYPTION_KEY` 和 `ADG_MASKING_ENCRYPTION_KEY` 设置为三个互不相同的长随机值。未显式指定 database 进行元数据扫描时，ADG 最多扫描 `ADG_METADATA_SCAN_MAX_DATABASES` 个数据库（默认 `25`）。连接器网络边界会在连接前拒绝 loopback、link-local metadata IP、multicast 和 unspecified 地址，同时允许常见 RFC1918 私有数据库地址；如需例外，可用 `ADG_DATASOURCE_NETWORK_ALLOWLIST` 配置逗号分隔的 host、IP 或 CIDR allowlist。
 
 ## 贡献者验证命令
 

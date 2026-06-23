@@ -172,7 +172,10 @@ def test_datasource(
     except NotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except (ConnectorDependencyError, ConnectorOperationError) as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_connector_error_detail(error),
+        ) from error
     return {"status": "ok"}
 
 
@@ -194,7 +197,10 @@ def scan_datasource(
     except NotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except (ConnectorDependencyError, ConnectorOperationError) as error:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_connector_error_detail(error),
+        ) from error
     session.commit()
     return {"status": "ok", **counts}
 
@@ -231,3 +237,8 @@ def _serialize_tag(tag: Tag) -> dict[str, Any]:
         "category": tag.category,
         "description": tag.description,
     }
+
+def _connector_error_detail(error: ConnectorDependencyError | ConnectorOperationError) -> str:
+    if isinstance(error, ConnectorDependencyError):
+        return "Datasource connector dependency is missing. Install the required optional extra."
+    return "Datasource connector operation failed. Check datasource connectivity and server logs."

@@ -53,7 +53,11 @@ class FakeConnector:
 
 class FailingOperationConnector(FakeConnector):
     def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
-        raise ConnectorOperationError("Lost connection to MySQL server during query")
+        raise ConnectorOperationError(
+            "OperationalError: could not connect to "
+            "postgresql+psycopg://alice@10.0.0.9/private; "
+            "Lost connection to MySQL server during query"
+        )
 
 
 class FailingDependencyConnector(FakeConnector):
@@ -63,6 +67,8 @@ class FailingDependencyConnector(FakeConnector):
 
 class RuntimeSettingsStub:
     secret_key = "unit-test-secret-key"
+    masking_encryption_key = "unit-test-masking-key"
+    secret_kdf_iterations = 1
     sql_execution_mode = "read_only"
     sql_strict_validation = False
 
@@ -321,6 +327,33 @@ def test_runtime_discovery_hides_disabled_resources_and_fields(
     assert disabled_description == {"status": "rejected", "reason": "resource_disabled"}
 
 
+def test_runtime_discovery_hides_resources_under_disabled_parent(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    database = add_resource(
+        db_session,
+        resource_id="res_database",
+        path="warehouse",
+        kind="database",
+        status="disabled",
+    )
+    table = add_resource(
+        db_session,
+        resource_id="res_customers",
+        path="warehouse.public.customers",
+        parent_id=database.id,
+    )
+    allow_resource_read(db_session, table.id)
+
+    listed = runtime(db_session).list_resources(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+    )
+
+    assert listed["resources"] == []
+
 def test_database_policy_makes_child_tables_discoverable(db_session: Session) -> None:
     add_datasource(db_session)
     database = add_resource(
@@ -481,14 +514,22 @@ def test_execute_query_returns_structured_error_when_connector_fails(
     assert "masking" not in response
     assert response["error"] == {
         "type": "connector_operation_error",
-        "message": "Lost connection to MySQL server during query",
+        "message": "Datasource query execution failed. Reference query_id for details.",
     }
+    assert "10.0.0.9" not in str(response)
+    assert "postgresql+psycopg" not in str(response)
+    assert "OperationalError" not in str(response)
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "error"
     assert event.reason == "connector_operation_error"
     assert event.query_id == response["query_id"]
     assert event.audit_metadata["error_type"] == "connector_operation_error"
+    assert event.audit_metadata["query_id"] == response["query_id"]
+    assert "error_message" not in event.audit_metadata
+    assert "10.0.0.9" not in str(event.audit_metadata)
+    assert "postgresql+psycopg" not in str(event.audit_metadata)
+    assert "OperationalError" not in str(event.audit_metadata)
 
 
 def test_execute_query_returns_structured_error_when_connector_dependency_is_missing(
@@ -515,8 +556,9 @@ def test_execute_query_returns_structured_error_when_connector_dependency_is_mis
     assert "rows" not in response
     assert response["error"] == {
         "type": "connector_dependency_error",
-        "message": "Connector 'postgres' requires optional extra 'postgres'",
+        "message": "Datasource connector dependency is unavailable. Contact an administrator.",
     }
+    assert "optional extra" not in str(response)
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.decision == "error"
     assert event.reason == "connector_dependency_error"
@@ -610,6 +652,68 @@ def test_execute_query_rejects_disabled_field_and_skips_connector(
     assert response["reason"] == "field_disabled:email"
     assert FakeConnector.last_sql is None
 
+
+def test_list_resources_checks_resource_policy_and_tags_in_one_batch(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    public_tag = Tag(id="tag_public", name="public")
+    db_session.add(public_tag)
+    resources = [
+        add_resource(
+            db_session,
+            resource_id=f"res_customers_{index}",
+            path=f"warehouse.public.customers_{index}",
+        )
+        for index in range(3)
+    ]
+    db_session.add_all(
+        [ResourceTag(tag_id=public_tag.id, resource_id=resource.id) for resource in resources]
+    )
+    db_session.add(
+        ResourcePolicy(
+            subject_type="role",
+            subject_id="analyst",
+            effect="allow",
+            action="read",
+            tag_id=public_tag.id,
+            status="active",
+        )
+    )
+    engine = cast(Engine, db_session.get_bind())
+    resource_policy_select_count = 0
+    resource_tag_select_count = 0
+
+    def count_resource_access_selects(
+        conn: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        nonlocal resource_policy_select_count, resource_tag_select_count
+        lowered = statement.lower()
+        if "from resource_policies" in lowered:
+            resource_policy_select_count += 1
+        if "from resource_tags" in lowered:
+            resource_tag_select_count += 1
+
+    event.listen(engine, "before_cursor_execute", count_resource_access_selects)
+    try:
+        response = runtime(db_session).list_resources(
+            identity=identity(),
+            api_key_id="key_1",
+            datasource_id="ds_1",
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count_resource_access_selects)
+
+    assert [resource["id"] for resource in response["resources"]] == [
+        resource.id for resource in resources
+    ]
+    assert resource_policy_select_count == 1
+    assert resource_tag_select_count == 1
 
 def test_execute_query_checks_field_policies_in_one_batch(db_session: Session) -> None:
     add_datasource(db_session)

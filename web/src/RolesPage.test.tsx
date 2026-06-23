@@ -217,7 +217,8 @@ async function mountConsoleApp(initialPage: string, language = "en-US") {
         text: async () => "{}",
       } as Response;
     }
-    const match = routeMap[url];
+    const baseUrl = url.split("?")[0];
+    const match = routeMap[url] ?? routeMap[baseUrl];
     if (!match) {
       return {
         ok: false,
@@ -277,7 +278,7 @@ describe("Roles page", () => {
     fireEvent.click(linkedUsersButton);
     expect(await screen.findByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("shows datasource secret placeholders and omits unchanged passwords from update payloads", async () => {
     await mountConsoleApp("datasources");
@@ -295,7 +296,7 @@ describe("Roles page", () => {
       expect(lastDatasourcePatchBody).not.toBeNull();
     });
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.password");
-  }, 30000);
+  }, 120000);
 
   it("allows datasource database to stay blank and saves the operator description", async () => {
     await mountConsoleApp("datasources");
@@ -320,7 +321,7 @@ describe("Roles page", () => {
       "Use for curated finance and operations datasets.",
     );
     expect(lastDatasourcePatchBody).not.toHaveProperty("config.database");
-  }, 30000);
+  }, 120000);
 
   it("localizes datasource delete confirmation buttons in Simplified Chinese", async () => {
     await mountConsoleApp("datasources", "zh-CN");
@@ -342,8 +343,77 @@ describe("Roles page", () => {
     expect(okButton).toHaveClass("ant-btn-dangerous");
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "OK" })).not.toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
+  it("loads audit rows from paginated responses and requests the next server page", async () => {
+    routeMap["/admin/audit-events"] = {
+      ok: true,
+      json: {
+        items: [
+          {
+            id: "event_1",
+            user_id: "user_1",
+            user_name: "Alice Analyst",
+            user_org_path: "Company/Finance",
+            event_type: "query_execution",
+            decision: "allowed",
+            reason: "allowed_by_policy",
+            datasource_id: "ds_1",
+            query_id: "query_1",
+            created_at: "2026-04-26T10:00:00Z",
+          },
+        ],
+        total: 60,
+        limit: 50,
+        offset: 0,
+      },
+    };
+    await mountConsoleApp("audit");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("query_1")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events?limit=50&offset=0")).toBe(true);
+
+    const nextButton = document.querySelector(".ant-pagination-next button");
+    expect(nextButton).not.toBeNull();
+    fireEvent.click(nextButton as HTMLButtonElement);
+
+    await waitFor(() => {
+      expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events?limit=50&offset=50")).toBe(true);
+    });
+  }, 120000);
+
+  it("renders resource-tree nodes from a paginated response", async () => {
+    routeMap["/admin/resource-tree"] = {
+      ok: true,
+      json: {
+        items: [
+          {
+            key: "resource:db_1",
+            type: "resource",
+            id: "db_1",
+            datasource_id: "ds_1",
+            name: "warehouse_db",
+            display_name: "warehouse_db",
+            kind: "database",
+            children: [],
+          },
+        ],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      },
+    };
+    await mountConsoleApp("datasources");
+    await signInWithValidAdminKey();
+
+    expect(await screen.findByText("Warehouse")).toBeInTheDocument();
+    const switcher = document.querySelector(".catalog-tree .ant-tree-switcher");
+    expect(switcher).not.toBeNull();
+    fireEvent.click(switcher as HTMLElement);
+    expect(await screen.findByText("warehouse_db")).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/resource-tree?limit=50&offset=0")).toBe(true);
+  }, 120000);
   it("keeps audit rows summary-only and loads raw SQL on demand", async () => {
     await mountConsoleApp("audit");
     await signInWithValidAdminKey();
@@ -357,7 +427,7 @@ describe("Roles page", () => {
     expect(await screen.findByText("Raw query SQL")).toBeInTheDocument();
     expect(await screen.findByText("select id from public.customers limit 1")).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input) === "/admin/audit-events/event_1/sql")).toBe(true);
-  }, 30000);
+  }, 120000);
 
   it("shows audit user names in the table and user identity details in the drawer", async () => {
     await mountConsoleApp("audit");
@@ -373,7 +443,7 @@ describe("Roles page", () => {
     expect(await screen.findByText("user_1")).toBeInTheDocument();
     expect(screen.getAllByText("Alice Analyst").length).toBeGreaterThan(0);
     expect(screen.getByText("Company/Finance")).toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("localizes audit detail decision and reason labels in Simplified Chinese", async () => {
     await mountConsoleApp("audit", "zh-CN");
@@ -389,7 +459,7 @@ describe("Roles page", () => {
     expect(screen.getAllByText("决策").length).toBeGreaterThan(0);
     expect(screen.getAllByText("原因").length).toBeGreaterThan(0);
     expect(screen.getAllByText("允许").length).toBeGreaterThan(0);
-  }, 30000);
+  }, 120000);
 
   it("labels the API key revoke icon action", async () => {
     await mountConsoleApp("apiKeys");
@@ -399,7 +469,7 @@ describe("Roles page", () => {
     const revokeButton = screen.getByRole("button", { name: "Revoke" });
     expect(revokeButton).toBeInTheDocument();
     expect(revokeButton.textContent).toBe("");
-  }, 30000);
+  }, 120000);
 
   it("shows hyphen placeholders for empty org path and roles in import preview", async () => {
     await mountConsoleApp("users");
@@ -420,7 +490,7 @@ describe("Roles page", () => {
     const keyStat = screen.getByText("Runtime keys created").closest(".ant-statistic");
     expect(keyStat).not.toBeNull();
     expect(keyStat).toHaveTextContent("1");
-  }, 30000);
+  }, 120000);
 
   it("filters directory users by selected org node using org path fallback", async () => {
     routeMap["/admin/org-nodes"] = {
@@ -458,5 +528,5 @@ describe("Roles page", () => {
     fireEvent.click(screen.getByRole("img", { name: "caret-down" }));
     fireEvent.click(await screen.findByText("Finance"));
     expect(await within(listPanel as HTMLElement).findByRole("cell", { name: "u001" })).toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 });

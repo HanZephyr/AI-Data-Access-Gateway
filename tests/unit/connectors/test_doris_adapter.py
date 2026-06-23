@@ -1,7 +1,9 @@
+import pytest
 from pytest import MonkeyPatch
 
 from adg.connectors.doris import adapter
 from adg.connectors.doris.adapter import DorisConnector
+from adg.connectors.errors import ConnectorOperationError
 
 
 class FakeResult:
@@ -122,7 +124,7 @@ class FakeEngine:
 def test_doris_scan_metadata_uses_raw_information_schema(monkeypatch: MonkeyPatch) -> None:
     connection = FakeConnection()
 
-    def fake_create_engine(url: object) -> FakeEngine:
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
         return FakeEngine(connection)
 
     monkeypatch.setattr(adapter, "create_engine", fake_create_engine, raising=False)
@@ -184,7 +186,7 @@ def test_doris_scan_metadata_discovers_all_accessible_databases_when_database_is
 ) -> None:
     connection = FakeConnection()
 
-    def fake_create_engine(url: object) -> FakeEngine:
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
         return FakeEngine(connection)
 
     monkeypatch.setattr(adapter, "create_engine", fake_create_engine, raising=False)
@@ -209,3 +211,69 @@ def test_doris_scan_metadata_discovers_all_accessible_databases_when_database_is
             ],
         }
     ]
+
+
+def test_doris_scan_metadata_passes_mysql_wire_timeouts(monkeypatch: MonkeyPatch) -> None:
+    connection = FakeConnection()
+    captured_kwargs: list[dict[str, object]] = []
+
+    class TimeoutSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 8
+        runtime_datasource_read_timeout_seconds = 31
+        runtime_datasource_write_timeout_seconds = 32
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        captured_kwargs.append(kwargs)
+        return FakeEngine(connection)
+
+    monkeypatch.setattr(adapter, "get_settings", lambda: TimeoutSettingsStub())
+    monkeypatch.setattr(adapter, "create_engine", fake_create_engine, raising=False)
+    monkeypatch.setattr(DorisConnector, "_require_dependency", lambda self: None)
+
+    DorisConnector().scan_metadata({"host": "db.internal", "database": "warehouse"})
+
+    assert captured_kwargs == [
+        {"connect_args": {"connect_timeout": 8, "read_timeout": 31, "write_timeout": 32}}
+    ]
+
+
+def test_doris_scan_metadata_blocks_dangerous_network_hosts(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    monkeypatch.setattr(adapter, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(DorisConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="datasource_network_blocked"):
+        DorisConnector().scan_metadata({"host": "169.254.169.254"})
+
+
+def test_doris_scan_metadata_rejects_database_discovery_over_limit(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = FakeConnection()
+
+    class ScanSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 1
+        datasource_network_allowlist = ""
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        return FakeEngine(connection)
+
+    monkeypatch.setattr(adapter, "get_settings", lambda: ScanSettingsStub())
+    monkeypatch.setattr(adapter, "create_engine", fake_create_engine, raising=False)
+    monkeypatch.setattr(DorisConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="metadata_scan_database_limit_exceeded"):
+        DorisConnector().scan_metadata({"host": "db.internal"})

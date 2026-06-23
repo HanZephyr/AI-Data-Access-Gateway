@@ -33,7 +33,13 @@ class GatewayRuntimeService:
         self._connector_registry = connector_registry or get_connector_registry()
         self._policy = RuntimePolicyService(session)
         self._audit = AuditService(session)
-        self._masking = MaskingService(session, secret_key=get_settings().secret_key)
+        settings = get_settings()
+        self._masking = MaskingService(
+            session,
+            secret_key=settings.secret_key,
+            masking_encryption_key=getattr(settings, "masking_encryption_key", settings.secret_key),
+            kdf_iterations=getattr(settings, "secret_kdf_iterations", 390_000),
+        )
 
     def list_datasources(
         self,
@@ -425,7 +431,6 @@ class GatewayRuntimeService:
                 query_id=query_id,
                 sql_text=guard_result.normalized_sql,
                 error_type=error_type,
-                error_message=str(error),
                 warnings=guard_result.warnings,
                 accessed_fields=guard_result.accessed_fields,
             )
@@ -435,7 +440,7 @@ class GatewayRuntimeService:
                 "warnings": guard_result.warnings,
                 "error": {
                     "type": error_type,
-                    "message": str(error),
+                    "message": self._connector_error_message(error),
                 },
             }
         result = self._enrich_result_column_types(result=result, resources=actual_resources)
@@ -482,6 +487,16 @@ class GatewayRuntimeService:
             return "connector_dependency_error"
         return "connector_operation_error"
 
+    def _connector_error_message(
+        self,
+        error: ConnectorDependencyError | ConnectorOperationError,
+    ) -> str:
+        """Return a safe client-facing connector error message."""
+
+        if isinstance(error, ConnectorDependencyError):
+            return "Datasource connector dependency is unavailable. Contact an administrator."
+        return "Datasource query execution failed. Reference query_id for details."
+
     def _visible_resources(
         self,
         *,
@@ -496,16 +511,20 @@ class GatewayRuntimeService:
         ]
         if datasource_id is not None:
             conditions.append(Resource.datasource_id == datasource_id)
-        resources = self._session.execute(select(Resource).where(*conditions)).scalars()
+        resources = list(self._session.execute(select(Resource).where(*conditions)).scalars())
+        disabled_reasons = self._disabled_resource_reasons(resources)
+        candidates = [
+            resource for resource in resources if disabled_reasons.get(resource.id) is None
+        ]
+        decisions = self._policy.check_resource_access_batch(
+            identity=identity,
+            resources=candidates,
+            action="read",
+        )
         return [
             resource
-            for resource in resources
-            if self._disabled_resource_reason(resource) is None
-            if self._policy.check_resource_access(
-                identity=identity,
-                resource=resource,
-                action="read",
-            ).allowed
+            for resource in candidates
+            if decisions.get(resource.id, None) is not None and decisions[resource.id].allowed
         ]
 
     def _resolve_guard_resources(
@@ -595,6 +614,42 @@ class GatewayRuntimeService:
             "query_language": resource.query_language,
         }
 
+    def _disabled_resource_reasons(self, resources: list[Resource]) -> dict[str, str | None]:
+        """Return disabled reasons for many resources after batched ancestor loading."""
+
+        resources_by_id = {resource.id: resource for resource in resources}
+        pending_parent_ids = {
+            resource.parent_id
+            for resource in resources
+            if resource.parent_id is not None and resource.parent_id not in resources_by_id
+        }
+        while pending_parent_ids:
+            parents = list(
+                self._session.execute(
+                    select(Resource).where(Resource.id.in_(sorted(pending_parent_ids)))
+                ).scalars()
+            )
+            if not parents:
+                break
+            pending_parent_ids = set()
+            for parent in parents:
+                resources_by_id[parent.id] = parent
+                if parent.parent_id is not None and parent.parent_id not in resources_by_id:
+                    pending_parent_ids.add(parent.parent_id)
+
+        reasons: dict[str, str | None] = {}
+        for resource in resources:
+            current: Resource | None = resource
+            seen_ids: set[str] = set()
+            reason = None
+            while current is not None and current.id not in seen_ids:
+                seen_ids.add(current.id)
+                if current.status != "active":
+                    reason = "resource_disabled"
+                    break
+                current = resources_by_id.get(current.parent_id) if current.parent_id else None
+            reasons[resource.id] = reason
+        return reasons
     def _disabled_resource_reason(self, resource: Resource) -> str | None:
         """Return a stable rejection reason when a resource or ancestor is disabled."""
 
@@ -761,7 +816,6 @@ class GatewayRuntimeService:
         query_id: str,
         sql_text: str,
         error_type: str,
-        error_message: str,
         warnings: list[str],
         accessed_fields: list[str],
     ) -> None:
@@ -781,7 +835,7 @@ class GatewayRuntimeService:
                 "warnings": warnings,
                 "accessed_fields": accessed_fields,
                 "error_type": error_type,
-                "error_message": error_message,
+                "query_id": query_id,
             },
         )
         self._session.flush()

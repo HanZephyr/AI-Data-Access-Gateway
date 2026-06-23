@@ -1,8 +1,11 @@
+import socket
 from typing import Any, cast
 
+import pytest
 from pytest import MonkeyPatch
 
 from adg.connectors import relational, runtime_engine_cache
+from adg.connectors.errors import ConnectorOperationError
 from adg.connectors.relational import RelationalConnector
 
 
@@ -125,7 +128,7 @@ def test_relational_scan_metadata_discovers_all_accessible_databases_when_databa
 ) -> None:
     created_databases: list[str | None] = []
 
-    def fake_create_engine(url: object) -> FakeEngine:
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
         database = getattr(url, "database", None)
         created_databases.append(database)
         return FakeEngine(database)
@@ -218,7 +221,7 @@ def test_relational_test_connection_and_scan_metadata_use_one_shot_engines(
     ) -> object:
         raise AssertionError("runtime cache must not be used")
 
-    def fake_create_engine(url: object) -> FakeEngine:
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
         database = getattr(url, "database", None)
         created_databases.append(database)
         return FakeEngine(database)
@@ -306,3 +309,203 @@ def test_relational_execute_query_passes_mysql_wire_timeouts(
             "write_timeout": 46,
         }
     ]
+
+
+def test_relational_test_connection_and_scan_metadata_pass_one_shot_timeouts(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured_kwargs: list[dict[str, object]] = []
+
+    class TimeoutSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 8
+        runtime_datasource_read_timeout_seconds = 31
+        runtime_datasource_write_timeout_seconds = 32
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        captured_kwargs.append(kwargs)
+        return FakeEngine(getattr(url, "database", None))
+
+    def fake_inspect(connection: FakeConnection) -> FakeInspector:
+        return FakeInspector(connection)
+
+    monkeypatch.setattr(relational, "get_settings", lambda: TimeoutSettingsStub())
+    monkeypatch.setattr(relational, "create_engine", fake_create_engine)
+    monkeypatch.setattr(relational, "inspect", fake_inspect)
+    monkeypatch.setattr(FakeMySqlConnector, "_require_dependency", lambda self: None)
+
+    connector = FakeMySqlConnector()
+    connector.test_connection({"host": "db.internal", "database": "warehouse"})
+    connector.scan_metadata({"host": "db.internal", "database": "warehouse"})
+
+    assert captured_kwargs == [
+        {"connect_args": {"connect_timeout": 8, "read_timeout": 31, "write_timeout": 32}},
+        {"connect_args": {"connect_timeout": 8, "read_timeout": 31, "write_timeout": 32}},
+    ]
+
+
+def test_relational_blocks_dangerous_network_hosts_before_connect(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    for host in ["127.0.0.1", "localhost"]:
+        with pytest.raises(ConnectorOperationError, match="datasource_network_blocked"):
+            FakePostgresConnector().test_connection({"host": host})
+
+
+def test_relational_blocks_dns_names_resolving_to_dangerous_addresses(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    def fake_getaddrinfo(
+        host: str,
+        port: object,
+        type: int = 0,
+    ) -> list[tuple[object, object, int, str, tuple[str, int]]]:
+        assert host == "metadata.google.internal"
+        assert port is None
+        assert type == socket.SOCK_STREAM
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                0,
+                "",
+                ("169.254.169.254", 0),
+            )
+        ]
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="datasource_network_blocked"):
+        FakePostgresConnector().test_connection({"host": "metadata.google.internal"})
+def test_relational_blocks_ipv4_mapped_metadata_addresses_before_connect(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    def fail_if_create_engine_is_called(url: object, **kwargs: object) -> object:
+        raise AssertionError("network boundary should block before engine creation")
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(relational, "create_engine", fail_if_create_engine_is_called)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="datasource_network_blocked"):
+        FakePostgresConnector().test_connection({"host": "::ffff:100.100.100.200"})
+
+
+def test_relational_uses_validated_ip_for_resolved_hostname_connections(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    created_hosts: list[str | None] = []
+
+    def fake_getaddrinfo(
+        host: str,
+        port: object,
+        type: int = 0,
+    ) -> list[tuple[object, object, int, str, tuple[str, int]]]:
+        assert host == "db.internal"
+        assert port is None
+        assert type == socket.SOCK_STREAM
+        return [
+            (
+                socket.AF_INET,
+                socket.SOCK_STREAM,
+                0,
+                "",
+                ("10.0.0.8", 0),
+            )
+        ]
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        created_hosts.append(getattr(url, "host", None))
+        return FakeEngine(getattr(url, "database", None))
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(relational, "create_engine", fake_create_engine)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    FakePostgresConnector().test_connection({"host": "db.internal", "database": "warehouse"})
+
+    assert created_hosts == ["10.0.0.8"]
+def test_relational_allows_explicitly_allowlisted_boundary_host(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = "127.0.0.1"
+
+    created_databases: list[str | None] = []
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        created_databases.append(getattr(url, "database", None))
+        return FakeEngine(getattr(url, "database", None))
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(relational, "create_engine", fake_create_engine)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    FakePostgresConnector().test_connection({"host": "127.0.0.1", "database": "warehouse"})
+
+    assert created_databases == ["warehouse"]
+
+
+def test_relational_scan_metadata_rejects_database_discovery_over_limit(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class ScanSettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 1
+        datasource_network_allowlist = ""
+
+    def fake_create_engine(url: object, **kwargs: object) -> FakeEngine:
+        return FakeEngine(getattr(url, "database", None))
+
+    monkeypatch.setattr(relational, "get_settings", lambda: ScanSettingsStub())
+    monkeypatch.setattr(relational, "create_engine", fake_create_engine)
+    monkeypatch.setattr(
+        FakePostgresConnector,
+        "_discover_database_names",
+        lambda self, connection: ["analytics", "warehouse"],
+    )
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="metadata_scan_database_limit_exceeded"):
+        FakePostgresConnector().scan_metadata({"host": "db.internal"})

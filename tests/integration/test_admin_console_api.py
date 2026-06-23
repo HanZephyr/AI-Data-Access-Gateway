@@ -17,7 +17,12 @@ from adg.control_plane.models.resource import Resource, ResourceField
 from adg.shared.security import hash_api_key
 
 
-def build_console_app(base_url: str = "http://testserver") -> TestClient:
+def build_console_app(
+    base_url: str = "http://testserver",
+    *,
+    extra_resource_count: int = 0,
+    audit_event_count: int = 1,
+) -> TestClient:
     engine = create_engine_from_url("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_factory = create_session_factory(engine)
@@ -93,18 +98,43 @@ def build_console_app(base_url: str = "http://testserver") -> TestClient:
                 metadata_json="{}",
             )
         )
-        AuditService(session).record_event(
-            user_id="user-1",
-            api_key_id="key_admin",
-            event_type="metadata_discovery",
-            decision="allowed",
-            datasource_id="ds_1",
-            resource_ids=[resource.id],
-            query_id=None,
-            sql_text="select id from public.customers limit 1",
-            reason=None,
-            metadata={"tool": "test"},
-        )
+        for index in range(extra_resource_count):
+            extra_resource = Resource(
+                id=f"res_extra_{index}",
+                datasource_id="ds_1",
+                kind="relational_table",
+                name=f"orders_{index}",
+                path=f"warehouse.public.orders_{index}",
+                display_name=f"orders_{index}",
+                query_language="sql",
+                metadata_json="{}",
+            )
+            session.add(extra_resource)
+            session.add(
+                ResourceField(
+                    id=f"field_extra_{index}",
+                    datasource_id="ds_1",
+                    resource_id=extra_resource.id,
+                    name="order_id",
+                    data_type="integer",
+                    nullable=False,
+                    ordinal_position=1,
+                    metadata_json="{}",
+                )
+            )
+        for index in range(audit_event_count):
+            AuditService(session).record_event(
+                user_id="user-1",
+                api_key_id="key_admin",
+                event_type="metadata_discovery",
+                decision="allowed",
+                datasource_id="ds_1",
+                resource_ids=[resource.id],
+                query_id=None,
+                sql_text="select id from public.customers limit 1",
+                reason=None,
+                metadata={"tool": "test", "index": index},
+            )
         session.commit()
 
     app = create_app()
@@ -121,14 +151,58 @@ def auth() -> dict[str, str]:
     return {"X-ADG-API-Key": "adg_admin"}
 
 
+def test_admin_resources_returns_paginated_object() -> None:
+    client = build_console_app(extra_resource_count=2)
+
+    response = client.get("/admin/resources?limit=1&offset=1", headers=auth())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["limit"] == 1
+    assert body["offset"] == 1
+    assert [item["id"] for item in body["items"]] == ["res_extra_0"]
+
+
+def test_admin_resource_tree_paginates_resource_nodes_and_fields_for_current_page() -> None:
+    client = build_console_app(extra_resource_count=2)
+
+    response = client.get("/admin/resource-tree?limit=1&offset=1", headers=auth())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["limit"] == 1
+    assert body["offset"] == 1
+    assert [item["id"] for item in body["items"]] == ["res_extra_0"]
+    assert body["items"][0]["children"][0]["type"] == "field"
+    assert body["items"][0]["children"][0]["resource_id"] == "res_extra_0"
+
+
+def test_admin_audit_events_returns_paginated_object() -> None:
+    client = build_console_app(audit_event_count=3)
+
+    response = client.get("/admin/audit-events?limit=2&offset=1", headers=auth())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["limit"] == 2
+    assert body["offset"] == 1
+    assert len(body["items"]) == 2
+    assert body["items"][0]["user_name"] == "Alice Analyst"
+    assert body["items"][0]["user_org_path"] == "Company/Finance"
+    assert "sql_text" not in body["items"][0]
+
+
 def test_admin_resource_and_tag_management() -> None:
     client = build_console_app()
 
     resources = client.get("/admin/resources", headers=auth())
     assert resources.status_code == 200
-    assert resources.json()[0]["id"] == "res_customers"
-    assert resources.json()[0]["parent_id"] is None
-    assert "tenant_id" not in resources.json()[0]
+    assert resources.json()["items"][0]["id"] == "res_customers"
+    assert resources.json()["items"][0]["parent_id"] is None
+    assert "tenant_id" not in resources.json()["items"][0]
 
     fields = client.get("/admin/resources/res_customers/fields", headers=auth())
     assert fields.status_code == 200
@@ -204,7 +278,7 @@ def test_admin_resource_and_tag_management() -> None:
 
     tree = client.get("/admin/resource-tree", headers=auth())
     assert tree.status_code == 200
-    table_node = tree.json()[0]
+    table_node = tree.json()["items"][0]
     assert table_node["kind"] == "relational_table"
     assert table_node["status"] == "disabled"
     assert table_node["description"] == "Stores registered customer account profiles."
@@ -217,7 +291,7 @@ def test_admin_resource_and_tag_management() -> None:
         }
     ]
     assert table_node["children"][0]["type"] == "field"
-    assert tree.json()[0]["children"][0]["status"] == "disabled"
+    assert tree.json()["items"][0]["children"][0]["status"] == "disabled"
 
     unbound = client.delete(
         f"/admin/resource-tags?resource_id=res_customers&tag_id={tag_id}",
@@ -688,17 +762,18 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
 
     audit = client.get("/admin/audit-events", headers=auth())
     assert audit.status_code == 200
-    assert audit.json()[0]["event_type"] == "metadata_discovery"
-    assert audit.json()[0]["user_id"] == "user-1"
-    assert audit.json()[0]["user_name"] == "Alice Analyst"
-    assert audit.json()[0]["user_org_path"] == "Company/Finance"
-    assert "tenant_id" not in audit.json()[0]
-    assert "sql_text" not in audit.json()[0]
+    assert audit.json()["items"][0]["event_type"] == "metadata_discovery"
+    assert audit.json()["items"][0]["user_id"] == "user-1"
+    assert audit.json()["items"][0]["user_name"] == "Alice Analyst"
+    assert audit.json()["items"][0]["user_org_path"] == "Company/Finance"
+    assert "tenant_id" not in audit.json()["items"][0]
+    assert "sql_text" not in audit.json()["items"][0]
 
-    audit_sql = client.get(f"/admin/audit-events/{audit.json()[0]['id']}/sql", headers=auth())
+    audit_event_id = audit.json()["items"][0]["id"]
+    audit_sql = client.get(f"/admin/audit-events/{audit_event_id}/sql", headers=auth())
     assert audit_sql.status_code == 200
     assert audit_sql.json() == {
-        "id": audit.json()[0]["id"],
+        "id": audit_event_id,
         "sql_text": "select id from public.customers limit 1",
     }
 
@@ -707,9 +782,9 @@ def test_admin_api_keys_audit_and_mcp_setup() -> None:
     assert any(
         event["event_type"] == "audit_sql_view"
         and event["api_key_id"] == "key_admin"
-        and event["metadata"] == {"target_event_id": audit.json()[0]["id"]}
+        and event["metadata"] == {"target_event_id": audit_event_id}
         and "sql_text" not in event
-        for event in audit_after_sql_view.json()
+        for event in audit_after_sql_view.json()["items"]
     )
 
     setup = client.get("/admin/mcp/setup", headers=auth())

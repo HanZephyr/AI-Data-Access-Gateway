@@ -1,10 +1,14 @@
+import base64
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from adg.connectors.base import QueryResult
-from adg.control_plane.models.masking import MaskingPolicy
+from adg.control_plane.models.masking import DecryptContext, MaskingPolicy
 from adg.control_plane.models.resource import Resource
 from adg.masking.service import MaskingService
 from adg.policy.runtime import IdentityContext
@@ -65,6 +69,66 @@ def test_reversible_masking_creates_marker_and_decrypts(db_session: Session) -> 
 
     assert marker.startswith("$adg_rev$")
     assert plaintext == ["alice@example.com"]
+
+
+def test_reversible_masking_wraps_context_key_with_masking_encryption_key(
+    db_session: Session,
+) -> None:
+    service = MaskingService(
+        db_session,
+        secret_key=SECRET,
+        masking_encryption_key="masking-key-for-tests",
+        kdf_iterations=1_200,
+    )
+
+    marker = service.mask_reversible_value(
+        user_id="user-1",
+        datasource_id="ds_1",
+        query_id="qry_1",
+        field_name="email",
+        value="alice@example.com",
+    )
+    context = db_session.query(DecryptContext).one()
+    envelope = json.loads(context.key_ciphertext)
+
+    assert envelope["kind"] == "encrypted_secret"
+    assert envelope["version"] == 2
+    assert envelope["kdf"] == "pbkdf2-hmac-sha256"
+    assert envelope["iterations"] == 1_200
+    assert service.decrypt_values(user_id="user-1", values=[marker]) == ["alice@example.com"]
+
+
+def test_reversible_decrypt_accepts_legacy_secret_key_wrapped_context(
+    db_session: Session,
+) -> None:
+    temporary_key = Fernet.generate_key()
+    ciphertext = Fernet(temporary_key).encrypt(b"legacy@example.com").decode()
+    legacy_service_key = base64.urlsafe_b64encode(hashlib.sha256(SECRET.encode()).digest())
+    db_session.add(
+        DecryptContext(
+            id="ctx_legacy",
+            query_id="qry_legacy",
+            user_id="user-1",
+            datasource_id="ds_1",
+            resource_ids_json="[]",
+            key_ciphertext=Fernet(legacy_service_key).encrypt(temporary_key).decode(),
+            allowed_fields_json='["email"]',
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+    )
+    db_session.flush()
+
+    plaintext = MaskingService(
+        db_session,
+        secret_key=SECRET,
+        masking_encryption_key="masking-key-for-tests",
+        kdf_iterations=1_200,
+    ).decrypt_values(
+        user_id="user-1",
+        values=[f"$adg_rev$ctx_legacy${ciphertext}"],
+    )
+
+    assert plaintext == ["legacy@example.com"]
 
 
 def test_decrypt_rejects_expired_contexts(db_session: Session) -> None:

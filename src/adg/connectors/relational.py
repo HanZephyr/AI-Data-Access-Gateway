@@ -1,4 +1,6 @@
 import importlib
+import ipaddress
+import socket
 from collections.abc import Sequence
 
 from sqlalchemy import URL, create_engine, inspect, text
@@ -8,6 +10,11 @@ from adg.app.settings import get_settings
 from adg.connectors import runtime_engine_cache
 from adg.connectors.base import MetadataColumn, MetadataSnapshot, QueryResult
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
+
+_METADATA_IPS = {
+    ipaddress.ip_address("169.254.169.254"),
+    ipaddress.ip_address("100.100.100.200"),
+}
 
 
 class RelationalConnector:
@@ -45,11 +52,17 @@ class RelationalConnector:
         """Open a connection and run a minimal query to validate connectivity."""
 
         self._require_dependency()
+        connection_config = self._validated_connection_config(config)
         try:
-            engine = create_engine(self._build_url(config))
+            engine = create_engine(
+                self._build_url(connection_config),
+                connect_args=self._one_shot_connect_args(),
+            )
             with engine.connect() as connection:
                 connection.exec_driver_sql("select 1")
         except ConnectorDependencyError:
+            raise
+        except ConnectorOperationError:
             raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
@@ -58,23 +71,38 @@ class RelationalConnector:
         """Inspect schemas, tables, views, and columns into the shared snapshot shape."""
 
         self._require_dependency()
-        configured_database = str(config.get("database", "")).strip()
+        connection_config = self._validated_connection_config(config)
+        configured_database = str(connection_config.get("database", "")).strip()
         try:
             if configured_database:
-                engine = create_engine(self._build_url(config))
+                engine = create_engine(
+                    self._build_url(connection_config),
+                    connect_args=self._one_shot_connect_args(),
+                )
                 with engine.connect() as connection:
                     databases = [self._scan_database(connection, configured_database)]
             else:
-                discovery_engine = create_engine(self._build_url(config))
+                discovery_engine = create_engine(
+                    self._build_url(connection_config),
+                    connect_args=self._one_shot_connect_args(),
+                )
                 with discovery_engine.connect() as connection:
                     database_names = self._discover_database_names(connection)
+                max_databases = get_settings().metadata_scan_max_databases
+                if len(database_names) > max_databases:
+                    raise ConnectorOperationError("metadata_scan_database_limit_exceeded")
                 databases = []
                 for database_name in database_names:
-                    database_config = {**config, "database": database_name}
-                    database_engine = create_engine(self._build_url(database_config))
+                    database_config = {**connection_config, "database": database_name}
+                    database_engine = create_engine(
+                        self._build_url(database_config),
+                        connect_args=self._one_shot_connect_args(),
+                    )
                     with database_engine.connect() as connection:
                         databases.append(self._scan_database(connection, database_name))
         except ConnectorDependencyError:
+            raise
+        except ConnectorOperationError:
             raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
@@ -156,10 +184,11 @@ class RelationalConnector:
         """Execute already-approved SQL and return normalized rows."""
 
         self._require_dependency()
+        connection_config = self._validated_connection_config(config)
         try:
             engine = runtime_engine_cache.get_engine(
                 self.connector_type,
-                self._build_url(config),
+                self._build_url(connection_config),
                 connect_args=self._runtime_connect_args(),
             )
             with engine.begin() as connection:
@@ -173,6 +202,8 @@ class RelationalConnector:
                     columns = [{"name": "affected_rows", "data_type": "integer"}]
                     rows = [{"affected_rows": result.rowcount}]
         except ConnectorDependencyError:
+            raise
+        except ConnectorOperationError:
             raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
@@ -190,6 +221,119 @@ class RelationalConnector:
             connect_args["read_timeout"] = settings.runtime_datasource_read_timeout_seconds
             connect_args["write_timeout"] = settings.runtime_datasource_write_timeout_seconds
         return connect_args
+
+    def _one_shot_connect_args(self) -> dict[str, object]:
+        """Return DBAPI timeout options for non-cached validation and scan engines."""
+
+        return self._runtime_connect_args()
+
+    def _validate_network_boundary(self, config: dict[str, object]) -> None:
+        """Reject datasource hosts that should never be contacted by connectors."""
+
+        self._validated_connection_config(config)
+
+    def _validated_connection_config(self, config: dict[str, object]) -> dict[str, object]:
+        """Return a connection config whose host has passed network boundary checks."""
+
+        host = str(config.get("host", "")).strip().strip("[]")
+        if not host:
+            return config
+        if self._host_is_allowlisted(host):
+            return config
+        if host.lower() in {"localhost", "localhost.localdomain"}:
+            raise ConnectorOperationError("datasource_network_blocked")
+
+        addresses = self._network_boundary_addresses(host)
+        for address in addresses:
+            effective_address = self._normalized_boundary_address(address)
+            if self._address_is_blocked(address) and not (
+                self._host_is_allowlisted(str(address))
+                or self._host_is_allowlisted(str(effective_address))
+            ):
+                raise ConnectorOperationError("datasource_network_blocked")
+
+        if addresses and not self._host_is_ip_literal(host):
+            resolved_config = dict(config)
+            resolved_config["host"] = str(self._normalized_boundary_address(addresses[0]))
+            return resolved_config
+        return config
+
+    def _network_boundary_addresses(
+        self,
+        host: str,
+    ) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+        """Return literal and DNS-resolved addresses for boundary checks."""
+
+        try:
+            return [ipaddress.ip_address(host)]
+        except ValueError:
+            pass
+
+        try:
+            resolved = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        except socket.gaierror:
+            return []
+
+        addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+        for result in resolved:
+            address_text = str(result[4][0])
+            try:
+                address = ipaddress.ip_address(address_text)
+            except ValueError:
+                continue
+            if address not in addresses:
+                addresses.append(address)
+        return addresses
+
+    def _address_is_blocked(
+        self,
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    ) -> bool:
+        """Return true for address classes connectors must not contact."""
+
+        effective_address = self._normalized_boundary_address(address)
+        return (
+            effective_address in _METADATA_IPS
+            or effective_address.is_loopback
+            or effective_address.is_link_local
+            or effective_address.is_multicast
+            or effective_address.is_unspecified
+        )
+
+    def _normalized_boundary_address(
+        self,
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+    ) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+        if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+            return address.ipv4_mapped
+        return address
+
+    def _host_is_ip_literal(self, host: str) -> bool:
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        return True
+
+    def _host_is_allowlisted(self, host: str) -> bool:
+        """Return true when settings explicitly permit an otherwise blocked host."""
+
+        entries = [
+            entry.strip()
+            for entry in getattr(get_settings(), "datasource_network_allowlist", "").split(",")
+            if entry.strip()
+        ]
+        for entry in entries:
+            if host.lower() == entry.lower():
+                return True
+            try:
+                network = ipaddress.ip_network(entry, strict=False)
+                address = ipaddress.ip_address(host)
+            except ValueError:
+                continue
+            if address in network:
+                return True
+        return False
 
     def _build_relation_payload(
         self,

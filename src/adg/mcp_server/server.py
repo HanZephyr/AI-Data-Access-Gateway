@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from typing import Any, cast
 
+from anyio import to_thread
 from fastapi import HTTPException
 from mcp.server.fastmcp import Context, FastMCP
 from sqlalchemy.orm import Session, sessionmaker
@@ -17,6 +19,15 @@ from adg.mcp_api.runtime_tools import RUNTIME_TOOL_DEFINITIONS, dispatch_runtime
 
 runtime_mcp_server = FastMCP("AI Data Access Gateway", host="0.0.0.0")
 McpContext = Context[Any, Any, Any]
+
+
+async def _run_in_threadpool[ThreadResult](
+    function: Callable[..., ThreadResult],
+    *args: object,
+) -> ThreadResult:
+    """Run synchronous MCP work in AnyIO's worker threadpool."""
+
+    return await to_thread.run_sync(function, *args)
 
 
 class RuntimeApiKeyMiddleware:
@@ -37,23 +48,45 @@ class RuntimeApiKeyMiddleware:
             return
 
         headers = Headers(raw=scope["headers"])
-        with self._session_factory() as session:
-            try:
-                authenticated = authenticate_runtime_api_key_value(
-                    session,
-                    headers.get(get_settings().api_key_header),
-                )
-            except HTTPException as exc:
-                await JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})(
-                    scope,
-                    receive,
-                    send,
-                )
-                return
+        client_identifier = _client_identifier_from_scope(scope)
+        try:
+            authenticated = await to_thread.run_sync(
+                self._authenticate,
+                headers.get(get_settings().api_key_header),
+                client_identifier,
+            )
+        except HTTPException as exc:
+            await JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})(
+                scope,
+                receive,
+                send,
+            )
+            return
 
         scope.setdefault("state", {})
         cast(dict[str, Any], scope["state"])["authenticated_api_key"] = authenticated
         await self.app(scope, receive, send)
+
+    def _authenticate(
+        self,
+        raw_api_key: str | None,
+        client_identifier: str | None,
+    ) -> AuthenticatedRuntimeKey:
+        """Authenticate inside the worker thread that owns the SQLAlchemy session."""
+
+        with self._session_factory() as session:
+            return authenticate_runtime_api_key_value(
+                session,
+                raw_api_key,
+                client_identifier=client_identifier,
+            )
+
+
+def _client_identifier_from_scope(scope: Scope) -> str | None:
+    client = scope.get("client")
+    if not isinstance(client, tuple) or not client:
+        return None
+    return str(client[0])
 
 
 class MountedMcpServerApp:
@@ -128,37 +161,38 @@ def _run_runtime_tool(ctx: McpContext, tool_name: str, payload: dict[str, Any]) 
     name="list_datasources",
     description=RUNTIME_TOOL_DEFINITIONS[0].description,
 )
-def list_datasources(
+async def list_datasources(
     ctx: McpContext,
 ) -> dict[str, Any]:
     """List datasources visible to the calling runtime identity."""
 
-    return _run_runtime_tool(ctx, "list_datasources", {})
+    return await _run_in_threadpool(_run_runtime_tool, ctx, "list_datasources", {})
 
 
 @runtime_mcp_server.tool(
     name="list_tags",
     description=RUNTIME_TOOL_DEFINITIONS[1].description,
 )
-def list_tags(
+async def list_tags(
     ctx: McpContext,
 ) -> dict[str, Any]:
     """List tags visible to the calling runtime identity."""
 
-    return _run_runtime_tool(ctx, "list_tags", {})
+    return await _run_in_threadpool(_run_runtime_tool, ctx, "list_tags", {})
 
 
 @runtime_mcp_server.tool(
     name="list_resources",
     description=RUNTIME_TOOL_DEFINITIONS[2].description,
 )
-def list_resources(
+async def list_resources(
     ctx: McpContext,
     datasource_id: str,
 ) -> dict[str, Any]:
     """List readable resources under one datasource."""
 
-    return _run_runtime_tool(
+    return await _run_in_threadpool(
+        _run_runtime_tool,
         ctx,
         "list_resources",
         {
@@ -171,13 +205,14 @@ def list_resources(
     name="list_resources_by_tag",
     description=RUNTIME_TOOL_DEFINITIONS[3].description,
 )
-def list_resources_by_tag(
+async def list_resources_by_tag(
     ctx: McpContext,
     tag_names: list[str],
 ) -> dict[str, Any]:
     """List readable resources that match one or more tag names."""
 
-    return _run_runtime_tool(
+    return await _run_in_threadpool(
+        _run_runtime_tool,
         ctx,
         "list_resources_by_tag",
         {
@@ -190,13 +225,14 @@ def list_resources_by_tag(
     name="describe_resource",
     description=RUNTIME_TOOL_DEFINITIONS[4].description,
 )
-def describe_resource(
+async def describe_resource(
     ctx: McpContext,
     resource_id: str,
 ) -> dict[str, Any]:
     """Describe one resource and its visible columns."""
 
-    return _run_runtime_tool(
+    return await _run_in_threadpool(
+        _run_runtime_tool,
         ctx,
         "describe_resource",
         {
@@ -209,14 +245,15 @@ def describe_resource(
     name="preview_resource",
     description=RUNTIME_TOOL_DEFINITIONS[5].description,
 )
-def preview_resource(
+async def preview_resource(
     ctx: McpContext,
     resource_id: str,
     limit: int = 20,
 ) -> dict[str, Any]:
     """Preview rows from one resource with policy enforcement."""
 
-    return _run_runtime_tool(
+    return await _run_in_threadpool(
+        _run_runtime_tool,
         ctx,
         "preview_resource",
         {
@@ -230,7 +267,7 @@ def preview_resource(
     name="execute_query",
     description=RUNTIME_TOOL_DEFINITIONS[6].description,
 )
-def execute_query(
+async def execute_query(
     ctx: McpContext,
     datasource_id: str,
     resource_ids: list[str],
@@ -239,7 +276,8 @@ def execute_query(
 ) -> dict[str, Any]:
     """Run one guarded read-only SQL query."""
 
-    return _run_runtime_tool(
+    return await _run_in_threadpool(
+        _run_runtime_tool,
         ctx,
         "execute_query",
         {

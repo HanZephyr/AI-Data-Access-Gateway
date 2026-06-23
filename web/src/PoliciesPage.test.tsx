@@ -205,6 +205,16 @@ const routeMap: Record<string, MockResponse> = {
   },
 };
 
+const policyResources = routeMap["/admin/resources"].json as unknown[];
+routeMap["/admin/resources?limit=500&offset=0"] = {
+  ok: true,
+  json: { items: policyResources.slice(0, 5), total: policyResources.length, limit: 5, offset: 0 },
+};
+routeMap["/admin/resources?limit=5&offset=5"] = {
+  ok: true,
+  json: { items: policyResources.slice(5), total: policyResources.length, limit: 5, offset: 5 },
+};
+
 function createStorage() {
   const store = new Map<string, string>();
   return {
@@ -248,7 +258,8 @@ async function mountConsoleApp(initialPage: string, language = "en-US") {
   localStorage.setItem("adg.page", initialPage);
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    const match = routeMap[url];
+    const baseUrl = url.split("?")[0];
+    const match = routeMap[url] ?? routeMap[baseUrl];
     if (!match) {
       return {
         ok: false,
@@ -411,6 +422,11 @@ describe("Policies page", () => {
     await signInWithValidAdminKey();
 
     fireEvent.click(await screen.findByRole("button", { name: "新建" }));
+
+    await waitFor(() => {
+      const calls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input));
+      expect(calls.some((url) => url.includes("/admin/resources?limit=5&offset=5"))).toBe(true);
+    });
 
     await waitFor(() => {
       expect(document.querySelector(".resource-tree-transfer")).toBeInTheDocument();

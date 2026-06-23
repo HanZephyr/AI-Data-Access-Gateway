@@ -7,6 +7,12 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from adg.app.auth_rate_limit import (
+    RATE_LIMIT_DETAIL,
+    check_auth_rate_limited,
+    record_auth_failure,
+    record_auth_success,
+)
 from adg.app.settings import get_settings
 from adg.control_plane.db import get_session
 from adg.control_plane.models.api_key import ApiKey
@@ -56,16 +62,28 @@ def require_api_key(
     """Authenticate a request against active API keys stored in the control plane."""
 
     raw_api_key = request.headers.get(get_settings().api_key_header)
-    return authenticate_api_key_value(session, raw_api_key)
+    return authenticate_api_key_value(
+        session,
+        raw_api_key,
+        client_identifier=_client_identifier_from_request(request),
+    )
 
 
 def authenticate_api_key_value(
     session: Session,
     raw_api_key: str | None,
+    client_identifier: str | None = None,
 ) -> AuthenticatedApiKey:
     """Authenticate one raw API key value against the active control-plane keys."""
 
+    if check_auth_rate_limited(raw_api_key, client_identifier):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=RATE_LIMIT_DETAIL,
+        )
+
     if raw_api_key is None or raw_api_key == "":
+        _record_auth_failure_or_raise_rate_limited(raw_api_key, client_identifier)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing API key",
@@ -81,20 +99,42 @@ def authenticate_api_key_value(
         if api_key.expires_at is not None and _normalize_expiration(
             api_key.expires_at
         ) <= datetime.now(UTC):
+            _record_auth_failure_or_raise_rate_limited(raw_api_key, client_identifier)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Expired API key",
             )
+        record_auth_success(raw_api_key, client_identifier)
         return AuthenticatedApiKey(
             id=api_key.id,
             scopes=api_key.scopes,
             user_id=api_key.user_id,
         )
 
+    _record_auth_failure_or_raise_rate_limited(raw_api_key, client_identifier)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid API key",
     )
+
+
+def _record_auth_failure_or_raise_rate_limited(
+    raw_api_key: str | None,
+    client_identifier: str | None = None,
+) -> None:
+    """Record one failed authentication and raise 429 when the threshold is reached."""
+
+    if record_auth_failure(raw_api_key, client_identifier):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=RATE_LIMIT_DETAIL,
+        )
+
+
+def _client_identifier_from_request(request: Request) -> str | None:
+    if request.client is None:
+        return None
+    return request.client.host
 
 
 def require_admin_api_key(
@@ -112,7 +152,11 @@ def require_runtime_api_key(
     """Require one runtime-scoped API key and load its bound runtime identity."""
 
     raw_api_key = request.headers.get(get_settings().api_key_header)
-    return authenticate_runtime_api_key_value(session, raw_api_key)
+    return authenticate_runtime_api_key_value(
+        session,
+        raw_api_key,
+        client_identifier=_client_identifier_from_request(request),
+    )
 
 
 def require_scope(
@@ -134,11 +178,12 @@ def require_scope(
 def authenticate_runtime_api_key_value(
     session: Session,
     raw_api_key: str | None,
+    client_identifier: str | None = None,
 ) -> AuthenticatedRuntimeKey:
     """Authenticate one raw API key value and require the runtime scope."""
 
     authenticated = require_scope(
-        authenticate_api_key_value(session, raw_api_key),
+        authenticate_api_key_value(session, raw_api_key, client_identifier=client_identifier),
         "runtime",
         "Runtime scope required",
     )

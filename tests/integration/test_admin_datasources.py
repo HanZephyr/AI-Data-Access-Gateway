@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from adg.admin_api.datasources import router as admin_datasource_router
+from adg.connectors.base import MetadataSnapshot, QueryResult
+from adg.connectors.errors import ConnectorOperationError
+from adg.connectors.registry import get_connector_registry
 from adg.control_plane.db import (
     create_engine_from_url,
     create_session_factory,
@@ -44,6 +47,19 @@ def build_admin_datasource_app() -> TestClient:
 
 
 DATASOURCE_DESCRIPTION = "Primary analytical warehouse for finance and operations."
+
+
+class FailingDatasourceConnector:
+    connector_type = "failing"
+
+    def test_connection(self, config: dict[str, object]) -> None:
+        raise ConnectorOperationError("Lost connection to MySQL server at 10.0.0.9")
+
+    def scan_metadata(self, config: dict[str, object]) -> MetadataSnapshot:
+        raise ConnectorOperationError("OperationalError postgresql+psycopg://10.0.0.9")
+
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        raise ConnectorOperationError("Lost connection to MySQL server at 10.0.0.9")
 
 
 def test_admin_datasource_crud_routes() -> None:
@@ -175,3 +191,33 @@ def test_admin_datasource_returns_404_for_unknown_id() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Datasource not found"
+
+
+def test_admin_datasource_live_operations_sanitize_connector_errors() -> None:
+    get_connector_registry().register("failing", FailingDatasourceConnector)
+    client = build_admin_datasource_app()
+
+    created = client.post(
+        "/admin/datasources",
+        json={
+            "name": "Failing Warehouse",
+            "type": "failing",
+            "config": {"host": "10.0.0.9", "username": "alice", "password": "secret"},
+        },
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+    datasource_id = created.json()["id"]
+
+    for action in ["test", "scan"]:
+        response = client.post(
+            f"/admin/datasources/{datasource_id}/{action}",
+            headers={"X-ADG-API-Key": "adg_admin"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == (
+            "Datasource connector operation failed. Check datasource connectivity and server logs."
+        )
+        assert "Lost connection" not in response.text
+        assert "OperationalError" not in response.text
+        assert "10.0.0.9" not in response.text

@@ -307,13 +307,19 @@ def test_mcp_tool_route_returns_structured_error_for_connector_failure() -> None
     assert "masking" not in body
     assert body["error"] == {
         "type": "connector_operation_error",
-        "message": "Lost connection to MySQL server during query",
+        "message": "Datasource query execution failed. Reference query_id for details.",
     }
+    assert "Lost connection to MySQL server" not in str(body)
     with session_factory() as session:
         event = session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "error"
     assert event.reason == "connector_operation_error"
+    assert event.query_id == body["query_id"]
+    assert event.audit_metadata["error_type"] == "connector_operation_error"
+    assert event.audit_metadata["query_id"] == body["query_id"]
+    assert "error_message" not in event.audit_metadata
+    assert "Lost connection to MySQL server" not in str(event.audit_metadata)
 
 
 def test_mcp_tool_route_rejects_api_key_without_runtime_scope() -> None:

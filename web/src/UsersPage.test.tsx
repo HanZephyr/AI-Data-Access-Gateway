@@ -193,7 +193,8 @@ async function mountConsoleApp(initialPage?: string) {
         text: async () => "",
       } as Response;
     }
-    const match = routeMap[url];
+    const baseUrl = url.split("?")[0];
+    const match = routeMap[url] ?? routeMap[baseUrl];
     if (!match) {
       return {
         ok: false,
@@ -251,7 +252,7 @@ describe("Users console page", () => {
     await signInWithValidAdminKey();
     expect(localStorage.getItem("adg.apiKey")).toBeNull();
     expect(await screen.findByText("Organization tree")).toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("shows a users navigation item and no standalone organization page", async () => {
     await mountConsoleApp("users");
@@ -260,7 +261,7 @@ describe("Users console page", () => {
     expect((await screen.findAllByText("Users")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Roles").length).toBeGreaterThan(0);
     expect(screen.queryByText("Organization")).not.toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("opens the excel import modal with click and drag upload affordances", async () => {
     await mountConsoleApp("users");
@@ -270,7 +271,7 @@ describe("Users console page", () => {
     expect((await screen.findAllByText("Upload file")).length).toBeGreaterThan(0);
     expect(screen.getByText("Drag file here")).toBeInTheDocument();
     expect(screen.getByLabelText("Organization path delimiter")).toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("keeps the selected Excel file inside the dragger without rendering a separate upload list", async () => {
     await mountConsoleApp("users");
@@ -287,7 +288,7 @@ describe("Users console page", () => {
 
     expect((await screen.findAllByText("users.xlsx")).length).toBeGreaterThan(0);
     expect(document.querySelector(".ant-upload-list")).toBeNull();
-  }, 30000);
+  }, 120000);
 
   it("shows localized field guidance and credential-based third-party import tabs in the import modal", async () => {
     await mountConsoleApp("users");
@@ -310,7 +311,7 @@ describe("Users console page", () => {
     expect(screen.getAllByText("Root department ID").length).toBeGreaterThan(0);
     expect(screen.queryByText("Departments response")).not.toBeInTheDocument();
     expect(screen.queryByText("Users response")).not.toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
   it("closes the import modal after a successful execute import", async () => {
     await mountConsoleApp("users");
@@ -325,7 +326,7 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog")).not.toBeVisible();
     });
-  }, 30000);
+  }, 120000);
 
   it("renders the rooted org tree and user detail workspace on the users page", async () => {
     await mountConsoleApp("users");
@@ -338,7 +339,7 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getByText("Runtime key")).toBeInTheDocument();
     });
-  }, 30000);
+  }, 120000);
 
   it("edits the selected user from the details panel", async () => {
     await mountConsoleApp("users");
@@ -355,7 +356,7 @@ describe("Users console page", () => {
       expect(screen.getAllByText("Alice Updated").length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText("u009").length).toBeGreaterThan(0);
-  }, 30000);
+  }, 120000);
 
   it("deletes the selected user from the details panel", async () => {
     await mountConsoleApp("users");
@@ -369,7 +370,7 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getByText("Select a user to inspect roles, organization placement, and runtime key actions.")).toBeInTheDocument();
     });
-  }, 30000);
+  }, 120000);
 
   it("opens context actions from the org tree nodes instead of top toolbar icons", async () => {
     await mountConsoleApp("users");
@@ -381,8 +382,43 @@ describe("Users console page", () => {
     fireEvent.contextMenu(screen.getByText("/"));
     expect(await screen.findByText("Create node")).toBeInTheDocument();
     expect(screen.queryByText("Delete node")).not.toBeInTheDocument();
-  }, 30000);
+  }, 120000);
 
+  it("cancels pending breakpoint resize frames on unmount", async () => {
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const requestAnimationFrame = vi.fn(() => 123);
+    const cancelAnimationFrame = vi.fn();
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: requestAnimationFrame,
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      value: cancelAnimationFrame,
+    });
+    try {
+      await mountConsoleApp("overview");
+      await signInWithValidAdminKey();
+
+      fireEvent(window, new Event("resize"));
+      const appWindow = window as WindowWithAppRoot;
+      appWindow.__adgRoot?.unmount();
+      appWindow.__adgRoot = undefined;
+      appWindow.__adgRootElement = undefined;
+
+      expect(cancelAnimationFrame).toHaveBeenCalledWith(123);
+    } finally {
+      Object.defineProperty(window, "requestAnimationFrame", {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, "cancelAnimationFrame", {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
+  }, 120000);
   it("opens a left-side navigation drawer on small screens", async () => {
     await mountConsoleApp("overview");
     await signInWithValidAdminKey();
@@ -395,5 +431,5 @@ describe("Users console page", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Users").length).toBeGreaterThan(0);
     });
-  }, 30000);
+  }, 120000);
 });

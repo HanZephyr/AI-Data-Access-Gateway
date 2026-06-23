@@ -183,8 +183,7 @@ def test_guard_allows_boolean_predicates() -> None:
 
 def test_guard_allows_common_date_predicates() -> None:
     result = SqlGuard().check(
-        "select id from public.orders "
-        "where created_at >= current_date - interval '30 days'"
+        "select id from public.orders where created_at >= current_date - interval '30 days'"
     )
 
     assert result.allowed is True
@@ -193,9 +192,7 @@ def test_guard_allows_common_date_predicates() -> None:
 
 
 def test_guard_allows_date_literal_casts() -> None:
-    result = SqlGuard().check(
-        "select id from public.orders where created_at >= date '2026-05-15'"
-    )
+    result = SqlGuard().check("select id from public.orders where created_at >= date '2026-05-15'")
 
     assert result.allowed is True
     assert result.normalized_sql is not None
@@ -268,3 +265,19 @@ def test_guard_allows_common_aggregate_functions() -> None:
 
     assert result.allowed is True
     assert result.used_functions == ["count", "sum"]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "select id from public.customers limit ?",
+        "select id from public.customers limit :limit",
+        "select id from public.customers limit 10 + 5",
+    ],
+)
+def test_guard_rejects_non_literal_limit(query: str) -> None:
+    result = SqlGuard(default_limit=100, max_limit=500).check(query)
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert "non_literal_limit_not_allowed" in result.rejection_reasons

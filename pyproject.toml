@@ -25,7 +25,8 @@ dependencies = [
 postgres = ["psycopg[binary]>=3.2.1"]
 mysql = ["pymysql>=1.1.1"]
 doris = ["pymysql>=1.1.1"]
-all = ["psycopg[binary]>=3.2.1", "pymysql>=1.1.1"]
+redis = ["redis>=5.0.0"]
+all = ["psycopg[binary]>=3.2.1", "pymysql>=1.1.1", "redis>=5.0.0"]
 dev = [
   "httpx>=0.27.2",
   "mypy>=1.11.2",

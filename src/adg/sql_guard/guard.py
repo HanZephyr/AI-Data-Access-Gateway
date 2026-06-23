@@ -157,6 +157,17 @@ class SqlGuard:
                 risk_level="medium",
             )
 
+        limit_rejection = self._limit_rejection(statement)
+        if limit_rejection is not None:
+            return SqlGuardResult(
+                allowed=False,
+                normalized_sql=None,
+                statement_type="SELECT",
+                accessed_resources=self._accessed_resources(statement),
+                accessed_fields=self._accessed_fields(statement),
+                rejection_reasons=[limit_rejection],
+            )
+
         used_functions = self._used_functions(statement)
         rejection_reasons: list[str] = []
         if self._strict_validation:
@@ -220,6 +231,17 @@ class SqlGuard:
 
         return str(statement.this).lower()
 
+    def _limit_rejection(self, statement: exp.Select) -> str | None:
+        """Reject dynamic LIMIT clauses before the query can reach a connector."""
+
+        limit = statement.args.get("limit")
+        if not isinstance(limit, exp.Limit):
+            return None
+        expression = limit.expression
+        if isinstance(expression, exp.Literal) and expression.is_int:
+            return None
+        return "non_literal_limit_not_allowed"
+
     def _with_effective_limit(self, statement: exp.Select) -> tuple[str, list[str]]:
         """Return SQL with a bounded LIMIT and warnings describing limit changes."""
 
@@ -237,7 +259,7 @@ class SqlGuard:
         return limited.sql(), warnings
 
     def _limit_value(self, statement: exp.Select) -> int | None:
-        """Extract a literal LIMIT or treat non-literal limits as the configured maximum."""
+        """Extract a literal LIMIT value, or None when no LIMIT is present."""
 
         limit = statement.args.get("limit")
         if not isinstance(limit, exp.Limit):
@@ -245,7 +267,7 @@ class SqlGuard:
         expression = limit.expression
         if isinstance(expression, exp.Literal) and expression.is_int:
             return int(expression.this)
-        return self._max_limit
+        return None
 
     def _accessed_resources(self, statement: exp.Expression) -> list[str]:
         """Collect referenced table names for later resource-policy resolution."""
@@ -305,10 +327,7 @@ class SqlGuard:
         """Allow DATE/TIME/TIMESTAMP casts while keeping projection safeguards separate."""
 
         target = function.to
-        return (
-            isinstance(target, exp.DataType)
-            and target.is_type(*self._safe_temporal_cast_types)
-        )
+        return isinstance(target, exp.DataType) and target.is_type(*self._safe_temporal_cast_types)
 
     def _function_name(self, function: exp.Func) -> str:
         """Return a stable lowercase function name, including sqlglot anonymous functions."""
@@ -323,10 +342,9 @@ class SqlGuard:
         rejections: set[str] = set()
         for projection in statement.expressions:
             for function in projection.find_all(exp.Func):
-                if (
-                    self._is_safe_temporal_projection_transform(function)
-                    and self._references_column(function)
-                ):
+                if self._is_safe_temporal_projection_transform(
+                    function
+                ) and self._references_column(function):
                     rejections.add(
                         f"temporal_projection_not_allowed:{self._function_name(function)}"
                     )
@@ -335,10 +353,14 @@ class SqlGuard:
     def _is_safe_temporal_projection_transform(self, function: exp.Func) -> bool:
         """Return whether a function is a temporal transform guarded in SELECT output."""
 
-        return self._is_safe_temporal_function(function) or isinstance(
-            function,
-            exp.Cast,
-        ) and self._is_safe_temporal_cast(function)
+        return (
+            self._is_safe_temporal_function(function)
+            or isinstance(
+                function,
+                exp.Cast,
+            )
+            and self._is_safe_temporal_cast(function)
+        )
 
     def _references_column(self, expression: exp.Expression) -> bool:
         """Check whether an expression derives from at least one source column."""
@@ -350,9 +372,6 @@ class SqlGuard:
 
         return any(
             isinstance(projection, exp.Star)
-            or (
-                isinstance(projection, exp.Column)
-                and isinstance(projection.this, exp.Star)
-            )
+            or (isinstance(projection, exp.Column) and isinstance(projection.this, exp.Star))
             for projection in statement.expressions
         )

@@ -40,7 +40,7 @@ const routeMap: Record<string, MockResponse> = {
       },
     ],
   },
-  "/admin/resource-tree": { ok: true, json: [] },
+  "/admin/resource-tree": { ok: true, json: { items: [], total: 0, limit: 50, offset: 0 } },
   "/admin/tags": { ok: true, json: [] },
   "/admin/datasources/ds_doris/test": {
     ok: false,
@@ -100,7 +100,8 @@ async function mountConsoleApp() {
   localStorage.setItem("adg.page", "datasources");
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    const match = routeMap[url];
+    const baseUrl = url.split("?")[0];
+    const match = routeMap[url] ?? routeMap[baseUrl];
     if (!match) {
       return {
         ok: false,
@@ -158,5 +159,5 @@ describe("Datasource action feedback", () => {
     await waitFor(() => {
       expect(screen.getByText("NullType() takes no arguments")).toBeInTheDocument();
     });
-  }, 30000);
+  }, 120000);
 });

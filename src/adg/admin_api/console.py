@@ -6,7 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -39,6 +39,39 @@ router = APIRouter(prefix="/admin", tags=["admin-console"])
 PolicySubjectType = Literal["all", "user", "role"]
 SERVICE_API_KEY_SCOPES = {"admin"}
 
+
+def _page_bounds(
+    *,
+    settings: Settings,
+    limit: int | None,
+    offset: int,
+) -> tuple[int, int]:
+    """Normalize admin list pagination using configured defaults and caps."""
+
+    if offset < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="offset must be >= 0",
+        )
+    effective_limit = settings.admin_page_default_limit if limit is None else limit
+    if effective_limit < 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="limit must be >= 1",
+        )
+    return min(effective_limit, settings.admin_page_max_limit), offset
+
+
+def _paginated_response(
+    *,
+    items: list[dict[str, Any]],
+    total: int,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    """Shape one admin list response with stable pagination metadata."""
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 class TagRequest(BaseModel):
     """Payload for creating a governance tag."""
@@ -266,33 +299,64 @@ class UserImporterPullRequest(BaseModel):
 def list_resources(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
     datasource_id: str | None = None,
-) -> list[dict[str, Any]]:
+    limit: int | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
     """List resources, optionally filtered by datasource, for admin tables."""
 
+    page_limit, page_offset = _page_bounds(settings=settings, limit=limit, offset=offset)
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
+    total = int(
+        session.execute(select(func.count()).select_from(Resource).where(*conditions)).scalar_one()
+    )
     resources = list(
-        session.execute(select(Resource).where(*conditions).order_by(Resource.path)).scalars()
+        session.execute(
+            select(Resource)
+            .where(*conditions)
+            .order_by(Resource.path)
+            .limit(page_limit)
+            .offset(page_offset)
+        ).scalars()
     )
     tags_by_resource_id = _load_resource_tags(session, [resource.id for resource in resources])
-    return [_serialize_resource(resource, tags_by_resource_id) for resource in resources]
+    return _paginated_response(
+        items=[_serialize_resource(resource, tags_by_resource_id) for resource in resources],
+        total=total,
+        limit=page_limit,
+        offset=page_offset,
+    )
 
 
 @router.get("/resource-tree")
 def list_resource_tree(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
     datasource_id: str | None = None,
-) -> list[dict[str, Any]]:
+    limit: int | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
     """Return resources and fields as an expandable catalog tree."""
 
+    page_limit, page_offset = _page_bounds(settings=settings, limit=limit, offset=offset)
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
+    total = int(
+        session.execute(select(func.count()).select_from(Resource).where(*conditions)).scalar_one()
+    )
     resources = list(
-        session.execute(select(Resource).where(*conditions).order_by(Resource.path)).scalars()
+        session.execute(
+            select(Resource)
+            .where(*conditions)
+            .order_by(Resource.path)
+            .limit(page_limit)
+            .offset(page_offset)
+        ).scalars()
     )
     resource_ids = [resource.id for resource in resources]
     tags_by_resource_id = _load_resource_tags(session, resource_ids)
@@ -305,7 +369,12 @@ def list_resource_tree(
                 .order_by(ResourceField.ordinal_position)
             ).scalars()
         )
-    return _build_resource_tree(resources, fields, tags_by_resource_id)
+    return _paginated_response(
+        items=_build_resource_tree(resources, fields, tags_by_resource_id),
+        total=total,
+        limit=page_limit,
+        offset=page_offset,
+    )
 
 
 @router.get("/resources/{resource_id}")
@@ -1306,14 +1375,29 @@ def revoke_api_key(
 def list_audit_events(
     _: Annotated[AuthenticatedApiKey, Depends(require_admin_api_key)],
     session: Annotated[Session, Depends(get_session)],
-) -> list[dict[str, Any]]:
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: int | None = None,
+    offset: int = 0,
+) -> dict[str, Any]:
     """List audit events newest-first for the admin console."""
 
-    events = session.execute(
-        select(AuditEvent)
-        .order_by(AuditEvent.created_at.desc())
-    ).scalars()
-    return [_serialize_audit_event_summary(event, session) for event in events]
+    page_limit, page_offset = _page_bounds(settings=settings, limit=limit, offset=offset)
+    total = int(session.execute(select(func.count()).select_from(AuditEvent)).scalar_one())
+    events = list(
+        session.execute(
+            select(AuditEvent)
+            .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+            .limit(page_limit)
+            .offset(page_offset)
+        ).scalars()
+    )
+    user_summaries = _load_audit_user_summaries(session, events)
+    return _paginated_response(
+        items=[_serialize_audit_event_summary(event, user_summaries) for event in events],
+        total=total,
+        limit=page_limit,
+        offset=page_offset,
+    )
 
 
 @router.get("/audit-events/{event_id}/sql")
@@ -1777,10 +1861,13 @@ def _serialize_api_key(api_key: ApiKey) -> dict[str, Any]:
     }
 
 
-def _serialize_audit_event_summary(event: AuditEvent, session: Session) -> dict[str, Any]:
+def _serialize_audit_event_summary(
+    event: AuditEvent,
+    user_summaries: dict[str | None, dict[str, str | None]],
+) -> dict[str, Any]:
     """Decode audit JSON fields for the summary list without raw SQL text."""
 
-    user_summary = _audit_user_summary(session, event.user_id)
+    user_summary = user_summaries.get(event.user_id, {"user_name": None, "user_org_path": None})
     return {
         "id": event.id,
         "user_id": event.user_id,
@@ -1797,6 +1884,35 @@ def _serialize_audit_event_summary(event: AuditEvent, session: Session) -> dict[
         "created_at": event.created_at.isoformat(),
     }
 
+
+def _load_audit_user_summaries(
+    session: Session,
+    events: list[AuditEvent],
+) -> dict[str | None, dict[str, str | None]]:
+    """Resolve audit event user details in batches for one page of events."""
+
+    summaries: dict[str | None, dict[str, str | None]] = {
+        None: {"user_name": None, "user_org_path": None}
+    }
+    user_ids = sorted({event.user_id for event in events if event.user_id is not None})
+    if not user_ids:
+        return summaries
+
+    users = list(session.execute(select(User).where(User.id.in_(user_ids))).scalars())
+    org_node_ids = sorted({user.org_node_id for user in users if user.org_node_id is not None})
+    org_paths_by_id: dict[str, str] = {}
+    if org_node_ids:
+        org_nodes = session.execute(select(OrgNode).where(OrgNode.id.in_(org_node_ids))).scalars()
+        org_paths_by_id = {node.id: node.path for node in org_nodes}
+
+    for user in users:
+        summaries[user.id] = {
+            "user_name": user.name,
+            "user_org_path": org_paths_by_id.get(user.org_node_id) if user.org_node_id else None,
+        }
+    for user_id in user_ids:
+        summaries.setdefault(user_id, {"user_name": None, "user_org_path": None})
+    return summaries
 
 def _audit_user_summary(session: Session, user_id: str | None) -> dict[str, str | None]:
     """Resolve audit user ids into operator-readable directory details."""

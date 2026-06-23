@@ -42,6 +42,7 @@ import {
   Layout,
   Menu,
   Modal,
+  Pagination,
   Popconfirm,
   Select,
   Space,
@@ -101,6 +102,51 @@ type PageKey =
   | "mcp";
 
 type AnyRecord = Record<string, any>;
+type PageRequest = { limit: number; offset: number };
+type PaginatedResponse<T> = {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+type PaginationState = PaginatedResponse<unknown> & {
+  setPage: (limit: number, offset: number) => void;
+};
+
+const DEFAULT_PAGE_LIMIT = 50;
+
+function isPaginatedResponse<T>(payload: unknown): payload is PaginatedResponse<T> {
+  return Boolean(
+    payload
+      && typeof payload === "object"
+      && Array.isArray((payload as PaginatedResponse<T>).items)
+      && typeof (payload as PaginatedResponse<T>).total === "number"
+      && typeof (payload as PaginatedResponse<T>).limit === "number"
+      && typeof (payload as PaginatedResponse<T>).offset === "number"
+  );
+}
+
+function paginatedPath(path: string, page: PageRequest) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}limit=${page.limit}&offset=${page.offset}`;
+}
+
+async function loadAllPaginated<T>(
+  request: <R>(path: string, init?: RequestInit) => Promise<R>,
+  path: string,
+) {
+  const pageSize = 500;
+  const first = await request<T[] | PaginatedResponse<T>>(paginatedPath(path, { limit: pageSize, offset: 0 }));
+  if (!isPaginatedResponse<T>(first)) return first;
+  const items = [...first.items];
+  for (let offset = first.offset + first.limit; offset < first.total; offset += first.limit) {
+    const next = await request<PaginatedResponse<T>>(paginatedPath(path, { limit: first.limit, offset }));
+    if (!isPaginatedResponse<T>(next)) break;
+    items.push(...next.items);
+  }
+  return items;
+}
+
 type DirectoryUserRecord = {
   id?: string;
   user_id?: string;
@@ -1406,22 +1452,45 @@ function useApi() {
   return { apiKey, authError, validating, saveApiKey, validateAndSaveApiKey, request };
 }
 
-function useData<T>(loader: () => Promise<T>, deps: React.DependencyList) {
+function useData<T>(
+  loader: (page: PageRequest) => Promise<T | PaginatedResponse<unknown>>,
+  deps: React.DependencyList,
+  options: { paginated?: boolean; defaultLimit?: number } = {},
+) {
   /** Load async table/detail data with a reload function and simple error state. */
 
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPageState] = useState<PageRequest>({
+    limit: options.defaultLimit ?? DEFAULT_PAGE_LIMIT,
+    offset: 0,
+  });
+  const [pageMeta, setPageMeta] = useState<Omit<PaginatedResponse<unknown>, "items"> | null>(null);
   const reload = () => {
     setLoading(true);
     setError(null);
-    loader()
-      .then(setData)
+    loader(page)
+      .then((payload) => {
+        if (isPaginatedResponse<unknown>(payload)) {
+          setData(payload.items as T);
+          setPageMeta({ total: payload.total, limit: payload.limit, offset: payload.offset });
+        } else {
+          setData(payload as T);
+          setPageMeta(null);
+        }
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   };
-  useEffect(reload, deps);
-  return { data, loading, error, reload };
+  useEffect(reload, [...deps, page.limit, page.offset]);
+  const setPage = (limit: number, offset: number) => {
+    setPageState({ limit, offset });
+  };
+  const pagination = options.paginated && pageMeta
+    ? { ...pageMeta, items: [], setPage }
+    : null;
+  return { data, loading, error, reload, pagination };
 }
 
 function useViewportBreakpoint(maxWidth: number) {
@@ -1431,9 +1500,23 @@ function useViewportBreakpoint(maxWidth: number) {
   const [matches, setMatches] = useState(read);
 
   useEffect(() => {
-    const onResize = () => setMatches(read());
+    let frameId: number | null = null;
+    const onResize = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        setMatches(read());
+      });
+    };
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", onResize);
+    };
   }, [maxWidth]);
 
   return matches;
@@ -1692,14 +1775,14 @@ function Overview({ api }: { api: ReturnType<typeof useApi> }) {
 
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
-  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
-  const audit = useData<AnyRecord[]>(() => api.request("/admin/audit-events"), [api.apiKey]);
+  const resources = useData<AnyRecord[]>((page) => api.request(paginatedPath("/admin/resources", page)), [api.apiKey], { paginated: true });
+  const audit = useData<AnyRecord[]>((page) => api.request(paginatedPath("/admin/audit-events", page)), [api.apiKey], { paginated: true });
   return (
     <div className="workspace">
       <div className="stats">
         <Statistic title={t("stats.datasources")} value={datasources.data?.length || 0} />
-        <Statistic title={t("stats.resources")} value={resources.data?.length || 0} />
-        <Statistic title={t("stats.audit")} value={audit.data?.length || 0} />
+        <Statistic title={t("stats.resources")} value={resources.pagination?.total ?? resources.data?.length ?? 0} />
+        <Statistic title={t("stats.audit")} value={audit.pagination?.total ?? audit.data?.length ?? 0} />
       </div>
     </div>
   );
@@ -2734,7 +2817,7 @@ function Datasources({
 
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
-  const resources = useData<CatalogTreeNode[]>(() => api.request("/admin/resource-tree"), [api.apiKey]);
+  const resources = useData<CatalogTreeNode[]>((page) => api.request(paginatedPath("/admin/resource-tree", page)), [api.apiKey], { paginated: true });
   const tags = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
   const [search, setSearch] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -2797,6 +2880,19 @@ function Datasources({
             onExpand={(keys) => setExpandedKeys(keys)}
             onSelect={(keys) => setSelectedKey(String(keys[0] || ""))}
           />
+          {resources.pagination ? (
+            <Pagination
+              size="small"
+              current={Math.floor(resources.pagination.offset / resources.pagination.limit) + 1}
+              pageSize={resources.pagination.limit}
+              total={resources.pagination.total}
+              showSizeChanger
+              onChange={(pageNumber, pageSize) => {
+                setSelectedKey(null);
+                resources.pagination?.setPage(pageSize, (pageNumber - 1) * pageSize);
+              }}
+            />
+          ) : null}
         </div>
       </div>
       {selected ? (
@@ -3725,7 +3821,7 @@ function CrudPolicy({ api, kind }: { api: ReturnType<typeof useApi>; kind: "reso
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
   const datasources = useData<AnyRecord[]>(() => api.request("/admin/datasources"), [api.apiKey]);
-  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
+  const resources = useData<AnyRecord[]>(() => loadAllPaginated<AnyRecord>(api.request, "/admin/resources"), [api.apiKey]);
   const tags = useData<AnyRecord[]>(() => api.request("/admin/tags"), [api.apiKey]);
   const users = useData<DirectoryUserRecord[]>(() => api.request("/admin/users"), [api.apiKey]);
   const roles = useData<AnyRecord[]>(() => api.request("/admin/roles"), [api.apiKey]);
@@ -4100,7 +4196,7 @@ function Masking({ api }: { api: ReturnType<typeof useApi> }) {
 
   const { message: messageApi } = AntApp.useApp();
   const { t } = useI18n();
-  const resources = useData<AnyRecord[]>(() => api.request("/admin/resources"), [api.apiKey]);
+  const resources = useData<AnyRecord[]>(() => loadAllPaginated<AnyRecord>(api.request, "/admin/resources"), [api.apiKey]);
   const state = useData<AnyRecord[]>(() => api.request("/admin/masking-policies"), [api.apiKey]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<AnyRecord | null>(null);
@@ -4583,7 +4679,7 @@ function DataPanel({
   actionsColumnWidth = 112,
 }: {
   title: string;
-  state: { data: AnyRecord[] | null; loading: boolean; error: string | null; reload: () => void };
+  state: { data: AnyRecord[] | null; loading: boolean; error: string | null; reload: () => void; pagination?: PaginationState | null };
   columns: ColumnsType<AnyRecord>;
   actions?: (row: AnyRecord) => React.ReactNode;
   onRow?: (row: AnyRecord) => React.HTMLAttributes<HTMLElement>;
@@ -4592,7 +4688,7 @@ function DataPanel({
   /** Shared table panel with optional row actions and a reload control. */
 
   const { t } = useI18n();
-  const count = state.data?.length || 0;
+  const count = state.pagination?.total ?? state.data?.length ?? 0;
   const tableColumns = actions
     ? [
         ...columns,
@@ -4612,7 +4708,24 @@ function DataPanel({
         <Space><Tag>{t("common.rows", { count })}</Tag><Button onClick={state.reload}>{t("common.refresh")}</Button></Space>
       </div>
       {state.error ? <Alert type="error" message={state.error} /> : (
-        <Table size="small" rowKey={(row) => row.id || JSON.stringify(row)} loading={state.loading} dataSource={state.data || []} columns={tableColumns} onRow={onRow} pagination={{ pageSize: 8 }} scroll={{ x: true }} />
+        <Table
+          size="small"
+          rowKey={(row) => row.id || JSON.stringify(row)}
+          loading={state.loading}
+          dataSource={state.data || []}
+          columns={tableColumns}
+          onRow={onRow}
+          pagination={state.pagination ? {
+            current: Math.floor(state.pagination.offset / state.pagination.limit) + 1,
+            pageSize: state.pagination.limit,
+            total: state.pagination.total,
+            showSizeChanger: true,
+            onChange: (pageNumber, pageSize) => {
+              state.pagination?.setPage(pageSize, (pageNumber - 1) * pageSize);
+            },
+          } : { pageSize: 8 }}
+          scroll={{ x: true }}
+        />
       )}
     </section>
   );
@@ -5833,7 +5946,7 @@ function AuditEventsPage({ api }: { api: ReturnType<typeof useApi> }) {
   /** Keep the audit list summary-only and fetch raw SQL through the dedicated endpoint. */
 
   const { t } = useI18n();
-  const state = useData<AnyRecord[]>(() => api.request("/admin/audit-events"), [api.apiKey]);
+  const state = useData<AnyRecord[]>((page) => api.request(paginatedPath("/admin/audit-events", page)), [api.apiKey], { paginated: true });
   const [selected, setSelected] = useState<AnyRecord | null>(null);
   const [sqlRecord, setSqlRecord] = useState<AnyRecord | null>(null);
   const [sqlError, setSqlError] = useState<string | null>(null);

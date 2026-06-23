@@ -2,6 +2,7 @@ from typing import Any
 
 from sqlalchemy import create_engine, text
 
+from adg.app.settings import get_settings
 from adg.connectors.base import MetadataSnapshot
 from adg.connectors.errors import ConnectorDependencyError, ConnectorOperationError
 from adg.connectors.relational import RelationalConnector
@@ -19,24 +20,45 @@ class DorisConnector(RelationalConnector):
         """Scan Doris metadata without SQLAlchemy's MySQL DDL parser."""
 
         self._require_dependency()
-        database_name = str(config.get("database", "")).strip()
+        connection_config = self._validated_connection_config(config)
+        database_name = str(connection_config.get("database", "")).strip()
 
         try:
-            engine = create_engine(self._build_url(config))
+            engine = create_engine(
+                self._build_url(connection_config),
+                connect_args=self._doris_one_shot_connect_args(),
+            )
             with engine.connect() as connection:
                 database_names = (
                     [database_name] if database_name else self._list_database_names(connection)
                 )
+                if (
+                    not database_name
+                    and len(database_names) > get_settings().metadata_scan_max_databases
+                ):
+                    raise ConnectorOperationError("metadata_scan_database_limit_exceeded")
                 databases = [
                     self._scan_database(connection, scanned_database_name)
                     for scanned_database_name in database_names
                 ]
         except ConnectorDependencyError:
             raise
+        except ConnectorOperationError:
+            raise
         except Exception as error:
             raise ConnectorOperationError(str(error)) from error
 
         return {"databases": databases}
+
+    def _doris_one_shot_connect_args(self) -> dict[str, object]:
+        """Return MySQL wire-protocol timeout options for Doris scan connections."""
+
+        settings = get_settings()
+        return {
+            "connect_timeout": settings.runtime_datasource_connect_timeout_seconds,
+            "read_timeout": settings.runtime_datasource_read_timeout_seconds,
+            "write_timeout": settings.runtime_datasource_write_timeout_seconds,
+        }
 
     def _list_database_names(self, connection: Any) -> list[str]:
         """Discover user-accessible Doris databases from information_schema."""

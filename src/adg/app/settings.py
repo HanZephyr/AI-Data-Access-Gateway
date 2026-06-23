@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_SECRET_KEY = "change-me-to-a-long-random-secret"
 DEFAULT_CREDENTIAL_ENCRYPTION_KEY = "change-me-to-a-long-random-credential-key"
+DEFAULT_MASKING_ENCRYPTION_KEY = "change-me-to-a-long-random-masking-key"
 
 
 class Settings(BaseSettings):
@@ -27,8 +28,17 @@ class Settings(BaseSettings):
         default=DEFAULT_CREDENTIAL_ENCRYPTION_KEY,
         min_length=16,
     )
+    masking_encryption_key: str = Field(
+        default=DEFAULT_MASKING_ENCRYPTION_KEY,
+        min_length=16,
+    )
+    secret_kdf_iterations: int = Field(default=390_000, ge=1_000)
+    metadata_scan_max_databases: int = Field(default=25, ge=1)
+    datasource_network_allowlist: str = ""
     log_level: str = "INFO"
     backend_host_port: int | None = Field(default=None, ge=1, le=65535)
+    admin_page_default_limit: int = Field(default=50, ge=1)
+    admin_page_max_limit: int = Field(default=500, ge=1)
     sql_execution_mode: Literal["read_only", "dml", "schema", "admin"] = "read_only"
     sql_strict_validation: bool = True
     runtime_datasource_pool_cache_size: int = Field(default=32, ge=1)
@@ -38,6 +48,12 @@ class Settings(BaseSettings):
     runtime_datasource_connect_timeout_seconds: int = Field(default=10, gt=0)
     runtime_datasource_read_timeout_seconds: int = Field(default=120, gt=0)
     runtime_datasource_write_timeout_seconds: int = Field(default=120, gt=0)
+    auth_rate_limit_enabled: bool = True
+    auth_rate_limit_storage: Literal["memory", "redis"] = "memory"
+    auth_rate_limit_redis_url: str | None = None
+    auth_rate_limit_window_seconds: int = Field(default=60, gt=0)
+    auth_rate_limit_max_failures: int = Field(default=10, gt=0)
+    auth_rate_limit_block_seconds: int = Field(default=300, gt=0)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
@@ -51,6 +67,31 @@ class Settings(BaseSettings):
         ):
             raise ValueError(
                 "ADG_CREDENTIAL_ENCRYPTION_KEY must be set to a unique random value in production."
+            )
+        if (
+            self.env == "production"
+            and self.masking_encryption_key == DEFAULT_MASKING_ENCRYPTION_KEY
+        ):
+            raise ValueError(
+                "ADG_MASKING_ENCRYPTION_KEY must be set to a unique random value in production."
+            )
+        production_keys = {
+            self.secret_key,
+            self.credential_encryption_key,
+            self.masking_encryption_key,
+        }
+        if self.env == "production" and len(production_keys) != 3:
+            raise ValueError(
+                "ADG_SECRET_KEY, ADG_CREDENTIAL_ENCRYPTION_KEY, and "
+                "ADG_MASKING_ENCRYPTION_KEY must be different in production."
+            )
+        if (
+            self.auth_rate_limit_enabled
+            and self.auth_rate_limit_storage == "redis"
+            and not self.auth_rate_limit_redis_url
+        ):
+            raise ValueError(
+                "ADG_AUTH_RATE_LIMIT_REDIS_URL is required when Redis rate limiting is enabled."
             )
         return self
 
