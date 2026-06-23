@@ -10,8 +10,9 @@ describe("runtime entrypoints", () => {
     expect(viteConfigSource).toContain('"/api/tools": backendTarget');
   });
 
-  it("labels the HTTP tool URL as a supported API instead of a legacy facade", () => {
+  it("labels the HTTP tool URL as a supplemental plain HTTP API", () => {
     expect(mainSource).not.toContain('"mcp.toolUrl": "Legacy HTTP facade"');
-    expect(mainSource).toContain('"mcp.toolUrl": "HTTP tool API"');
+    expect(mainSource).toContain('"mcp.toolUrl": "Supplemental HTTP tool API"');
+    expect(mainSource).toContain('"mcp.toolUrl": "补充普通 HTTP 工具地址"');
   });
 });

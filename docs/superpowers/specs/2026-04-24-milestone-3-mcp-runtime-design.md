@@ -3,6 +3,8 @@
 **Date:** 2026-04-24
 **Status:** Approved
 
+> 注记（2026-06-23）：本文档中的 `POST /mcp/tools/{tool_name}` 路径和“请求体提供身份上下文”身份模型已被当前实现和 2026-04-26 身份改造覆盖。当前 AI Agent 主入口是 FastMCP Streamable HTTP `/mcp`；`POST /api/tools/{tool_name}` 仅作为面向传统服务集成的补充普通 HTTP 工具接口；不支持 `POST /mcp/tools/{tool_name}` 作为兼容别名。
+
 ---
 
 ## Scope

@@ -21,7 +21,7 @@ status: active
 ## Responsibilities
 
 - Provide transport-neutral runtime tool handlers for datasource, tag, resource, preview, and query workflows.
-- Expose FastMCP Streamable HTTP at `/mcp` and a simpler authenticated HTTP tool API at `POST /api/tools/{tool_name}`.
+- Expose FastMCP Streamable HTTP at `/mcp` as the primary AI-agent entrypoint and a supplemental authenticated plain HTTP tool API at `POST /api/tools/{tool_name}` for traditional service integrations.
 - Enforce runtime resource and field policies over Milestone 2 resource snapshots.
 - Parse SQL through a conservative AST-based guard before read-only connector execution.
 - Record runtime audit events for discovery, successful execution, connector failures, SQL rejection, and permission rejection.
@@ -31,7 +31,7 @@ status: active
 - Runtime service: `src/adg/gateway_runtime/tools.py`
 - FastAPI mount and `/mcp` path normalization: `src/adg/app/main.py`
 - FastMCP Streamable HTTP server: `src/adg/mcp_server/server.py`
-- Simplified HTTP tool API: `src/adg/mcp_api/tools.py`
+- Supplemental plain HTTP tool API: `src/adg/mcp_api/tools.py`
 - Policy service: `src/adg/policy/runtime.py`
 - SQL Guard: `src/adg/sql_guard/guard.py`
 - Governance models: `src/adg/control_plane/models/governance.py`
@@ -65,7 +65,7 @@ status: active
 
 ## Common pitfalls
 
-- Treating historical `POST /mcp/tools/{tool_name}` as a current runtime entrypoint. It is obsolete; current callers should use FastMCP Streamable HTTP `/mcp` or the simpler `POST /api/tools/{tool_name}` API.
+- Treating historical `POST /mcp/tools/{tool_name}` as a current runtime entrypoint or compatibility alias. It is obsolete and intentionally unsupported; AI agents should use FastMCP Streamable HTTP `/mcp`, while non-agent traditional services may use the supplemental `POST /api/tools/{tool_name}` API.
 - Forgetting to proxy current runtime entrypoints from the web host. Production Nginx and the local Vite dev server must forward `/mcp` and `/api/tools/` to the backend.
 - Letting unknown SQL tables execute because the declared resource scope is non-empty. SQL Guard extraction must resolve to known resource snapshots.
 - Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.

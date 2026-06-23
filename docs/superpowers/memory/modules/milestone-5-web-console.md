@@ -40,7 +40,7 @@ status: active
 - The web console stores the operator-supplied API key in local storage and sends it through `X-ADG-API-Key`.
 - Management tables should prioritize human-readable labels such as `resource_label` over raw primary/foreign key values. Raw UUIDs remain available in details when needed for troubleshooting.
 - Policy and masking forms should use searchable resource selectors backed by `/admin/resources` rather than asking operators to copy `resource_id` strings manually.
-- Production Nginx and the local Vite dev server must both proxy the current runtime HTTP tool entrypoint `/api/tools/` to the backend; local Vite uses the `/api/tools` proxy key.
+- Production Nginx and the local Vite dev server must both proxy the supplemental plain HTTP tool entrypoint `/api/tools/` to the backend; local Vite uses the `/api/tools` proxy key.
 - `web/package-lock.json` tarball `resolved` URLs should remain canonical `https://registry.npmjs.org/` URLs so Docker builds can keep `NPM_REGISTRY_URL` as an install-time registry override instead of baking a mirror into the lockfile.
 - `web/dist/`, `web/node_modules/`, `web/tsconfig.tsbuildinfo`, and runtime `data/` are local artifacts and must remain ignored.
 
@@ -52,7 +52,7 @@ status: active
 ## Common pitfalls
 
 - Treating the console as standalone without backend seed data. The UI expects a valid admin API key and live FastAPI admin endpoints.
-- Proxying `/mcp` but forgetting `/api/tools/`. The setup UI exposes both FastMCP `/mcp` and direct HTTP tool URLs, and the latter must work behind the same frontend origin in production and local development.
+- Proxying `/mcp` but forgetting `/api/tools/`. The setup UI exposes the FastMCP `/mcp` primary endpoint plus the supplemental plain HTTP tool URL, and both must work behind the same frontend origin in production and local development.
 - Rewriting `web/package-lock.json` `resolved` fields to a private or regional registry. That conflicts with the configurable `NPM_REGISTRY_URL` build contract and creates noisy lockfile churn.
 - Reintroducing manual foreign-key text boxes for resource association. This raises operator error risk and contradicts the console UX contract.
 - Committing web build artifacts or local SQLite/log files.
