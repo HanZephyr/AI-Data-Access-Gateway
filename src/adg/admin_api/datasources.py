@@ -13,7 +13,7 @@ from adg.control_plane.models.datasource import Datasource
 from adg.control_plane.models.governance import DatasourceTag, Tag
 from adg.control_plane.services.datasource_service import DatasourceService
 from adg.control_plane.services.metadata_scan_service import MetadataScanService
-from adg.shared.errors import NotFoundError
+from adg.shared.errors import NotFoundError, ValidationError
 
 router = APIRouter(prefix="/admin/datasources", tags=["admin"])
 
@@ -79,13 +79,16 @@ def create_datasource(
     """Create a datasource record without testing the connection immediately."""
 
     service = DatasourceService(session)
-    datasource = service.create_datasource(
-        name=payload.name,
-        connector_type=payload.type,
-        description=payload.description,
-        config=payload.config,
-        status=payload.status,
-    )
+    try:
+        datasource = service.create_datasource(
+            name=payload.name,
+            connector_type=payload.type,
+            description=payload.description,
+            config=payload.config,
+            status=payload.status,
+        )
+    except ValidationError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     session.commit()
     session.refresh(datasource)
     return _serialize_datasource(datasource)
@@ -131,6 +134,8 @@ def update_datasource(
         )
     except NotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except ValidationError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     session.commit()
     session.refresh(datasource)
     return _serialize_datasource(

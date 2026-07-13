@@ -65,7 +65,13 @@ def build_internal_app(
                 status="active",
             )
         )
-        service = MaskingService(session, secret_key=get_settings().secret_key)
+        settings = get_settings()
+        service = MaskingService(
+            session,
+            secret_key=settings.secret_key,
+            masking_encryption_key=settings.masking_encryption_key,
+            kdf_iterations=settings.secret_kdf_iterations,
+        )
         marker = service.mask_reversible_value(
             user_id="user-1",
             datasource_id="ds_1",
@@ -121,6 +127,19 @@ def test_runtime_decrypt_rejects_expired_context() -> None:
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Decrypt context expired"
+
+
+def test_runtime_decrypt_rejects_oversized_batches() -> None:
+    client, marker, _ = build_internal_app()
+
+    response = client.post(
+        "/runtime/decrypt",
+        json={"values": [marker] * 101},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Decrypt value limit exceeded"
 
 
 def test_runtime_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:

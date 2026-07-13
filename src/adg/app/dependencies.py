@@ -76,7 +76,8 @@ def authenticate_api_key_value(
 ) -> AuthenticatedApiKey:
     """Authenticate one raw API key value against the active control-plane keys."""
 
-    if check_auth_rate_limited(raw_api_key, client_identifier):
+    # A shared reverse-proxy peer must never prevent a valid credential from being checked.
+    if check_auth_rate_limited(raw_api_key):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=RATE_LIMIT_DETAIL,
@@ -104,7 +105,7 @@ def authenticate_api_key_value(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Expired API key",
             )
-        record_auth_success(raw_api_key, client_identifier)
+        record_auth_success(raw_api_key)
         return AuthenticatedApiKey(
             id=api_key.id,
             scopes=api_key.scopes,
@@ -124,7 +125,10 @@ def _record_auth_failure_or_raise_rate_limited(
 ) -> None:
     """Record one failed authentication and raise 429 when the threshold is reached."""
 
-    if record_auth_failure(raw_api_key, client_identifier):
+    if check_auth_rate_limited(raw_api_key, client_identifier) or record_auth_failure(
+        raw_api_key,
+        client_identifier,
+    ):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=RATE_LIMIT_DETAIL,

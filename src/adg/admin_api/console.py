@@ -73,6 +73,17 @@ def _paginated_response(
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
+
+def _consume_resource_tree_budget(remaining: int, node_count: int) -> int:
+    """Fail closed instead of returning a partial catalog tree."""
+
+    if node_count > remaining:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="resource_tree_node_budget_exceeded",
+        )
+    return remaining - node_count
+
 class TagRequest(BaseModel):
     """Payload for creating a governance tag."""
 
@@ -346,20 +357,47 @@ def list_resource_tree(
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
+    root_conditions = [*conditions, Resource.parent_id.is_(None)]
     total = int(
-        session.execute(select(func.count()).select_from(Resource).where(*conditions)).scalar_one()
+        session.execute(
+            select(func.count()).select_from(Resource).where(*root_conditions)
+        ).scalar_one()
     )
+    remaining_nodes = settings.admin_resource_tree_max_nodes
     resources = list(
         session.execute(
             select(Resource)
-            .where(*conditions)
+            .where(*root_conditions)
             .order_by(Resource.path)
-            .limit(page_limit)
+            .limit(min(page_limit, remaining_nodes + 1))
             .offset(page_offset)
         ).scalars()
     )
+    remaining_nodes = _consume_resource_tree_budget(remaining_nodes, len(resources))
+    seen_resource_ids = {resource.id for resource in resources}
+    parent_ids = set(seen_resource_ids)
+    while parent_ids:
+        descendants = list(
+            session.execute(
+                select(Resource)
+                .where(Resource.parent_id.in_(parent_ids), *conditions)
+                .order_by(Resource.path)
+                .limit(remaining_nodes + 1)
+            ).scalars()
+        )
+        new_descendants = [
+            resource for resource in descendants if resource.id not in seen_resource_ids
+        ]
+        if not new_descendants:
+            break
+        remaining_nodes = _consume_resource_tree_budget(
+            remaining_nodes,
+            len(new_descendants),
+        )
+        resources.extend(new_descendants)
+        parent_ids = {resource.id for resource in new_descendants}
+        seen_resource_ids.update(parent_ids)
     resource_ids = [resource.id for resource in resources]
-    tags_by_resource_id = _load_resource_tags(session, resource_ids)
     fields = []
     if resource_ids:
         fields = list(
@@ -367,8 +405,15 @@ def list_resource_tree(
                 select(ResourceField)
                 .where(ResourceField.resource_id.in_(resource_ids))
                 .order_by(ResourceField.ordinal_position)
+                .limit(remaining_nodes + 1)
             ).scalars()
         )
+        remaining_nodes = _consume_resource_tree_budget(remaining_nodes, len(fields))
+    tags_by_resource_id = _load_resource_tags(
+        session,
+        resource_ids,
+        max_rows=remaining_nodes,
+    )
     return _paginated_response(
         items=_build_resource_tree(resources, fields, tags_by_resource_id),
         total=total,
@@ -1701,18 +1746,25 @@ def _serialize_tag(tag: Tag) -> dict[str, Any]:
 def _load_resource_tags(
     session: Session,
     resource_ids: list[str],
+    *,
+    max_rows: int | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Load serialized tags for resource ids keyed by resource id."""
 
     if not resource_ids:
         return {}
 
-    rows = session.execute(
+    query = (
         select(ResourceTag.resource_id, Tag)
         .join(Tag, Tag.id == ResourceTag.tag_id)
         .where(ResourceTag.resource_id.in_(resource_ids))
         .order_by(Tag.name)
-    ).all()
+    )
+    if max_rows is not None:
+        query = query.limit(max_rows + 1)
+    rows = session.execute(query).all()
+    if max_rows is not None:
+        _consume_resource_tree_budget(max_rows, len(rows))
     tags_by_resource_id: dict[str, list[dict[str, Any]]] = {item_id: [] for item_id in resource_ids}
     for resource_id, tag in rows:
         tags_by_resource_id.setdefault(resource_id, []).append(_serialize_tag(tag))

@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from adg.app.main import create_app
-from adg.app.settings import get_settings
+from adg.app.settings import Settings, get_settings
 from adg.audit.service import AuditService
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
@@ -22,6 +22,8 @@ def build_console_app(
     *,
     extra_resource_count: int = 0,
     audit_event_count: int = 1,
+    hierarchical_resource_tree: bool = False,
+    resource_tree_max_nodes: int | None = None,
 ) -> TestClient:
     engine = create_engine_from_url("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -122,6 +124,53 @@ def build_console_app(
                     metadata_json="{}",
                 )
             )
+        if hierarchical_resource_tree:
+            for prefix in ("a_warehouse", "b_warehouse"):
+                database = Resource(
+                    id=f"res_{prefix}",
+                    datasource_id="ds_1",
+                    kind="database",
+                    name=prefix,
+                    path=prefix,
+                    display_name=prefix,
+                    query_language="sql",
+                    metadata_json="{}",
+                )
+                schema = Resource(
+                    id=f"res_{prefix}_public",
+                    datasource_id="ds_1",
+                    parent_id=database.id,
+                    kind="schema",
+                    name="public",
+                    path=f"{prefix}.public",
+                    display_name="public",
+                    query_language="sql",
+                    metadata_json="{}",
+                )
+                table = Resource(
+                    id=f"res_{prefix}_orders",
+                    datasource_id="ds_1",
+                    parent_id=schema.id,
+                    kind="relational_table",
+                    name="orders",
+                    path=f"{prefix}.public.orders",
+                    display_name="orders",
+                    query_language="sql",
+                    metadata_json="{}",
+                )
+                session.add_all([database, schema, table])
+                session.add(
+                    ResourceField(
+                        id=f"field_{prefix}_order_id",
+                        datasource_id="ds_1",
+                        resource_id=table.id,
+                        name="order_id",
+                        data_type="integer",
+                        nullable=False,
+                        ordinal_position=1,
+                        metadata_json="{}",
+                    )
+                )
         for index in range(audit_event_count):
             AuditService(session).record_event(
                 user_id="user-1",
@@ -144,6 +193,9 @@ def build_console_app(
             yield session
 
     app.dependency_overrides[get_session] = override_session
+    if resource_tree_max_nodes is not None:
+        settings = Settings(admin_resource_tree_max_nodes=resource_tree_max_nodes)
+        app.dependency_overrides[get_settings] = lambda: settings
     return TestClient(app, base_url=base_url)
 
 
@@ -177,6 +229,56 @@ def test_admin_resource_tree_paginates_resource_nodes_and_fields_for_current_pag
     assert [item["id"] for item in body["items"]] == ["res_extra_0"]
     assert body["items"][0]["children"][0]["type"] == "field"
     assert body["items"][0]["children"][0]["resource_id"] == "res_extra_0"
+
+
+def test_admin_resource_tree_paginates_roots_with_complete_descendants() -> None:
+    client = build_console_app(hierarchical_resource_tree=True)
+
+    first_page = client.get("/admin/resource-tree?limit=1&offset=0", headers=auth())
+    second_page = client.get("/admin/resource-tree?limit=1&offset=1", headers=auth())
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    first_body = first_page.json()
+    second_body = second_page.json()
+    assert first_body["total"] == 3
+    assert [item["id"] for item in first_body["items"]] == ["res_a_warehouse"]
+    assert first_body["items"][0]["children"][0]["id"] == "res_a_warehouse_public"
+    assert first_body["items"][0]["children"][0]["children"][0]["id"] == (
+        "res_a_warehouse_orders"
+    )
+    assert first_body["items"][0]["children"][0]["children"][0]["children"][0][
+        "field_id"
+    ] == "field_a_warehouse_order_id"
+    assert [item["id"] for item in second_body["items"]] == ["res_b_warehouse"]
+
+
+@pytest.mark.parametrize(
+    "hierarchical_resource_tree,node_budget",
+    [(False, 1), (True, 2)],
+)
+def test_admin_resource_tree_rejects_subtrees_over_node_budget(
+    hierarchical_resource_tree: bool,
+    node_budget: int,
+) -> None:
+    client = build_console_app(
+        hierarchical_resource_tree=hierarchical_resource_tree,
+        resource_tree_max_nodes=node_budget,
+    )
+
+    response = client.get("/admin/resource-tree?limit=1&offset=0", headers=auth())
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "resource_tree_node_budget_exceeded"}
+
+
+def test_admin_resource_tree_returns_complete_subtree_within_node_budget() -> None:
+    client = build_console_app(resource_tree_max_nodes=2)
+
+    response = client.get("/admin/resource-tree?limit=1&offset=0", headers=auth())
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["children"][0]["field_id"] == "field_email"
 
 
 def test_admin_audit_events_returns_paginated_object() -> None:

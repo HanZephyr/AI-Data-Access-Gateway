@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from adg.shared.crypto import FERNET_KDF_MAX_ITERATIONS, FERNET_KDF_MIN_ITERATIONS
+
 DEFAULT_SECRET_KEY = "change-me-to-a-long-random-secret"
 DEFAULT_CREDENTIAL_ENCRYPTION_KEY = "change-me-to-a-long-random-credential-key"
 DEFAULT_MASKING_ENCRYPTION_KEY = "change-me-to-a-long-random-masking-key"
@@ -33,13 +35,18 @@ class Settings(BaseSettings):
         default=DEFAULT_MASKING_ENCRYPTION_KEY,
         min_length=16,
     )
-    secret_kdf_iterations: int = Field(default=390_000, ge=1_000)
+    secret_kdf_iterations: int = Field(
+        default=390_000,
+        ge=FERNET_KDF_MIN_ITERATIONS,
+        le=FERNET_KDF_MAX_ITERATIONS,
+    )
     metadata_scan_max_databases: int = Field(default=25, ge=1)
     datasource_network_allowlist: str = ""
     log_level: str = "INFO"
     backend_host_port: int | None = Field(default=None, ge=1, le=65535)
     admin_page_default_limit: int = Field(default=50, ge=1)
     admin_page_max_limit: int = Field(default=500, ge=1)
+    admin_resource_tree_max_nodes: int = Field(default=10_000, ge=1)
     sql_execution_mode: Literal["read_only", "dml", "schema", "admin"] = "read_only"
     sql_strict_validation: bool = True
     runtime_datasource_pool_cache_size: int = Field(default=32, ge=1)
@@ -49,12 +56,15 @@ class Settings(BaseSettings):
     runtime_datasource_connect_timeout_seconds: int = Field(default=10, gt=0)
     runtime_datasource_read_timeout_seconds: int = Field(default=120, gt=0)
     runtime_datasource_write_timeout_seconds: int = Field(default=120, gt=0)
+    runtime_query_max_limit: int = Field(default=1000, ge=1)
+    runtime_decrypt_max_values: int = Field(default=100, ge=1)
     auth_rate_limit_enabled: bool = True
     auth_rate_limit_storage: Literal["memory", "redis"] = "memory"
     auth_rate_limit_redis_url: str | None = None
     auth_rate_limit_window_seconds: int = Field(default=60, gt=0)
     auth_rate_limit_max_failures: int = Field(default=10, gt=0)
     auth_rate_limit_block_seconds: int = Field(default=300, gt=0)
+    auth_rate_limit_memory_max_buckets: int = Field(default=10_000, ge=2)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

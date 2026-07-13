@@ -271,8 +271,8 @@ class RelationalConnector:
 
         try:
             resolved = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-        except socket.gaierror:
-            return []
+        except socket.gaierror as error:
+            raise ConnectorOperationError("datasource_network_unresolved") from error
 
         addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
         for result in resolved:
@@ -283,6 +283,8 @@ class RelationalConnector:
                 continue
             if address not in addresses:
                 addresses.append(address)
+        if not addresses:
+            raise ConnectorOperationError("datasource_network_unresolved")
         return addresses
 
     def _address_is_blocked(

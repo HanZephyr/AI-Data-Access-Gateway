@@ -4,6 +4,7 @@ import hashlib
 import importlib
 import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Protocol, cast
 
@@ -11,16 +12,27 @@ from adg.app.settings import Settings, get_settings
 
 RATE_LIMIT_DETAIL = "Too many authentication failures"
 _MISSING_KEY_SENTINEL = "<missing>"
+_REDIS_RECORD_FAILURE_SCRIPT = """
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return 1
+end
+local failures = redis.call('INCR', KEYS[1])
+if failures == 1 then
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+if failures >= tonumber(ARGV[2]) then
+    redis.call('SETEX', KEYS[2], tonumber(ARGV[3]), 1)
+    redis.call('DEL', KEYS[1])
+    return 1
+end
+return 0
+"""
 
 
 class RedisClient(Protocol):
     """Minimal synchronous Redis API used by the auth failure limiter."""
 
-    def incr(self, key: str) -> int: ...
-
-    def expire(self, key: str, seconds: int) -> object: ...
-
-    def setex(self, key: str, seconds: int, value: int) -> object: ...
+    def eval(self, script: str, numkeys: int, *keys_and_args: object) -> object: ...
 
     def exists(self, key: str) -> int: ...
 
@@ -40,7 +52,7 @@ class AuthRateLimiter:
     def __init__(self, settings: Settings, redis_client: RedisClient | None = None) -> None:
         self._settings = settings
         self._redis_client = redis_client
-        self._memory_buckets: dict[str, MemoryFailureBucket] = {}
+        self._memory_buckets: OrderedDict[str, MemoryFailureBucket] = OrderedDict()
         self._lock = threading.Lock()
 
     def check_auth_rate_limited(
@@ -99,28 +111,63 @@ class AuthRateLimiter:
                 return False
             if bucket.blocked_until is not None:
                 if bucket.blocked_until > now:
+                    self._memory_buckets.move_to_end(fingerprint)
                     return True
                 self._memory_buckets.pop(fingerprint, None)
                 return False
             if bucket.window_expires_at <= now:
                 self._memory_buckets.pop(fingerprint, None)
+                return False
+            self._memory_buckets.move_to_end(fingerprint)
             return False
 
     def _memory_record_failure(self, fingerprint: str) -> bool:
         now = time.monotonic()
         with self._lock:
             bucket = self._memory_buckets.get(fingerprint)
+            if bucket is not None and bucket.blocked_until is not None:
+                if bucket.blocked_until > now:
+                    self._memory_buckets.move_to_end(fingerprint)
+                    return True
+                self._memory_buckets.pop(fingerprint, None)
+                bucket = None
             if bucket is None or bucket.window_expires_at <= now:
+                if bucket is not None:
+                    self._memory_buckets.pop(fingerprint, None)
+                self._prune_memory_buckets(now)
+                while (
+                    len(self._memory_buckets)
+                    >= self._settings.auth_rate_limit_memory_max_buckets
+                ):
+                    self._memory_buckets.popitem(last=False)
                 bucket = MemoryFailureBucket(
                     failures=0,
                     window_expires_at=now + self._settings.auth_rate_limit_window_seconds,
                 )
                 self._memory_buckets[fingerprint] = bucket
+            else:
+                self._memory_buckets.move_to_end(fingerprint)
             bucket.failures += 1
             if bucket.failures >= self._settings.auth_rate_limit_max_failures:
                 bucket.blocked_until = now + self._settings.auth_rate_limit_block_seconds
                 return True
             return False
+
+    def _prune_memory_buckets(self, now: float) -> None:
+        """Discard expired buckets before enforcing the configured memory bound."""
+
+        expired = [
+            fingerprint
+            for fingerprint, bucket in self._memory_buckets.items()
+            if (
+                bucket.blocked_until is not None
+                and bucket.blocked_until <= now
+                or bucket.blocked_until is None
+                and bucket.window_expires_at <= now
+            )
+        ]
+        for fingerprint in expired:
+            self._memory_buckets.pop(fingerprint, None)
 
     def _redis_is_blocked(self, fingerprint: str) -> bool:
         client = self._require_redis_client()
@@ -128,19 +175,17 @@ class AuthRateLimiter:
 
     def _redis_record_failure(self, fingerprint: str) -> bool:
         client = self._require_redis_client()
-        failure_key = self._failure_key(fingerprint)
-        failures = int(client.incr(failure_key))
-        if failures == 1:
-            client.expire(failure_key, self._settings.auth_rate_limit_window_seconds)
-        if failures >= self._settings.auth_rate_limit_max_failures:
-            client.setex(
+        return bool(
+            client.eval(
+                _REDIS_RECORD_FAILURE_SCRIPT,
+                2,
+                self._failure_key(fingerprint),
                 self._block_key(fingerprint),
+                self._settings.auth_rate_limit_window_seconds,
+                self._settings.auth_rate_limit_max_failures,
                 self._settings.auth_rate_limit_block_seconds,
-                1,
             )
-            client.delete(failure_key)
-            return True
-        return False
+        )
 
     def _require_redis_client(self) -> RedisClient:
         if self._redis_client is None:
@@ -164,10 +209,10 @@ class AuthRateLimiter:
         return hashlib.sha256(f"{namespace}:{safe_value}".encode()).hexdigest()
 
     def _failure_key(self, fingerprint: str) -> str:
-        return f"adg:auth-rate-limit:failure:{fingerprint}"
+        return f"adg:auth-rate-limit:{{{fingerprint}}}:failure"
 
     def _block_key(self, fingerprint: str) -> str:
-        return f"adg:auth-rate-limit:block:{fingerprint}"
+        return f"adg:auth-rate-limit:{{{fingerprint}}}:block"
 
 
 def create_redis_client(redis_url: str) -> RedisClient:

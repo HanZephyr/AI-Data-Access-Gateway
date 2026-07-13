@@ -181,6 +181,33 @@ def test_admin_datasource_routes_require_admin_key() -> None:
     assert response.status_code == 401
 
 
+def test_admin_datasource_rejects_client_supplied_encrypted_secret() -> None:
+    client = build_admin_datasource_app()
+
+    response = client.post(
+        "/admin/datasources",
+        json={
+            "name": "Warehouse",
+            "type": "postgres",
+            "config": {
+                "host": "db.internal",
+                "password": {
+                    "kind": "encrypted_secret",
+                    "version": 2,
+                    "kdf": "pbkdf2-hmac-sha256",
+                    "iterations": 2_000_001,
+                    "salt": "attacker-controlled",
+                    "ciphertext": "attacker-controlled",
+                },
+            },
+        },
+        headers={"X-ADG-API-Key": "adg_admin"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Encrypted datasource secrets cannot be supplied"
+
+
 def test_admin_datasource_returns_404_for_unknown_id() -> None:
     client = build_admin_datasource_app()
 

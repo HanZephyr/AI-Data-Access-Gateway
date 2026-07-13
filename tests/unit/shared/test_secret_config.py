@@ -1,5 +1,8 @@
 from typing import Any, cast
 
+import pytest
+
+from adg.shared.errors import ValidationError
 from adg.shared.secret_config import SecretConfigService
 
 
@@ -108,3 +111,14 @@ def test_secret_config_uses_random_salt_for_new_envelopes() -> None:
     assert second["version"] == 2
     assert first["salt"] != second["salt"]
     assert first["ciphertext"] != second["ciphertext"]
+
+
+def test_secret_config_rejects_client_supplied_encrypted_envelope() -> None:
+    service = SecretConfigService(
+        credential_encryption_key="credential-key-for-tests-123",
+        kdf_iterations=1_200,
+    )
+    protected = service.protect_persisted_config({"password": "secret"})
+
+    with pytest.raises(ValidationError, match="Encrypted datasource secrets cannot be supplied"):
+        service.protect_persisted_config({"password": protected["password"]})

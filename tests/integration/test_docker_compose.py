@@ -73,6 +73,12 @@ def test_backend_compose_passes_runtime_datasource_timeout_settings() -> None:
     assert environment["ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS"] == (
         "${ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS:-120}"
     )
+    assert environment["ADG_RUNTIME_QUERY_MAX_LIMIT"] == (
+        "${ADG_RUNTIME_QUERY_MAX_LIMIT:-1000}"
+    )
+    assert environment["ADG_RUNTIME_DECRYPT_MAX_VALUES"] == (
+        "${ADG_RUNTIME_DECRYPT_MAX_VALUES:-100}"
+    )
 
 
 def test_backend_compose_passes_mcp_query_api_key_compatibility_switch() -> None:
@@ -92,13 +98,55 @@ def test_backend_dockerfile_supports_configurable_runtime_port() -> None:
     assert "--port ${ADG_BACKEND_PORT:-8000}" in dockerfile
 
 
-def test_backend_compose_requires_both_production_secrets() -> None:
+def test_backend_compose_passes_hardening_configuration() -> None:
     compose = load_compose_example()
 
     environment = compose["services"]["backend"]["environment"]
 
-    assert "ADG_SECRET_KEY" in environment
-    assert "ADG_CREDENTIAL_ENCRYPTION_KEY" in environment
+    assert environment["ADG_SECRET_KEY"].startswith("${ADG_SECRET_KEY:?")
+    assert environment["ADG_CREDENTIAL_ENCRYPTION_KEY"].startswith(
+        "${ADG_CREDENTIAL_ENCRYPTION_KEY:?"
+    )
+    assert environment["ADG_MASKING_ENCRYPTION_KEY"].startswith(
+        "${ADG_MASKING_ENCRYPTION_KEY:?"
+    )
+    assert environment["ADG_SECRET_KDF_ITERATIONS"] == (
+        "${ADG_SECRET_KDF_ITERATIONS:-390000}"
+    )
+    assert environment["ADG_ADMIN_PAGE_DEFAULT_LIMIT"] == (
+        "${ADG_ADMIN_PAGE_DEFAULT_LIMIT:-50}"
+    )
+    assert environment["ADG_ADMIN_PAGE_MAX_LIMIT"] == "${ADG_ADMIN_PAGE_MAX_LIMIT:-500}"
+    assert environment["ADG_ADMIN_RESOURCE_TREE_MAX_NODES"] == (
+        "${ADG_ADMIN_RESOURCE_TREE_MAX_NODES:-10000}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_ENABLED"] == (
+        "${ADG_AUTH_RATE_LIMIT_ENABLED:-true}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_STORAGE"] == (
+        "${ADG_AUTH_RATE_LIMIT_STORAGE:-memory}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_REDIS_URL"] == (
+        "${ADG_AUTH_RATE_LIMIT_REDIS_URL:-}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_WINDOW_SECONDS"] == (
+        "${ADG_AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_MAX_FAILURES"] == (
+        "${ADG_AUTH_RATE_LIMIT_MAX_FAILURES:-10}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS"] == (
+        "${ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS:-300}"
+    )
+    assert environment["ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS"] == (
+        "${ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS:-10000}"
+    )
+    assert environment["ADG_METADATA_SCAN_MAX_DATABASES"] == (
+        "${ADG_METADATA_SCAN_MAX_DATABASES:-25}"
+    )
+    assert environment["ADG_DATASOURCE_NETWORK_ALLOWLIST"] == (
+        "${ADG_DATASOURCE_NETWORK_ALLOWLIST:-}"
+    )
 
 
 def test_backend_compose_passes_optional_pypi_index_build_arg() -> None:

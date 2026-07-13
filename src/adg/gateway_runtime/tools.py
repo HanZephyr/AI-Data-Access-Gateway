@@ -294,7 +294,36 @@ class GatewayRuntimeService:
         """Validate, authorize, execute, mask, and audit a read-only runtime query."""
 
         self._session.flush()
+        settings = get_settings()
+        limit_reason = None
+        if limit < 1:
+            limit_reason = "runtime_limit_invalid"
+        elif limit > settings.runtime_query_max_limit:
+            limit_reason = "runtime_limit_exceeded"
+        if limit_reason is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "sql_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                limit_reason,
+            )
+            return {"status": "rejected", "reason": limit_reason}
         datasource = self._get_datasource(datasource_id)
+        if datasource.status != "active":
+            reason = "datasource_disabled"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
         declared_resources = [self._get_resource(resource_id) for resource_id in resource_ids]
         # Declared resources are the caller's intended scope; every declared resource is checked.
         for resource in declared_resources:
@@ -327,7 +356,6 @@ class GatewayRuntimeService:
                 )
                 return {"status": "rejected", "reason": decision.reason}
 
-        settings = get_settings()
         guard_result = SqlGuard(
             default_limit=limit,
             max_limit=limit,
@@ -396,6 +424,23 @@ class GatewayRuntimeService:
             )
             return {"status": "rejected", "reason": reason}
 
+        projection_rejection = self._masking.projection_rejection(
+            identity=identity,
+            resources=actual_resources,
+            projections=guard_result.projections,
+        )
+        if projection_rejection is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                projection_rejection,
+            )
+            return {"status": "rejected", "reason": projection_rejection}
+
         declared_ids = set(resource_ids)
         actual_ids = {resource.id for resource in actual_resources}
         # SQL-derived resources are authoritative and must stay inside the declared scope.
@@ -450,6 +495,7 @@ class GatewayRuntimeService:
             query_id=query_id,
             resources=actual_resources,
             result=result,
+            projections=guard_result.projections,
         )
         self._audit.record_event(
             user_id=identity.user_id,
@@ -511,7 +557,13 @@ class GatewayRuntimeService:
         ]
         if datasource_id is not None:
             conditions.append(Resource.datasource_id == datasource_id)
-        resources = list(self._session.execute(select(Resource).where(*conditions)).scalars())
+        resources = list(
+            self._session.execute(
+                select(Resource)
+                .join(Datasource, Datasource.id == Resource.datasource_id)
+                .where(Datasource.status == "active", *conditions)
+            ).scalars()
+        )
         disabled_reasons = self._disabled_resource_reasons(resources)
         candidates = [
             resource for resource in resources if disabled_reasons.get(resource.id) is None
@@ -653,6 +705,9 @@ class GatewayRuntimeService:
     def _disabled_resource_reason(self, resource: Resource) -> str | None:
         """Return a stable rejection reason when a resource or ancestor is disabled."""
 
+        datasource = self._session.get(Datasource, resource.datasource_id)
+        if datasource is None or datasource.status != "active":
+            return "datasource_disabled"
         current: Resource | None = resource
         while current is not None:
             if current.status != "active":

@@ -204,6 +204,55 @@ def test_require_api_key_rate_limits_key_spraying_from_same_client(
     finally:
         get_settings.cache_clear()
         auth_rate_limit.reset_auth_rate_limiter()
+
+
+def test_require_api_key_client_block_does_not_reject_valid_credentials(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    configure_auth_rate_limit(monkeypatch, max_failures=2)
+    try:
+        client = TestClient(build_test_app("adg_valid"))
+
+        first = client.get("/protected", headers={"X-ADG-API-Key": "adg_wrong_1"})
+        blocked = client.get("/protected", headers={"X-ADG-API-Key": "adg_wrong_2"})
+        valid = client.get("/protected", headers={"X-ADG-API-Key": "adg_valid"})
+        still_blocked = client.get(
+            "/protected",
+            headers={"X-ADG-API-Key": "adg_wrong_3"},
+        )
+
+        assert first.status_code == 401
+        assert blocked.status_code == 429
+        assert valid.status_code == 200
+        assert still_blocked.status_code == 429
+    finally:
+        get_settings.cache_clear()
+        auth_rate_limit.reset_auth_rate_limiter()
+
+
+def test_require_api_key_does_not_trust_forwarded_headers_for_rate_limit_identity(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    configure_auth_rate_limit(monkeypatch, max_failures=2)
+    try:
+        client = TestClient(build_test_app("adg_valid"))
+
+        first = client.get(
+            "/protected",
+            headers={"X-ADG-API-Key": "adg_wrong_1", "X-Forwarded-For": "198.51.100.1"},
+        )
+        second = client.get(
+            "/protected",
+            headers={"X-ADG-API-Key": "adg_wrong_2", "X-Forwarded-For": "198.51.100.2"},
+        )
+
+        assert first.status_code == 401
+        assert second.status_code == 429
+    finally:
+        get_settings.cache_clear()
+        auth_rate_limit.reset_auth_rate_limiter()
+
+
 def test_require_api_key_success_does_not_clear_client_spraying_bucket(
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -268,6 +317,21 @@ def test_require_api_key_redis_rate_limits_key_spraying_from_same_client(
             self.values: dict[str, int] = {}
             self.expirations: dict[str, int] = {}
 
+        def eval(self, script: str, numkeys: int, *keys_and_args: object) -> int:
+            assert numkeys == 2
+            failure_key = str(keys_and_args[0])
+            block_key = str(keys_and_args[1])
+            if self.exists(block_key):
+                return 1
+            failures = self.incr(failure_key)
+            if failures == 1:
+                self.expire(failure_key, int(str(keys_and_args[2])))
+            if failures >= int(str(keys_and_args[3])):
+                self.setex(block_key, int(str(keys_and_args[4])), 1)
+                self.delete(failure_key)
+                return 1
+            return 0
+
         def incr(self, key: str) -> int:
             self.values[key] = self.values.get(key, 0) + 1
             return self.values[key]
@@ -314,6 +378,21 @@ def test_require_api_key_rate_limit_supports_redis_backend(
         def __init__(self) -> None:
             self.values: dict[str, int] = {}
             self.expirations: dict[str, int] = {}
+
+        def eval(self, script: str, numkeys: int, *keys_and_args: object) -> int:
+            assert numkeys == 2
+            failure_key = str(keys_and_args[0])
+            block_key = str(keys_and_args[1])
+            if self.exists(block_key):
+                return 1
+            failures = self.incr(failure_key)
+            if failures == 1:
+                self.expire(failure_key, int(str(keys_and_args[2])))
+            if failures >= int(str(keys_and_args[3])):
+                self.setex(block_key, int(str(keys_and_args[4])), 1)
+                self.delete(failure_key)
+                return 1
+            return 0
 
         def incr(self, key: str) -> int:
             self.values[key] = self.values.get(key, 0) + 1

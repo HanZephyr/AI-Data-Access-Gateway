@@ -17,6 +17,31 @@ def test_guard_allows_select_and_injects_default_limit() -> None:
     assert result.risk_level == "low"
 
 
+def test_guard_tracks_projection_output_lineage() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "select email as leaked, lower(phone) as normalized_phone from public.customers"
+    )
+
+    assert result.allowed is True
+    assert [
+        (projection.output_name, projection.source_fields)
+        for projection in result.projections
+    ] == [
+        ("leaked", ("email",)),
+        ("normalized_phone", ("phone",)),
+    ]
+
+
+def test_guard_rejects_derived_projection_without_stable_output_name() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "select lower(email) from public.customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["derived_projection_requires_alias"]
+
+
 def test_guard_reduces_limit_to_maximum() -> None:
     result = SqlGuard(default_limit=100, max_limit=500).check(
         "select id from public.customers limit 900"
@@ -32,6 +57,53 @@ def test_guard_rejects_mutation_statement() -> None:
 
     assert result.allowed is False
     assert "statement_not_allowed" in result.rejection_reasons
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "explain analyze delete from public.customers where id = 1",
+        "explain update public.customers set name = 'Alice' where id = 1",
+    ],
+)
+def test_guard_rejects_explain_commands_that_can_execute_mutations(query: str) -> None:
+    result = SqlGuard().check(query)
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["statement_not_allowed"]
+
+
+@pytest.mark.parametrize(
+    "query,rejection",
+    [
+        (
+            "select id into archived_customers from public.customers",
+            "select_into_not_allowed",
+        ),
+        ("select id from public.customers for update", "locking_read_not_allowed"),
+        ("select id from public.customers for share", "locking_read_not_allowed"),
+    ],
+)
+def test_guard_rejects_select_side_effects_even_with_relaxed_validation(
+    query: str,
+    rejection: str,
+) -> None:
+    result = SqlGuard(strict_validation=False).check(query)
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == [rejection]
+
+
+def test_guard_only_allows_select_into_in_schema_mode() -> None:
+    result = SqlGuard(execution_mode="schema").check(
+        "select id into archived_customers from public.customers"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.normalized_sql.startswith("CREATE TABLE archived_customers AS SELECT")
 
 
 @pytest.mark.parametrize(
@@ -166,6 +238,28 @@ def test_guard_relaxed_validation_allows_non_allowlisted_select_features() -> No
     assert result.normalized_sql is not None
     assert result.used_functions == ["md5"]
     assert "LIMIT 100" in result.normalized_sql
+
+
+def test_guard_marks_relaxed_wildcard_and_nested_projection_boundaries() -> None:
+    wildcard = SqlGuard(strict_validation=False).check(
+        "select *, email as leaked from public.customers"
+    )
+    nested = SqlGuard().check(
+        "select t.leaked from (select email as leaked from public.customers) t"
+    )
+
+    assert wildcard.allowed is True
+    assert any(projection.is_wildcard for projection in wildcard.projections)
+    assert nested.allowed is True
+    assert all(projection.has_nested_select for projection in nested.projections)
+
+
+def test_guard_rejects_case_insensitive_duplicate_projection_names() -> None:
+    result = SqlGuard().check('select email as x, email as "X" from public.customers')
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["duplicate_projection_output_name"]
 
 
 def test_guard_allows_boolean_predicates() -> None:
