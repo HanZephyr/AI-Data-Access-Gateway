@@ -27,7 +27,13 @@ def decrypt_values(
 
     user_id = api_key.user_id
     values = [str(value) for value in payload.get("values", [])]
-    masking_service = MaskingService(session, secret_key=get_settings().secret_key)
+    settings = get_settings()
+    masking_service = MaskingService(
+        session,
+        secret_key=settings.secret_key,
+        masking_encryption_key=settings.masking_encryption_key,
+        kdf_iterations=settings.secret_kdf_iterations,
+    )
     policy = RuntimePolicyService(session)
     try:
         contexts = masking_service.get_decrypt_contexts(user_id=user_id, values=values)

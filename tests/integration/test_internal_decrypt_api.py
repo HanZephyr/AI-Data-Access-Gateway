@@ -65,7 +65,13 @@ def build_internal_app(
                 status="active",
             )
         )
-        service = MaskingService(session, secret_key=get_settings().secret_key)
+        settings = get_settings()
+        service = MaskingService(
+            session,
+            secret_key=settings.secret_key,
+            masking_encryption_key=settings.masking_encryption_key,
+            kdf_iterations=settings.secret_kdf_iterations,
+        )
         marker = service.mask_reversible_value(
             user_id="user-1",
             datasource_id="ds_1",
