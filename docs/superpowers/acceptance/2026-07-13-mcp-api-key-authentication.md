@@ -2,7 +2,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-13-mcp-api-key-authentication-design.md`
 **Date:** 2026-07-13
-**Status:** Draft
+**Status:** Approved
 
 ---
 
