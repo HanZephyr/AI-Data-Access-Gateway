@@ -48,6 +48,16 @@ uv run --no-dev --extra all uvicorn adg.app.main:create_app --factory --host 0.0
 
 `init-admin` prints a one-time admin API key for console onboarding and admin setup. Save it immediately and use it in the console. Runtime HTTP examples require a separate runtime-scoped API key bound to a directory user; create or reset that key after initialization.
 
+### MCP authentication
+
+For `/mcp`, provide the same runtime-scoped API key in one of these forms:
+
+- The default or configured API key header (default: `X-ADG-API-Key`)
+- `Authorization: Bearer <runtime-api-key>`
+- `/mcp?apikey=<runtime-api-key>`
+
+If different non-empty credentials are provided from multiple sources, `/mcp` returns HTTP 400. Prefer Header or Bearer authentication; use the query parameter only for platforms that cannot set request headers. Do not retain full query strings in proxies, access logs, or monitoring systems, because they can expose the API key.
+
 ### Frontend
 
 ```powershell
