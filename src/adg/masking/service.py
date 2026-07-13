@@ -1,5 +1,6 @@
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,6 +21,7 @@ from adg.shared.crypto import (
 )
 from adg.shared.errors import ValidationError
 from adg.shared.ids import uuidv7
+from adg.sql_guard.guard import ProjectionLineage
 
 
 class MaskingService:
@@ -48,18 +50,24 @@ class MaskingService:
         query_id: str,
         resources: list[Resource],
         result: QueryResult,
+        projections: list[ProjectionLineage] | None = None,
     ) -> tuple[QueryResult, list[dict[str, str]]]:
         """Return a masked query result plus metadata about changed columns."""
 
         policies = self._matching_policies(identity=identity, resources=resources)
+        policy_targets = [
+            (policy, output_name)
+            for policy in policies
+            for output_name in self._policy_output_names(policy, projections)
+        ]
         masked_columns: list[dict[str, str]] = []
         rows: list[dict[str, object]] = []
         reversible_fields = sorted(
             {
-                policy.field_name
-                for policy in policies
+                output_name
+                for policy, output_name in policy_targets
                 if policy.strategy == "reversible"
-                and any(row.get(policy.field_name) is not None for row in result.rows)
+                and any(self._row_value(row, output_name) is not None for row in result.rows)
             }
         )
         reversible_context = None
@@ -74,31 +82,53 @@ class MaskingService:
 
         for row in result.rows:
             masked_row = dict(row)
-            for policy in policies:
-                if policy.field_name not in masked_row or masked_row[policy.field_name] is None:
+            for policy, output_name in policy_targets:
+                row_key = self._row_key(masked_row, output_name)
+                if row_key is None or masked_row[row_key] is None:
                     continue
                 # Reversible masking stores a decrypt context; other strategies are stateless.
                 if policy.strategy == "reversible":
                     if reversible_context is None:
                         raise RuntimeError("Reversible masking context was not initialized")
                     context_id, temporary_fernet = reversible_context
-                    masked_row[policy.field_name] = self._encrypt_reversible_marker(
+                    masked_row[row_key] = self._encrypt_reversible_marker(
                         context_id=context_id,
                         temporary_fernet=temporary_fernet,
-                        value=masked_row[policy.field_name],
+                        value=masked_row[row_key],
                     )
                 else:
-                    masked_row[policy.field_name] = self.mask_plain_value(
-                        masked_row[policy.field_name],
+                    masked_row[row_key] = self.mask_plain_value(
+                        masked_row[row_key],
                         strategy=policy.strategy,
                         config=self._policy_config(policy),
                     )
-                marker = {"name": policy.field_name, "strategy": policy.strategy}
+                marker = {"name": row_key, "strategy": policy.strategy}
                 if marker not in masked_columns:
                     masked_columns.append(marker)
             rows.append(masked_row)
 
         return QueryResult(columns=result.columns, rows=rows), masked_columns
+
+    def projection_rejection(
+        self,
+        *,
+        identity: IdentityContext,
+        resources: list[Resource],
+        projections: list[ProjectionLineage],
+    ) -> str | None:
+        """Reject projections that combine more than one applicable masking policy."""
+
+        policies = self._matching_policies(identity=identity, resources=resources)
+        for projection in projections:
+            source_fields = {field.casefold() for field in projection.source_fields}
+            matching = [
+                policy for policy in policies if policy.field_name.casefold() in source_fields
+            ]
+            if matching and projection.output_name is None:
+                return "masked_projection_requires_alias"
+            if len(matching) > 1:
+                return "ambiguous_masking_projection"
+        return None
 
     def mask_plain_value(
         self,
@@ -320,3 +350,35 @@ class MaskingService:
         if not isinstance(loaded, dict):
             return {}
         return {str(key): value for key, value in loaded.items()}
+
+    def _policy_output_names(
+        self,
+        policy: MaskingPolicy,
+        projections: list[ProjectionLineage] | None,
+    ) -> list[str]:
+        """Resolve a source-field policy to the result columns that depend on it."""
+
+        if projections is None:
+            return [policy.field_name]
+        field_name = policy.field_name.casefold()
+        return list(
+            dict.fromkeys(
+                projection.output_name
+                for projection in projections
+                if projection.output_name is not None
+                and field_name in {source.casefold() for source in projection.source_fields}
+            )
+        )
+
+    def _row_key(self, row: dict[str, object], output_name: str) -> str | None:
+        """Find a connector result key without allowing casing to bypass masking."""
+
+        expected = output_name.casefold()
+        return next((key for key in row if key.casefold() == expected), None)
+
+    def _row_value(self, row: Mapping[str, object], output_name: str) -> object:
+        """Read one result value by case-insensitive output name."""
+
+        row_dict = dict(row)
+        row_key = self._row_key(row_dict, output_name)
+        return None if row_key is None else row_dict[row_key]

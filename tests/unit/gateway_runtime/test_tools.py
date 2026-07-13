@@ -65,6 +65,15 @@ class FailingDependencyConnector(FakeConnector):
         raise ConnectorDependencyError("Connector 'postgres' requires optional extra 'postgres'")
 
 
+class AliasedResultConnector(FakeConnector):
+    def execute_query(self, config: dict[str, object], sql: str, limit: int) -> QueryResult:
+        type(self).last_sql = sql
+        return QueryResult(
+            columns=[{"name": "LEAKED", "data_type": "varchar"}],
+            rows=[{"LEAKED": "alice@example.com"}],
+        )
+
+
 class RuntimeSettingsStub:
     secret_key = "unit-test-secret-key"
     masking_encryption_key = "unit-test-masking-key"
@@ -855,6 +864,92 @@ def test_execute_query_applies_fixed_masking_policy(db_session: Session) -> None
     assert response["masking"]["masked_columns"] == [
         {"name": "email", "strategy": "fixed"}
     ]
+
+
+def test_execute_query_masks_aliased_columns_case_insensitively(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("adg.gateway_runtime.tools.get_settings", lambda: RuntimeSettingsStub())
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        MaskingPolicy(
+            resource_id=resource.id,
+            field_name="email",
+            strategy="fixed",
+            config_json='{"replacement":"REDACTED"}',
+            status="active",
+        )
+    )
+
+    service = runtime_with_connector(db_session, AliasedResultConnector)
+    for query in (
+        "select email as leaked from public.customers",
+        "select lower(email) as leaked from public.customers",
+    ):
+        response = service.execute_query(
+            identity=identity(),
+            api_key_id="key_1",
+            datasource_id="ds_1",
+            resource_ids=[resource.id],
+            query=query,
+            limit=1,
+        )
+
+        assert response["status"] == "success"
+        assert response["rows"] == [{"LEAKED": "REDACTED"}]
+        assert response["masking"]["masked_columns"] == [
+            {"name": "LEAKED", "strategy": "fixed"}
+        ]
+
+
+def test_execute_query_rejects_projection_with_multiple_masking_policies(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("adg.gateway_runtime.tools.get_settings", lambda: RuntimeSettingsStub())
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        ResourceField(
+            datasource_id="ds_1",
+            resource_id=resource.id,
+            name="phone",
+            data_type="varchar",
+            nullable=True,
+            ordinal_position=3,
+            status="active",
+            metadata_json="{}",
+        )
+    )
+    db_session.add_all(
+        [
+            MaskingPolicy(
+                resource_id=resource.id,
+                field_name=field_name,
+                strategy="fixed",
+                config_json='{"replacement":"REDACTED"}',
+                status="active",
+            )
+            for field_name in ("email", "phone")
+        ]
+    )
+    AliasedResultConnector.last_sql = None
+
+    response = runtime_with_connector(db_session, AliasedResultConnector).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select concat(email, phone) as leaked from public.customers",
+        limit=1,
+    )
+
+    assert response == {"status": "rejected", "reason": "ambiguous_masking_projection"}
+    assert AliasedResultConnector.last_sql is None
 
 
 def test_execute_query_applies_reversible_masking_policy(db_session: Session) -> None:

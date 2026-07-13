@@ -424,6 +424,23 @@ class GatewayRuntimeService:
             )
             return {"status": "rejected", "reason": reason}
 
+        projection_rejection = self._masking.projection_rejection(
+            identity=identity,
+            resources=actual_resources,
+            projections=guard_result.projections,
+        )
+        if projection_rejection is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                projection_rejection,
+            )
+            return {"status": "rejected", "reason": projection_rejection}
+
         declared_ids = set(resource_ids)
         actual_ids = {resource.id for resource in actual_resources}
         # SQL-derived resources are authoritative and must stay inside the declared scope.
@@ -478,6 +495,7 @@ class GatewayRuntimeService:
             query_id=query_id,
             resources=actual_resources,
             result=result,
+            projections=guard_result.projections,
         )
         self._audit.record_event(
             user_id=identity.user_id,

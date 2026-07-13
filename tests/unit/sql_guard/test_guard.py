@@ -17,6 +17,31 @@ def test_guard_allows_select_and_injects_default_limit() -> None:
     assert result.risk_level == "low"
 
 
+def test_guard_tracks_projection_output_lineage() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "select email as leaked, lower(phone) as normalized_phone from public.customers"
+    )
+
+    assert result.allowed is True
+    assert [
+        (projection.output_name, projection.source_fields)
+        for projection in result.projections
+    ] == [
+        ("leaked", ("email",)),
+        ("normalized_phone", ("phone",)),
+    ]
+
+
+def test_guard_rejects_derived_projection_without_stable_output_name() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "select lower(email) from public.customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["derived_projection_requires_alias"]
+
+
 def test_guard_reduces_limit_to_maximum() -> None:
     result = SqlGuard(default_limit=100, max_limit=500).check(
         "select id from public.customers limit 900"

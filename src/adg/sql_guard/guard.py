@@ -8,6 +8,14 @@ type SqlExecutionMode = Literal["read_only", "dml", "schema", "admin"]
 
 
 @dataclass(frozen=True)
+class ProjectionLineage:
+    """Map one result projection to the source fields that feed it."""
+
+    output_name: str | None
+    source_fields: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SqlGuardResult:
     """Structured verdict produced after parsing and normalizing a SQL statement."""
 
@@ -16,6 +24,7 @@ class SqlGuardResult:
     statement_type: str | None
     accessed_resources: list[str] = field(default_factory=list)
     accessed_fields: list[str] = field(default_factory=list)
+    projections: list[ProjectionLineage] = field(default_factory=list)
     used_functions: list[str] = field(default_factory=list)
     risk_level: str = "high"
     rejection_reasons: list[str] = field(default_factory=list)
@@ -143,6 +152,7 @@ class SqlGuard:
                 statement_type=statement_type,
                 accessed_resources=self._accessed_resources(statement),
                 accessed_fields=self._accessed_fields(statement),
+                projections=self._projection_lineage(statement),
                 rejection_reasons=[statement_rejection],
             )
 
@@ -165,11 +175,12 @@ class SqlGuard:
                 statement_type="SELECT",
                 accessed_resources=self._accessed_resources(statement),
                 accessed_fields=self._accessed_fields(statement),
+                projections=self._projection_lineage(statement),
                 rejection_reasons=[limit_rejection],
             )
 
         used_functions = self._used_functions(statement)
-        rejection_reasons: list[str] = []
+        rejection_reasons = self._projection_rejections(statement)
         if self._strict_validation:
             # Function allowlisting keeps expensive or unsafe database functions out of runtime SQL.
             rejection_reasons.extend(
@@ -188,6 +199,7 @@ class SqlGuard:
             statement_type="SELECT",
             accessed_resources=self._accessed_resources(statement),
             accessed_fields=self._accessed_fields(statement),
+            projections=self._projection_lineage(statement),
             used_functions=used_functions,
             risk_level="low" if not rejection_reasons else "high",
             rejection_reasons=rejection_reasons,
@@ -290,6 +302,44 @@ class SqlGuard:
 
         fields = {column.name for column in statement.find_all(exp.Column) if column.name != "*"}
         return sorted(fields)
+
+    def _projection_lineage(self, statement: exp.Expression) -> list[ProjectionLineage]:
+        """Return stable output-to-source mappings for SELECT result masking."""
+
+        if not isinstance(statement, exp.Select):
+            return []
+        projections: list[ProjectionLineage] = []
+        for projection in statement.expressions:
+            output_name = projection.alias_or_name or None
+            source_fields = tuple(
+                sorted(
+                    {
+                        column.name
+                        for column in projection.find_all(exp.Column)
+                        if column.name != "*"
+                    }
+                )
+            )
+            projections.append(
+                ProjectionLineage(
+                    output_name=output_name,
+                    source_fields=source_fields,
+                )
+            )
+        return projections
+
+    def _projection_rejections(self, statement: exp.Select) -> list[str]:
+        """Reject derived outputs whose database result name cannot be mapped reliably."""
+
+        for projection in statement.expressions:
+            references_field = any(projection.find_all(exp.Column))
+            if (
+                references_field
+                and not isinstance(projection, (exp.Column, exp.AggFunc))
+                and not projection.alias
+            ):
+                return ["derived_projection_requires_alias"]
+        return []
 
     def _used_functions(self, statement: exp.Expression) -> list[str]:
         """Collect SQL function names used by the statement."""
