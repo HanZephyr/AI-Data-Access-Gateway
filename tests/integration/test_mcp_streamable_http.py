@@ -472,6 +472,17 @@ async def test_streamable_mcp_server_rejects_query_api_key_by_default() -> None:
 
 
 @pytest.mark.anyio
+async def test_streamable_mcp_server_ignores_query_conflict_when_query_auth_is_disabled() -> None:
+    app, _ = build_streamable_mcp_app()
+
+    await assert_mcp_list_datasources(
+        app,
+        headers={"X-ADG-API-Key": "adg_runtime"},
+        query="?apikey=adg_other",
+    )
+
+
+@pytest.mark.anyio
 async def test_mcp_tool_handlers_are_async_and_run_runtime_work_in_threadpool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
