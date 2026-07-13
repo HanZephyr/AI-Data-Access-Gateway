@@ -9,6 +9,19 @@ from adg.connectors.errors import ConnectorOperationError
 from adg.connectors.relational import RelationalConnector
 
 
+@pytest.fixture(autouse=True)
+def resolve_test_database_host(monkeypatch: MonkeyPatch) -> None:
+    """Keep connector unit tests independent from workstation DNS."""
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("203.0.113.8", 0))
+        ],
+    )
+
+
 class FakeScalarResult:
     def __init__(self, values: list[str]) -> None:
         self._values = values
@@ -397,6 +410,50 @@ def test_relational_blocks_dns_names_resolving_to_dangerous_addresses(
 
     with pytest.raises(ConnectorOperationError, match="datasource_network_blocked"):
         FakePostgresConnector().test_connection({"host": "metadata.google.internal"})
+
+
+def test_relational_fails_closed_when_dns_resolution_fails(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class BoundarySettingsStub:
+        runtime_datasource_connect_timeout_seconds = 10
+        runtime_datasource_read_timeout_seconds = 120
+        runtime_datasource_write_timeout_seconds = 120
+        metadata_scan_max_databases = 25
+        datasource_network_allowlist = ""
+
+    def fail_resolution(host: str, port: object, type: int = 0) -> object:
+        raise socket.gaierror("temporary lookup failure")
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(socket, "getaddrinfo", fail_resolution)
+    monkeypatch.setattr(FakePostgresConnector, "_require_dependency", lambda self: None)
+
+    with pytest.raises(ConnectorOperationError, match="datasource_network_unresolved"):
+        FakePostgresConnector().test_connection({"host": "db.internal"})
+
+
+@pytest.mark.parametrize(
+    "resolved",
+    [
+        [],
+        [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("not-an-ip", 0))],
+    ],
+)
+def test_relational_fails_closed_when_dns_has_no_usable_address(
+    monkeypatch: MonkeyPatch,
+    resolved: list[tuple[object, object, int, str, tuple[str, int]]],
+) -> None:
+    class BoundarySettingsStub:
+        datasource_network_allowlist = ""
+
+    monkeypatch.setattr(relational, "get_settings", lambda: BoundarySettingsStub())
+    monkeypatch.setattr(socket, "getaddrinfo", lambda host, port, **kwargs: resolved)
+
+    with pytest.raises(ConnectorOperationError, match="datasource_network_unresolved"):
+        FakePostgresConnector()._validated_connection_config({"host": "db.internal"})
+
+
 def test_relational_blocks_ipv4_mapped_metadata_addresses_before_connect(
     monkeypatch: MonkeyPatch,
 ) -> None:

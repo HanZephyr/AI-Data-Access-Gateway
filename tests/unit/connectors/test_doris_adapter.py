@@ -1,9 +1,24 @@
+import socket
+
 import pytest
 from pytest import MonkeyPatch
 
 from adg.connectors.doris import adapter
 from adg.connectors.doris.adapter import DorisConnector
 from adg.connectors.errors import ConnectorOperationError
+
+
+@pytest.fixture(autouse=True)
+def resolve_test_database_host(monkeypatch: MonkeyPatch) -> None:
+    """Keep connector unit tests independent from workstation DNS."""
+
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda host, port, **kwargs: [
+            (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("203.0.113.8", 0))
+        ],
+    )
 
 
 class FakeResult:
