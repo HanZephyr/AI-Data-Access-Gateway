@@ -14,6 +14,7 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.backend_host_port is None
     assert settings.admin_page_default_limit == 50
     assert settings.admin_page_max_limit == 500
+    assert settings.admin_resource_tree_max_nodes == 10_000
     assert settings.sql_execution_mode == "read_only"
     assert settings.sql_strict_validation is True
     assert settings.runtime_datasource_pool_cache_size == 32
@@ -50,6 +51,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_BACKEND_HOST_PORT", "8001")
     monkeypatch.setenv("ADG_ADMIN_PAGE_DEFAULT_LIMIT", "25")
     monkeypatch.setenv("ADG_ADMIN_PAGE_MAX_LIMIT", "250")
+    monkeypatch.setenv("ADG_ADMIN_RESOURCE_TREE_MAX_NODES", "2000")
     monkeypatch.setenv("ADG_SQL_EXECUTION_MODE", "dml")
     monkeypatch.setenv("ADG_SQL_STRICT_VALIDATION", "false")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_POOL_CACHE_SIZE", "8")
@@ -81,6 +83,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.backend_host_port == 8001
     assert settings.admin_page_default_limit == 25
     assert settings.admin_page_max_limit == 250
+    assert settings.admin_resource_tree_max_nodes == 2000
     assert settings.sql_execution_mode == "dml"
     assert settings.sql_strict_validation is False
     assert settings.runtime_datasource_pool_cache_size == 8

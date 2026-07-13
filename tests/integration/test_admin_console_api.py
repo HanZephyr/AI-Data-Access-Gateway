@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from adg.app.main import create_app
-from adg.app.settings import get_settings
+from adg.app.settings import Settings, get_settings
 from adg.audit.service import AuditService
 from adg.control_plane.db import create_engine_from_url, create_session_factory, get_session
 from adg.control_plane.models import Base
@@ -23,6 +23,7 @@ def build_console_app(
     extra_resource_count: int = 0,
     audit_event_count: int = 1,
     hierarchical_resource_tree: bool = False,
+    resource_tree_max_nodes: int | None = None,
 ) -> TestClient:
     engine = create_engine_from_url("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -192,6 +193,9 @@ def build_console_app(
             yield session
 
     app.dependency_overrides[get_session] = override_session
+    if resource_tree_max_nodes is not None:
+        settings = Settings(admin_resource_tree_max_nodes=resource_tree_max_nodes)
+        app.dependency_overrides[get_settings] = lambda: settings
     return TestClient(app, base_url=base_url)
 
 
@@ -247,6 +251,34 @@ def test_admin_resource_tree_paginates_roots_with_complete_descendants() -> None
         "field_id"
     ] == "field_a_warehouse_order_id"
     assert [item["id"] for item in second_body["items"]] == ["res_b_warehouse"]
+
+
+@pytest.mark.parametrize(
+    "hierarchical_resource_tree,node_budget",
+    [(False, 1), (True, 2)],
+)
+def test_admin_resource_tree_rejects_subtrees_over_node_budget(
+    hierarchical_resource_tree: bool,
+    node_budget: int,
+) -> None:
+    client = build_console_app(
+        hierarchical_resource_tree=hierarchical_resource_tree,
+        resource_tree_max_nodes=node_budget,
+    )
+
+    response = client.get("/admin/resource-tree?limit=1&offset=0", headers=auth())
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "resource_tree_node_budget_exceeded"}
+
+
+def test_admin_resource_tree_returns_complete_subtree_within_node_budget() -> None:
+    client = build_console_app(resource_tree_max_nodes=2)
+
+    response = client.get("/admin/resource-tree?limit=1&offset=0", headers=auth())
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["children"][0]["field_id"] == "field_email"
 
 
 def test_admin_audit_events_returns_paginated_object() -> None:

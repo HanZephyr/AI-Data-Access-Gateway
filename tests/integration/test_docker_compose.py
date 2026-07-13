@@ -107,6 +107,9 @@ def test_backend_compose_passes_hardening_configuration() -> None:
         "${ADG_ADMIN_PAGE_DEFAULT_LIMIT:-50}"
     )
     assert environment["ADG_ADMIN_PAGE_MAX_LIMIT"] == "${ADG_ADMIN_PAGE_MAX_LIMIT:-500}"
+    assert environment["ADG_ADMIN_RESOURCE_TREE_MAX_NODES"] == (
+        "${ADG_ADMIN_RESOURCE_TREE_MAX_NODES:-10000}"
+    )
     assert environment["ADG_AUTH_RATE_LIMIT_ENABLED"] == (
         "${ADG_AUTH_RATE_LIMIT_ENABLED:-true}"
     )

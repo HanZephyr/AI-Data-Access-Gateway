@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     backend_host_port: int | None = Field(default=None, ge=1, le=65535)
     admin_page_default_limit: int = Field(default=50, ge=1)
     admin_page_max_limit: int = Field(default=500, ge=1)
+    admin_resource_tree_max_nodes: int = Field(default=10_000, ge=1)
     sql_execution_mode: Literal["read_only", "dml", "schema", "admin"] = "read_only"
     sql_strict_validation: bool = True
     runtime_datasource_pool_cache_size: int = Field(default=32, ge=1)
