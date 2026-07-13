@@ -327,6 +327,46 @@ def test_runtime_discovery_hides_disabled_resources_and_fields(
     assert disabled_description == {"status": "rejected", "reason": "resource_disabled"}
 
 
+def test_runtime_rejects_resources_from_disabled_datasource(db_session: Session) -> None:
+    add_datasource(db_session, status="disabled")
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    service = runtime(db_session)
+
+    listed = service.list_resources(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+    )
+    described = service.describe_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=resource.id,
+    )
+    FakeConnector.last_sql = None
+    previewed = service.preview_resource(
+        identity=identity(),
+        api_key_id="key_1",
+        resource_id=resource.id,
+        limit=1,
+    )
+    assert FakeConnector.last_sql is None
+    executed = service.execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from warehouse.public.customers",
+        limit=1,
+    )
+
+    assert listed == {"resources": []}
+    assert described == {"status": "rejected", "reason": "datasource_disabled"}
+    assert previewed == {"status": "rejected", "reason": "datasource_disabled"}
+    assert executed == {"status": "rejected", "reason": "datasource_disabled"}
+    assert FakeConnector.last_sql is None
+
+
 def test_runtime_discovery_hides_resources_under_disabled_parent(
     db_session: Session,
 ) -> None:

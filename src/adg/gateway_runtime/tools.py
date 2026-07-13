@@ -295,6 +295,18 @@ class GatewayRuntimeService:
 
         self._session.flush()
         datasource = self._get_datasource(datasource_id)
+        if datasource.status != "active":
+            reason = "datasource_disabled"
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "permission_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                reason,
+            )
+            return {"status": "rejected", "reason": reason}
         declared_resources = [self._get_resource(resource_id) for resource_id in resource_ids]
         # Declared resources are the caller's intended scope; every declared resource is checked.
         for resource in declared_resources:
@@ -511,7 +523,13 @@ class GatewayRuntimeService:
         ]
         if datasource_id is not None:
             conditions.append(Resource.datasource_id == datasource_id)
-        resources = list(self._session.execute(select(Resource).where(*conditions)).scalars())
+        resources = list(
+            self._session.execute(
+                select(Resource)
+                .join(Datasource, Datasource.id == Resource.datasource_id)
+                .where(Datasource.status == "active", *conditions)
+            ).scalars()
+        )
         disabled_reasons = self._disabled_resource_reasons(resources)
         candidates = [
             resource for resource in resources if disabled_reasons.get(resource.id) is None
@@ -653,6 +671,9 @@ class GatewayRuntimeService:
     def _disabled_resource_reason(self, resource: Resource) -> str | None:
         """Return a stable rejection reason when a resource or ancestor is disabled."""
 
+        datasource = self._session.get(Datasource, resource.datasource_id)
+        if datasource is None or datasource.status != "active":
+            return "datasource_disabled"
         current: Resource | None = resource
         while current is not None:
             if current.status != "active":
