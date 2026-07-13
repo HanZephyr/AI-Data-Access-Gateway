@@ -60,6 +60,21 @@ def test_guard_rejects_mutation_statement() -> None:
 
 
 @pytest.mark.parametrize(
+    "query",
+    [
+        "explain analyze delete from public.customers where id = 1",
+        "explain update public.customers set name = 'Alice' where id = 1",
+    ],
+)
+def test_guard_rejects_explain_commands_that_can_execute_mutations(query: str) -> None:
+    result = SqlGuard().check(query)
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["statement_not_allowed"]
+
+
+@pytest.mark.parametrize(
     "query,rejection",
     [
         (

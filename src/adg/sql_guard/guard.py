@@ -42,7 +42,7 @@ class SqlGuard:
         "schema": {"read", "dml", "schema"},
         "admin": {"read", "dml", "schema", "admin"},
     }
-    _read_only_command_names = {"explain", "show"}
+    _read_only_command_names = {"show"}
     _dml_statement_keys = {"delete", "insert", "merge", "update"}
     _schema_statement_keys = {"alter", "create", "drop", "truncate", "truncatetable"}
     _schema_command_names = {"rename"}
