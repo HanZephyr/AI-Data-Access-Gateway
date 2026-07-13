@@ -225,6 +225,28 @@ def test_guard_relaxed_validation_allows_non_allowlisted_select_features() -> No
     assert "LIMIT 100" in result.normalized_sql
 
 
+def test_guard_marks_relaxed_wildcard_and_nested_projection_boundaries() -> None:
+    wildcard = SqlGuard(strict_validation=False).check(
+        "select *, email as leaked from public.customers"
+    )
+    nested = SqlGuard().check(
+        "select t.leaked from (select email as leaked from public.customers) t"
+    )
+
+    assert wildcard.allowed is True
+    assert any(projection.is_wildcard for projection in wildcard.projections)
+    assert nested.allowed is True
+    assert all(projection.has_nested_select for projection in nested.projections)
+
+
+def test_guard_rejects_case_insensitive_duplicate_projection_names() -> None:
+    result = SqlGuard().check('select email as x, email as "X" from public.customers')
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["duplicate_projection_output_name"]
+
+
 def test_guard_allows_boolean_predicates() -> None:
     result = SqlGuard().check(
         "select id, total from public.orders "

@@ -1,5 +1,6 @@
 from typing import cast
 
+import pytest
 from pytest import MonkeyPatch
 from sqlalchemy import event, select
 from sqlalchemy.engine import Engine
@@ -903,6 +904,65 @@ def test_execute_query_masks_aliased_columns_case_insensitively(
         assert response["masking"]["masked_columns"] == [
             {"name": "LEAKED", "strategy": "fixed"}
         ]
+
+
+@pytest.mark.parametrize(
+    "query,reason,use_relaxed_validation",
+    [
+        (
+            "select *, email as leaked from public.customers",
+            "masked_wildcard_projection_not_allowed",
+            True,
+        ),
+        (
+            "select t.leaked from (select email as leaked from public.customers) t",
+            "masked_nested_projection_not_supported",
+            False,
+        ),
+        (
+            'select email as x, email as "X" from public.customers',
+            "duplicate_projection_output_name",
+            False,
+        ),
+    ],
+)
+def test_execute_query_rejects_masking_projection_bypasses_before_connector(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+    query: str,
+    reason: str,
+    use_relaxed_validation: bool,
+) -> None:
+    if use_relaxed_validation:
+        monkeypatch.setattr(
+            "adg.gateway_runtime.tools.get_settings",
+            lambda: RuntimeSettingsStub(),
+        )
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        MaskingPolicy(
+            resource_id=resource.id,
+            field_name="email",
+            strategy="fixed",
+            config_json='{"replacement":"REDACTED"}',
+            status="active",
+        )
+    )
+    AliasedResultConnector.last_sql = None
+
+    response = runtime_with_connector(db_session, AliasedResultConnector).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query=query,
+        limit=1,
+    )
+
+    assert response == {"status": "rejected", "reason": reason}
+    assert AliasedResultConnector.last_sql is None
 
 
 def test_execute_query_rejects_projection_with_multiple_masking_policies(

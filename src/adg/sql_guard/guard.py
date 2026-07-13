@@ -13,6 +13,8 @@ class ProjectionLineage:
 
     output_name: str | None
     source_fields: tuple[str, ...]
+    is_wildcard: bool = False
+    has_nested_select: bool = False
 
 
 @dataclass(frozen=True)
@@ -308,6 +310,10 @@ class SqlGuard:
 
         if not isinstance(statement, exp.Select):
             return []
+        has_nested_select = any(
+            isinstance(expression, exp.Select) and expression is not statement
+            for expression in statement.walk()
+        )
         projections: list[ProjectionLineage] = []
         for projection in statement.expressions:
             output_name = projection.alias_or_name or None
@@ -324,6 +330,8 @@ class SqlGuard:
                 ProjectionLineage(
                     output_name=output_name,
                     source_fields=source_fields,
+                    is_wildcard=self._is_wildcard_projection(projection),
+                    has_nested_select=has_nested_select,
                 )
             )
         return projections
@@ -331,6 +339,13 @@ class SqlGuard:
     def _projection_rejections(self, statement: exp.Select) -> list[str]:
         """Reject derived outputs whose database result name cannot be mapped reliably."""
 
+        output_names = [
+            projection.alias_or_name.casefold()
+            for projection in statement.expressions
+            if projection.alias_or_name
+        ]
+        if len(output_names) != len(set(output_names)):
+            return ["duplicate_projection_output_name"]
         for projection in statement.expressions:
             references_field = any(projection.find_all(exp.Column))
             if (
@@ -340,6 +355,13 @@ class SqlGuard:
             ):
                 return ["derived_projection_requires_alias"]
         return []
+
+    def _is_wildcard_projection(self, projection: exp.Expression) -> bool:
+        """Return whether one top-level projection expands an unknown result shape."""
+
+        return isinstance(projection, exp.Star) or (
+            isinstance(projection, exp.Column) and isinstance(projection.this, exp.Star)
+        )
 
     def _used_functions(self, statement: exp.Expression) -> list[str]:
         """Collect SQL function names used by the statement."""
@@ -427,8 +449,4 @@ class SqlGuard:
     def _has_wildcard_projection(self, statement: exp.Select) -> bool:
         """Reject wildcard projections so runtime callers must name fields explicitly."""
 
-        return any(
-            isinstance(projection, exp.Star)
-            or (isinstance(projection, exp.Column) and isinstance(projection.this, exp.Star))
-            for projection in statement.expressions
-        )
+        return any(self._is_wildcard_projection(projection) for projection in statement.expressions)

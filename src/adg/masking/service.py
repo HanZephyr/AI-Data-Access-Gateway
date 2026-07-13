@@ -119,6 +119,10 @@ class MaskingService:
         """Reject projections that combine more than one applicable masking policy."""
 
         policies = self._matching_policies(identity=identity, resources=resources)
+        if policies and any(projection.is_wildcard for projection in projections):
+            return "masked_wildcard_projection_not_allowed"
+        if policies and any(projection.has_nested_select for projection in projections):
+            return "masked_nested_projection_not_supported"
         for projection in projections:
             source_fields = {field.casefold() for field in projection.source_fields}
             matching = [
