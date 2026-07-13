@@ -279,6 +279,29 @@ async def test_streamable_mcp_server_rejects_conflicting_duplicate_api_key_heade
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-ADG-API-Key": "adg_runtime, adg_other"},
+        {"Authorization": "Bearer adg_runtime, Bearer adg_other"},
+    ],
+)
+async def test_streamable_mcp_server_rejects_comma_joined_api_key_headers(
+    headers: dict[str, str],
+) -> None:
+    app, _ = build_streamable_mcp_app()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://127.0.0.1:8000",
+    ) as http_client:
+        response = await http_client.post("/mcp", headers=headers)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Conflicting API key credentials"}
+
+
+@pytest.mark.anyio
 async def test_streamable_mcp_server_rejects_conflicting_api_key_credentials(
     enabled_mcp_query_api_key: None,
 ) -> None:

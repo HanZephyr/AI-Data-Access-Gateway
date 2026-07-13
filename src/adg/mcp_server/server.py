@@ -99,14 +99,17 @@ def _extract_api_key_from_scope(scope: Scope) -> str | None:
     headers = Headers(raw=scope["headers"])
     settings = get_settings()
     configured_header = settings.api_key_header
+    configured_values = headers.getlist(configured_header)
     authorization_values = headers.getlist("authorization")
+    if any("," in value for value in [*configured_values, *authorization_values]):
+        raise HTTPException(status_code=400, detail="Conflicting API key credentials")
     if configured_header.casefold() == "authorization":
         header_candidates = [
             _extract_bearer_api_key(value) or value for value in authorization_values
         ]
     else:
         header_candidates = [
-            *headers.getlist(configured_header),
+            *configured_values,
             *(_extract_bearer_api_key(value) for value in authorization_values),
         ]
     candidates = [
