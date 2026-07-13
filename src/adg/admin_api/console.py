@@ -346,18 +346,39 @@ def list_resource_tree(
     conditions = []
     if datasource_id is not None:
         conditions.append(Resource.datasource_id == datasource_id)
+    root_conditions = [*conditions, Resource.parent_id.is_(None)]
     total = int(
-        session.execute(select(func.count()).select_from(Resource).where(*conditions)).scalar_one()
+        session.execute(
+            select(func.count()).select_from(Resource).where(*root_conditions)
+        ).scalar_one()
     )
     resources = list(
         session.execute(
             select(Resource)
-            .where(*conditions)
+            .where(*root_conditions)
             .order_by(Resource.path)
             .limit(page_limit)
             .offset(page_offset)
         ).scalars()
     )
+    seen_resource_ids = {resource.id for resource in resources}
+    parent_ids = set(seen_resource_ids)
+    while parent_ids:
+        descendants = list(
+            session.execute(
+                select(Resource)
+                .where(Resource.parent_id.in_(parent_ids), *conditions)
+                .order_by(Resource.path)
+            ).scalars()
+        )
+        new_descendants = [
+            resource for resource in descendants if resource.id not in seen_resource_ids
+        ]
+        if not new_descendants:
+            break
+        resources.extend(new_descendants)
+        parent_ids = {resource.id for resource in new_descendants}
+        seen_resource_ids.update(parent_ids)
     resource_ids = [resource.id for resource in resources]
     tags_by_resource_id = _load_resource_tags(session, resource_ids)
     fields = []
