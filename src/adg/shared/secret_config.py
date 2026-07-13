@@ -9,6 +9,7 @@ from adg.shared.crypto import (
     derive_legacy_fernet_key,
     encrypt_fernet_envelope,
 )
+from adg.shared.errors import ValidationError
 
 SECRET_ENVELOPE_KIND: Final[str] = FERNET_ENVELOPE_KIND
 SECRET_PLACEHOLDER_KIND: Final[str] = "secret_placeholder"
@@ -110,7 +111,7 @@ class SecretConfigService:
         previous: object,
     ) -> object:
         if self._is_encrypted_secret(value):
-            return self._reuse_previous_secret(value)
+            raise ValidationError("Encrypted datasource secrets cannot be supplied")
         if self._should_preserve_secret(value):
             return self._reuse_previous_secret(previous)
         return self._encrypt_secret(str(value))

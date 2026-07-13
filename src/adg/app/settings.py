@@ -4,6 +4,8 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from adg.shared.crypto import FERNET_KDF_MAX_ITERATIONS, FERNET_KDF_MIN_ITERATIONS
+
 DEFAULT_SECRET_KEY = "change-me-to-a-long-random-secret"
 DEFAULT_CREDENTIAL_ENCRYPTION_KEY = "change-me-to-a-long-random-credential-key"
 DEFAULT_MASKING_ENCRYPTION_KEY = "change-me-to-a-long-random-masking-key"
@@ -32,7 +34,11 @@ class Settings(BaseSettings):
         default=DEFAULT_MASKING_ENCRYPTION_KEY,
         min_length=16,
     )
-    secret_kdf_iterations: int = Field(default=390_000, ge=1_000)
+    secret_kdf_iterations: int = Field(
+        default=390_000,
+        ge=FERNET_KDF_MIN_ITERATIONS,
+        le=FERNET_KDF_MAX_ITERATIONS,
+    )
     metadata_scan_max_databases: int = Field(default=25, ge=1)
     datasource_network_allowlist: str = ""
     log_level: str = "INFO"

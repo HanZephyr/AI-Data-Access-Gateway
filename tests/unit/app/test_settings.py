@@ -168,6 +168,10 @@ def test_settings_reject_invalid_runtime_pool_values(monkeypatch: MonkeyPatch) -
     with pytest.raises(ValueError, match="secret_kdf_iterations"):
         Settings()
 
+    monkeypatch.setenv("ADG_SECRET_KDF_ITERATIONS", "2000001")
+    with pytest.raises(ValueError, match="secret_kdf_iterations"):
+        Settings()
+
     monkeypatch.delenv("ADG_SECRET_KDF_ITERATIONS")
     monkeypatch.setenv("ADG_METADATA_SCAN_MAX_DATABASES", "0")
     with pytest.raises(ValueError, match="metadata_scan_max_databases"):

@@ -1,4 +1,5 @@
 import base64
+import binascii
 import hashlib
 import os
 from collections.abc import Iterable, Mapping
@@ -11,6 +12,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 FERNET_ENVELOPE_KIND: Final[str] = "encrypted_secret"
 FERNET_ENVELOPE_VERSION: Final[int] = 2
 FERNET_KDF_NAME: Final[str] = "pbkdf2-hmac-sha256"
+FERNET_KDF_MIN_ITERATIONS: Final[int] = 1_000
+FERNET_KDF_MAX_ITERATIONS: Final[int] = 2_000_000
+FERNET_SALT_BYTES: Final[int] = 16
+FERNET_SALT_ENCODED_LENGTH: Final[int] = 24
 
 
 def encrypt_fernet_envelope(
@@ -41,8 +46,11 @@ def decrypt_fernet_envelope(
 ) -> bytes:
     """Decrypt a v2 PBKDF2 envelope or the legacy sha256-derived envelope."""
 
-    if envelope.get("version") == FERNET_ENVELOPE_VERSION:
+    version = envelope.get("version")
+    if version == FERNET_ENVELOPE_VERSION:
         return _decrypt_v2_envelope(envelope, secret=secret)
+    if version is not None:
+        raise InvalidToken()
     return decrypt_legacy_fernet_token(
         str(envelope.get("ciphertext", "")),
         secrets=(secret, *legacy_secrets),
@@ -91,9 +99,24 @@ def _decrypt_v2_envelope(envelope: Mapping[str, object], *, secret: str) -> byte
         raise InvalidToken()
     if not isinstance(salt_text, str):
         raise InvalidToken()
-    if not isinstance(iterations, int):
+    if (
+        not isinstance(iterations, int)
+        or isinstance(iterations, bool)
+        or not FERNET_KDF_MIN_ITERATIONS <= iterations <= FERNET_KDF_MAX_ITERATIONS
+    ):
         raise InvalidToken()
-    salt = base64.urlsafe_b64decode(salt_text.encode())
+    if len(salt_text) != FERNET_SALT_ENCODED_LENGTH:
+        raise InvalidToken()
+    try:
+        salt = base64.b64decode(
+            salt_text.encode("ascii"),
+            altchars=b"-_",
+            validate=True,
+        )
+    except (UnicodeEncodeError, ValueError, binascii.Error) as error:
+        raise InvalidToken() from error
+    if len(salt) != FERNET_SALT_BYTES:
+        raise InvalidToken()
     key = derive_pbkdf2_fernet_key(secret=secret, salt=salt, iterations=iterations)
     return Fernet(key).decrypt(ciphertext.encode())
 
