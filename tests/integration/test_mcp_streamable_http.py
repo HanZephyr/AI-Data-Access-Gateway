@@ -99,7 +99,7 @@ def reset_streamable_mcp_session_manager(monkeypatch: pytest.MonkeyPatch) -> Non
 async def assert_mcp_list_datasources(
     app: FastAPI,
     *,
-    headers: dict[str, str],
+    headers: dict[str, str] | list[tuple[str, str]],
     query: str = "",
 ) -> None:
     async with runtime_mcp_server.session_manager.run():
@@ -178,6 +178,62 @@ async def test_streamable_mcp_server_accepts_matching_api_key_credentials() -> N
         },
         query="?apikey=adg_runtime",
     )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [
+            ("X-ADG-API-Key", "adg_runtime"),
+            ("X-ADG-API-Key", "adg_runtime"),
+        ],
+        [
+            ("Authorization", "Bearer adg_runtime"),
+            ("Authorization", "bEaReR adg_runtime"),
+        ],
+    ],
+)
+async def test_streamable_mcp_server_accepts_matching_duplicate_api_key_headers(
+    headers: list[tuple[str, str]],
+) -> None:
+    app, _ = build_streamable_mcp_app()
+
+    await assert_mcp_list_datasources(app, headers=headers)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [
+            ("X-ADG-API-Key", "adg_runtime"),
+            ("X-ADG-API-Key", "adg_other"),
+        ],
+        [
+            ("Authorization", "Bearer adg_runtime"),
+            ("Authorization", "Bearer adg_other"),
+        ],
+    ],
+)
+async def test_streamable_mcp_server_rejects_conflicting_duplicate_api_key_headers(
+    headers: list[tuple[str, str]],
+) -> None:
+    app, _ = build_streamable_mcp_app()
+
+    async with runtime_mcp_server.session_manager.run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1:8000",
+        ) as http_client:
+            response = await http_client.post(
+                "/mcp",
+                content="{}",
+                headers=[("Content-Type", "application/json"), *headers],
+            )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Conflicting API key credentials"}
 
 
 @pytest.mark.anyio

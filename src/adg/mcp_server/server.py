@@ -98,9 +98,12 @@ def _extract_api_key_from_scope(scope: Scope) -> str | None:
 
     headers = Headers(raw=scope["headers"])
     candidates = [
-        headers.get(get_settings().api_key_header),
+        *headers.getlist(get_settings().api_key_header),
         *QueryParams(scope["query_string"]).getlist("apikey"),
-        _extract_bearer_api_key(headers.get("authorization")),
+        *(
+            _extract_bearer_api_key(authorization)
+            for authorization in headers.getlist("authorization")
+        ),
     ]
     supplied_keys = {candidate for candidate in candidates if candidate}
     if len(supplied_keys) > 1:
