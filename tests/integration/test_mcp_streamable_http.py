@@ -167,6 +167,24 @@ async def test_streamable_mcp_server_accepts_configured_api_key_header(
 
 
 @pytest.mark.anyio
+async def test_streamable_mcp_server_accepts_bearer_when_configured_header_is_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADG_API_KEY_HEADER", "Authorization")
+    get_settings.cache_clear()
+    try:
+        app, _ = build_streamable_mcp_app()
+
+        await assert_mcp_list_datasources(
+            app,
+            headers={"Authorization": "Bearer adg_runtime"},
+        )
+    finally:
+        monkeypatch.delenv("ADG_API_KEY_HEADER", raising=False)
+        get_settings.cache_clear()
+
+
+@pytest.mark.anyio
 async def test_streamable_mcp_server_accepts_matching_api_key_credentials() -> None:
     app, _ = build_streamable_mcp_app()
 
