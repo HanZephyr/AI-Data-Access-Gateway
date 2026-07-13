@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from mcp.server.fastmcp import Context, FastMCP
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.applications import Starlette
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, QueryParams
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -47,12 +47,12 @@ class RuntimeApiKeyMiddleware:
             await self.app(scope, receive, send)
             return
 
-        headers = Headers(raw=scope["headers"])
         client_identifier = _client_identifier_from_scope(scope)
         try:
+            raw_api_key = _extract_api_key_from_scope(scope)
             authenticated = await to_thread.run_sync(
                 self._authenticate,
-                headers.get(get_settings().api_key_header),
+                raw_api_key,
                 client_identifier,
             )
         except HTTPException as exc:
@@ -80,6 +80,32 @@ class RuntimeApiKeyMiddleware:
                 raw_api_key,
                 client_identifier=client_identifier,
             )
+
+
+def _extract_bearer_api_key(authorization: str | None) -> str | None:
+    """Return the API key from one Bearer authorization value, if present."""
+
+    if authorization is None:
+        return None
+    parts = authorization.split(maxsplit=1)
+    if len(parts) != 2 or parts[0].casefold() != "bearer":
+        return None
+    return parts[1].strip() or None
+
+
+def _extract_api_key_from_scope(scope: Scope) -> str | None:
+    """Resolve one matching MCP API key credential or reject conflicting values."""
+
+    headers = Headers(raw=scope["headers"])
+    candidates = [
+        headers.get(get_settings().api_key_header),
+        *QueryParams(scope["query_string"]).getlist("apikey"),
+        _extract_bearer_api_key(headers.get("authorization")),
+    ]
+    supplied_keys = {candidate for candidate in candidates if candidate}
+    if len(supplied_keys) > 1:
+        raise HTTPException(status_code=400, detail="Conflicting API key credentials")
+    return next(iter(supplied_keys), None)
 
 
 def _client_identifier_from_scope(scope: Scope) -> str | None:

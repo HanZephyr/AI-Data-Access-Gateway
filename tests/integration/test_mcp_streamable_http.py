@@ -10,6 +10,7 @@ from mcp.client.streamable_http import streamable_http_client
 from sqlalchemy.orm import Session, sessionmaker
 
 from adg.app.main import create_app
+from adg.app.settings import get_settings
 from adg.control_plane.db import create_engine_from_url, create_session_factory
 from adg.control_plane.models import Base
 from adg.control_plane.models.api_key import ApiKey
@@ -88,36 +89,131 @@ def build_streamable_mcp_app() -> tuple[FastAPI, sessionmaker[Session]]:
     return create_app(session_factory=session_factory), session_factory
 
 
+@pytest.fixture(autouse=True)
+def reset_streamable_mcp_session_manager(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Create a new one-shot FastMCP session manager for every integration test."""
+
+    monkeypatch.setattr(runtime_mcp_server, "_session_manager", None)
+
+
+async def assert_mcp_list_datasources(
+    app: FastAPI,
+    *,
+    headers: dict[str, str],
+    query: str = "",
+) -> None:
+    async with runtime_mcp_server.session_manager.run():
+        base_url = "http://127.0.0.1:8000"
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url=base_url,
+            headers=headers,
+        ) as http_client:
+            async with streamable_http_client(
+                f"{base_url}/mcp{query}",
+                http_client=http_client,
+            ) as (read_stream, write_stream, _):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+
+                    tools = await session.list_tools()
+                    list_datasources_tool = next(
+                        tool for tool in tools.tools if tool.name == "list_datasources"
+                    )
+                    properties = list_datasources_tool.inputSchema.get("properties", {})
+                    assert "user_id" not in properties
+                    assert "roles" not in properties
+                    assert "groups" not in properties
+
+                    result = await session.call_tool("list_datasources", {})
+                    assert result.structuredContent is not None
+                    assert result.structuredContent["datasources"][0]["id"] == "ds_1"
+
+
 @pytest.mark.anyio
-async def test_streamable_mcp_server_lists_tools_and_calls_runtime_tool() -> None:
+@pytest.mark.parametrize(
+    ("headers", "query"),
+    [
+        ({"X-ADG-API-Key": "adg_runtime"}, ""),
+        ({}, "?apikey=adg_runtime"),
+        ({"Authorization": "bEaReR adg_runtime"}, ""),
+    ],
+)
+async def test_streamable_mcp_server_accepts_runtime_api_key_sources(
+    headers: dict[str, str],
+    query: str,
+) -> None:
+    app, _ = build_streamable_mcp_app()
+
+    await assert_mcp_list_datasources(app, headers=headers, query=query)
+
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_accepts_configured_api_key_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADG_API_KEY_HEADER", "X-Custom-ADG-Key")
+    get_settings.cache_clear()
+    try:
+        app, _ = build_streamable_mcp_app()
+
+        await assert_mcp_list_datasources(
+            app,
+            headers={"X-Custom-ADG-Key": "adg_runtime"},
+        )
+    finally:
+        monkeypatch.delenv("ADG_API_KEY_HEADER", raising=False)
+        get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_accepts_matching_api_key_credentials() -> None:
+    app, _ = build_streamable_mcp_app()
+
+    await assert_mcp_list_datasources(
+        app,
+        headers={
+            "X-ADG-API-Key": "adg_runtime",
+            "Authorization": "Bearer adg_runtime",
+        },
+        query="?apikey=adg_runtime",
+    )
+
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_rejects_conflicting_api_key_credentials() -> None:
     app, _ = build_streamable_mcp_app()
 
     async with runtime_mcp_server.session_manager.run():
-        for base_url in ["http://127.0.0.1:8000", "http://101.200.0.241:8001"]:
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
-                base_url=base_url,
-                headers={"X-ADG-API-Key": "adg_runtime"},
-            ) as http_client:
-                async with streamable_http_client(
-                    f"{base_url}/mcp",
-                    http_client=http_client,
-                ) as (read_stream, write_stream, _):
-                    async with ClientSession(read_stream, write_stream) as session:
-                        await session.initialize()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1:8000",
+        ) as http_client:
+            response = await http_client.post(
+                "/mcp?apikey=adg_other",
+                content="{}",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ADG-API-Key": "adg_runtime",
+                },
+            )
 
-                        tools = await session.list_tools()
-                        list_datasources_tool = next(
-                            tool for tool in tools.tools if tool.name == "list_datasources"
-                        )
-                        properties = list_datasources_tool.inputSchema.get("properties", {})
-                        assert "user_id" not in properties
-                        assert "roles" not in properties
-                        assert "groups" not in properties
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Conflicting API key credentials"}
 
-                        result = await session.call_tool("list_datasources", {})
-                        assert result.structuredContent is not None
-                        assert result.structuredContent["datasources"][0]["id"] == "ds_1"
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_rejects_missing_api_key() -> None:
+    app, _ = build_streamable_mcp_app()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://127.0.0.1:8000",
+    ) as http_client:
+        response = await http_client.post("/mcp")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing API key"}
 
 
 @pytest.mark.anyio

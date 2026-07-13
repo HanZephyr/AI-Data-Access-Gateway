@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -140,6 +141,30 @@ def test_mcp_tool_route_accepts_non_admin_api_key() -> None:
 
     assert response.status_code == 200
     assert response.json()["datasources"][0]["id"] == "ds_1"
+
+
+@pytest.mark.parametrize(
+    ("params", "headers"),
+    [
+        ({"apikey": "adg_runtime"}, {}),
+        ({}, {"Authorization": "Bearer adg_runtime"}),
+    ],
+)
+def test_mcp_tool_route_does_not_accept_query_or_bearer_api_key(
+    params: dict[str, str],
+    headers: dict[str, str],
+) -> None:
+    client, _ = build_mcp_app()
+
+    response = client.post(
+        "/api/tools/list_datasources",
+        json={},
+        params=params,
+        headers=headers,
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing API key"}
 
 
 def test_mcp_tool_route_inherits_database_policy_to_child_tables() -> None:
