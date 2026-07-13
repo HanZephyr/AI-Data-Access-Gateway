@@ -45,7 +45,7 @@ status: active
 ## Invariants
 
 - Runtime tool calls use runtime API key authentication, not `require_admin_api_key`; admin scope is not required for MCP or direct HTTP tool callers.
-- `/mcp` accepts the configured API Key Header (default `X-ADG-API-Key`), `apikey` query parameter, or `Authorization: Bearer <key>` as the same runtime API Key. Every non-empty value across all sources, including repeated Header values, must match; conflicting values return HTTP 400 before database authentication. Query and Bearer inputs do not extend to `/api/tools/{tool_name}`.
+- `/mcp` accepts the configured API Key Header (default `X-ADG-API-Key`) or `Authorization: Bearer <key>` as the same runtime API Key. The `apikey` query parameter is a disabled-by-default compatibility source enabled only with `ADG_MCP_QUERY_API_KEY_ENABLED=true`. Every non-empty value across enabled sources, including repeated Header values, must match; conflicting values return HTTP 400 before database authentication. Query and Bearer inputs do not extend to `/api/tools/{tool_name}`.
 - Runtime identity comes from the authenticated API key's bound user. Tool request payloads must not be trusted for `user_id`, `roles`, or `groups`; direct HTTP tool dispatch rejects those fields.
 - Runtime policy evaluation defaults to allow only when no active policies exist for the requested action.
 - When active policies exist for an action, matching allow is required and matching deny wins.

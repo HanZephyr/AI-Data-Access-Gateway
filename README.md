@@ -50,13 +50,14 @@ uv run --no-dev --extra all uvicorn adg.app.main:create_app --factory --host 0.0
 
 ### MCP authentication
 
-For `/mcp`, provide the same runtime-scoped API key in one of these forms:
+For `/mcp`, provide the same runtime-scoped API key using the configured API key Header or Bearer authentication:
 
 - The default or configured API key header (default: `X-ADG-API-Key`)
 - `Authorization: Bearer <runtime-api-key>`
-- `/mcp?apikey=<runtime-api-key>`
 
-If different non-empty credentials are provided from multiple sources, `/mcp` returns HTTP 400. Prefer Header or Bearer authentication; use the query parameter only for platforms that cannot set request headers. Do not retain full query strings in proxies, access logs, or monitoring systems, because they can expose the API key.
+Query authentication is a disabled-by-default compatibility option for platforms that cannot set request headers. Enable it at deployment time with `ADG_MCP_QUERY_API_KEY_ENABLED=true`, then use `/mcp?apikey=<runtime-api-key>`. There is intentionally no runtime or admin-console toggle: authentication bootstrap policy must be fixed before requests reach the application.
+
+If different non-empty credentials are provided from enabled sources, `/mcp` returns HTTP 400. Prefer Header or Bearer authentication. When query authentication is enabled, do not retain full query strings in proxies, access logs, or monitoring systems, because they can expose the API key.
 
 ### Frontend
 

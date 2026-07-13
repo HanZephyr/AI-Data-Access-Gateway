@@ -10,6 +10,7 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.env == "local"
     assert settings.service_name == "AI Data Access Gateway"
     assert settings.api_key_header == "X-ADG-API-Key"
+    assert settings.mcp_query_api_key_enabled is False
     assert settings.control_plane_database_url.startswith("sqlite:///")
     assert settings.backend_host_port is None
     assert settings.admin_page_default_limit == 50
@@ -38,6 +39,7 @@ def test_settings_defaults_are_local_friendly() -> None:
 def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setenv("ADG_ENV", "test")
     monkeypatch.setenv("ADG_CONTROL_PLANE_DATABASE_URL", "sqlite:///./test.db")
+    monkeypatch.setenv("ADG_MCP_QUERY_API_KEY_ENABLED", "true")
     monkeypatch.setenv("ADG_SECRET_KEY", "unit-test-secret")
     monkeypatch.setenv("ADG_CREDENTIAL_ENCRYPTION_KEY", "unit-test-credential-key")
     monkeypatch.setenv("ADG_MASKING_ENCRYPTION_KEY", "unit-test-masking-key")
@@ -66,6 +68,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
 
     assert settings.env == "test"
     assert settings.control_plane_database_url == "sqlite:///./test.db"
+    assert settings.mcp_query_api_key_enabled is True
     assert settings.secret_key == "unit-test-secret"
     assert settings.credential_encryption_key == "unit-test-credential-key"
     assert settings.masking_encryption_key == "unit-test-masking-key"

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     service_name: str = "AI Data Access Gateway"
     control_plane_database_url: str = "sqlite:///./data/adg-control-plane.db"
     api_key_header: str = "X-ADG-API-Key"
+    mcp_query_api_key_enabled: bool = False
     secret_key: str = Field(default=DEFAULT_SECRET_KEY, min_length=16)
     credential_encryption_key: str = Field(
         default=DEFAULT_CREDENTIAL_ENCRYPTION_KEY,

@@ -7,7 +7,7 @@
 ## 范围
 
 - 保留现有由 `ADG_API_KEY_HEADER` 配置的请求头方式，默认 Header 为 `X-ADG-API-Key`。
-- 新增固定查询参数 `apikey`，例如 `/mcp?apikey=<key>`。
+- 新增由 `ADG_MCP_QUERY_API_KEY_ENABLED` 显式开启的固定查询参数 `apikey`，例如 `/mcp?apikey=<key>`；默认关闭。
 - 新增 `Authorization: Bearer <key>`；`Bearer` 前缀大小写不敏感，并在校验前去除前缀与分隔空白。
 - 仅作用于 `/mcp`。补充 HTTP 工具接口 `POST /api/tools/{tool_name}`、管理接口与内部接口保持现有 Header 鉴权行为。
 
@@ -22,16 +22,16 @@
 `RuntimeApiKeyMiddleware` 在调用既有运行时鉴权函数前，收集以下候选凭证：
 
 1. `ADG_API_KEY_HEADER` 指定的 Header。
-2. 查询参数 `apikey`。
+2. 启用兼容开关时的查询参数 `apikey`。
 3. 符合 `Bearer <key>` 格式的 `Authorization` Header。
 
 只有一个非空候选值，或多个非空候选值完全相同，便将该值传给既有运行时鉴权逻辑。多个非空候选值不同则在访问数据库前返回 HTTP 400，防止不一致配置被静默掩盖。
 
-没有可用候选值时继续返回 HTTP 401 `Missing API key`。无效、过期或不具备 runtime scope 的 API Key 沿用现有状态码与响应。
+没有可用候选值时继续返回 HTTP 401 `Missing API key`。开关关闭时 query 参数不参与候选值或冲突判断。无效、过期或不具备 runtime scope 的 API Key 沿用现有状态码与响应。
 
 ## 测试
 
-- 验证默认/已配置 Header、查询参数和 Bearer 均可完成 MCP 初始化及工具调用。
+- 验证默认/已配置 Header 和 Bearer 均可完成 MCP 初始化及工具调用，query 默认关闭且显式开启后可用。
 - 验证 `bearer` 前缀不区分大小写。
 - 验证不同来源携带不同值时返回 HTTP 400。
 - 验证 `/api/tools/{tool_name}` 不接受新增的 query 或 Bearer 来源。

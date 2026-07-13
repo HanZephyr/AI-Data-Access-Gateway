@@ -97,7 +97,8 @@ def _extract_api_key_from_scope(scope: Scope) -> str | None:
     """Resolve one matching MCP API key credential or reject conflicting values."""
 
     headers = Headers(raw=scope["headers"])
-    configured_header = get_settings().api_key_header
+    settings = get_settings()
+    configured_header = settings.api_key_header
     authorization_values = headers.getlist("authorization")
     if configured_header.casefold() == "authorization":
         header_candidates = [
@@ -110,7 +111,11 @@ def _extract_api_key_from_scope(scope: Scope) -> str | None:
         ]
     candidates = [
         *header_candidates,
-        *QueryParams(scope["query_string"]).getlist("apikey"),
+        *(
+            QueryParams(scope["query_string"]).getlist("apikey")
+            if settings.mcp_query_api_key_enabled
+            else []
+        ),
     ]
     supplied_keys = {candidate for candidate in candidates if candidate}
     if len(supplied_keys) > 1:

@@ -50,13 +50,14 @@ uv run --no-dev --extra all uvicorn adg.app.main:create_app --factory --host 0.0
 
 ### MCP 鉴权
 
-对于 `/mcp`，可通过以下任一方式提供同一把 runtime 作用域 API Key：
+对于 `/mcp`，可通过配置的 API Key 请求头或 Bearer 鉴权提供同一把 runtime 作用域 API Key：
 
 - 默认或配置的 API Key 请求头（默认：`X-ADG-API-Key`）
 - `Authorization: Bearer <runtime-api-key>`
-- `/mcp?apikey=<runtime-api-key>`
 
-多个来源同时提供不同的非空凭据时，`/mcp` 返回 HTTP 400。优先使用请求头或 Bearer 方式；查询参数仅适用于无法设置请求头的平台。代理、访问日志和监控系统不得保留完整查询串，因为其中可能暴露 API Key。
+Query 鉴权是默认关闭的兼容能力，仅用于无法设置请求头的平台。部署时显式设置 `ADG_MCP_QUERY_API_KEY_ENABLED=true` 后，才可使用 `/mcp?apikey=<runtime-api-key>`。系统特意不提供运行时或管理控制台开关，因为鉴权引导策略必须在请求进入应用前固定。
+
+已启用来源同时提供不同的非空凭据时，`/mcp` 返回 HTTP 400。应优先使用请求头或 Bearer 方式。启用 query 鉴权后，代理、访问日志和监控系统不得保留完整查询串，因为其中可能暴露 API Key。
 
 ### 前端
 

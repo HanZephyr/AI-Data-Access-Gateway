@@ -1,5 +1,5 @@
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, cast
 
 import httpx
@@ -96,6 +96,16 @@ def reset_streamable_mcp_session_manager(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(runtime_mcp_server, "_session_manager", None)
 
 
+@pytest.fixture
+def enabled_mcp_query_api_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("ADG_MCP_QUERY_API_KEY_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        get_settings.cache_clear()
+
+
 async def assert_mcp_list_datasources(
     app: FastAPI,
     *,
@@ -135,7 +145,6 @@ async def assert_mcp_list_datasources(
     ("headers", "query"),
     [
         ({"X-ADG-API-Key": "adg_runtime"}, ""),
-        ({}, "?apikey=adg_runtime"),
         ({"Authorization": "bEaReR adg_runtime"}, ""),
     ],
 )
@@ -146,6 +155,19 @@ async def test_streamable_mcp_server_accepts_runtime_api_key_sources(
     app, _ = build_streamable_mcp_app()
 
     await assert_mcp_list_datasources(app, headers=headers, query=query)
+
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_accepts_query_api_key_when_enabled(
+    enabled_mcp_query_api_key: None,
+) -> None:
+    app, _ = build_streamable_mcp_app()
+
+    await assert_mcp_list_datasources(
+        app,
+        headers={},
+        query="?apikey=adg_runtime",
+    )
 
 
 @pytest.mark.anyio
@@ -185,7 +207,9 @@ async def test_streamable_mcp_server_accepts_bearer_when_configured_header_is_au
 
 
 @pytest.mark.anyio
-async def test_streamable_mcp_server_accepts_matching_api_key_credentials() -> None:
+async def test_streamable_mcp_server_accepts_matching_api_key_credentials(
+    enabled_mcp_query_api_key: None,
+) -> None:
     app, _ = build_streamable_mcp_app()
 
     await assert_mcp_list_datasources(
@@ -255,7 +279,9 @@ async def test_streamable_mcp_server_rejects_conflicting_duplicate_api_key_heade
 
 
 @pytest.mark.anyio
-async def test_streamable_mcp_server_rejects_conflicting_api_key_credentials() -> None:
+async def test_streamable_mcp_server_rejects_conflicting_api_key_credentials(
+    enabled_mcp_query_api_key: None,
+) -> None:
     app, _ = build_streamable_mcp_app()
 
     async with runtime_mcp_server.session_manager.run():
@@ -285,6 +311,21 @@ async def test_streamable_mcp_server_rejects_missing_api_key() -> None:
         base_url="http://127.0.0.1:8000",
     ) as http_client:
         response = await http_client.post("/mcp")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing API key"}
+
+
+@pytest.mark.anyio
+async def test_streamable_mcp_server_rejects_query_api_key_by_default() -> None:
+    app, _ = build_streamable_mcp_app()
+
+    async with runtime_mcp_server.session_manager.run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1:8000",
+        ) as http_client:
+            response = await http_client.post("/mcp?apikey=adg_runtime")
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Missing API key"}
