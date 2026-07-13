@@ -11,8 +11,11 @@ related_docs:
   - docs/superpowers/specs/2026-04-24-milestone-3-mcp-runtime-design.md
   - docs/superpowers/acceptance/2026-04-24-milestone-3-mcp-runtime.md
   - docs/superpowers/plans/2026-04-24-milestone-3-mcp-runtime.md
+  - docs/superpowers/specs/2026-07-13-mcp-api-key-authentication-design.md
+  - docs/superpowers/acceptance/2026-07-13-mcp-api-key-authentication.md
+  - docs/superpowers/plans/2026-07-13-mcp-api-key-authentication.md
   - docs/superpowers/memory/modules/milestone-2-datasource-foundation.md
-last_verified_commit: 9b0b509
+last_verified_commit: f2b9767
 status: active
 ---
 
@@ -42,6 +45,7 @@ status: active
 ## Invariants
 
 - Runtime tool calls use runtime API key authentication, not `require_admin_api_key`; admin scope is not required for MCP or direct HTTP tool callers.
+- `/mcp` accepts the configured API Key Header (default `X-ADG-API-Key`), `apikey` query parameter, or `Authorization: Bearer <key>` as the same runtime API Key. Every non-empty value across all sources, including repeated Header values, must match; conflicting values return HTTP 400 before database authentication. Query and Bearer inputs do not extend to `/api/tools/{tool_name}`.
 - Runtime identity comes from the authenticated API key's bound user. Tool request payloads must not be trusted for `user_id`, `roles`, or `groups`; direct HTTP tool dispatch rejects those fields.
 - Runtime policy evaluation defaults to allow only when no active policies exist for the requested action.
 - When active policies exist for an action, matching allow is required and matching deny wins.
@@ -66,6 +70,7 @@ status: active
 ## Common pitfalls
 
 - Treating historical `POST /mcp/tools/{tool_name}` as a current runtime entrypoint or compatibility alias. It is obsolete and intentionally unsupported; AI agents should use FastMCP Streamable HTTP `/mcp`, while non-agent traditional services may use the supplemental `POST /api/tools/{tool_name}` API.
+- Resolving only the first repeated API Key or Authorization Header. Proxies may preserve or combine duplicate values differently, so `/mcp` credential extraction must collect every value and reject conflicts instead of silently selecting one.
 - Forgetting to proxy current runtime entrypoints from the web host. Production Nginx and the local Vite dev server must forward `/mcp` and `/api/tools/` to the backend.
 - Letting unknown SQL tables execute because the declared resource scope is non-empty. SQL Guard extraction must resolve to known resource snapshots.
 - Assuming tag visibility ignores policy. Tags are visible only through resources the identity can discover.
