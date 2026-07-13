@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = Field(default=60, gt=0)
     auth_rate_limit_max_failures: int = Field(default=10, gt=0)
     auth_rate_limit_block_seconds: int = Field(default=300, gt=0)
+    auth_rate_limit_memory_max_buckets: int = Field(default=10_000, ge=2)
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

@@ -33,6 +33,7 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.auth_rate_limit_window_seconds == 60
     assert settings.auth_rate_limit_max_failures == 10
     assert settings.auth_rate_limit_block_seconds == 300
+    assert settings.auth_rate_limit_memory_max_buckets == 10_000
 
 
 def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> None:
@@ -62,6 +63,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_WINDOW_SECONDS", "30")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_MAX_FAILURES", "4")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS", "120")
+    monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS", "2000")
     settings = Settings()
 
     assert settings.env == "test"
@@ -90,6 +92,7 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.auth_rate_limit_window_seconds == 30
     assert settings.auth_rate_limit_max_failures == 4
     assert settings.auth_rate_limit_block_seconds == 120
+    assert settings.auth_rate_limit_memory_max_buckets == 2000
 
 
 def test_settings_reject_default_secret_key_in_production(monkeypatch: MonkeyPatch) -> None:
@@ -191,6 +194,11 @@ def test_settings_reject_invalid_runtime_pool_values(monkeypatch: MonkeyPatch) -
         Settings()
 
     monkeypatch.delenv("ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS")
+    monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS", "1")
+    with pytest.raises(ValueError, match="auth_rate_limit_memory_max_buckets"):
+        Settings()
+
+    monkeypatch.delenv("ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_STORAGE", "redis")
     monkeypatch.delenv("ADG_AUTH_RATE_LIMIT_REDIS_URL", raising=False)
     with pytest.raises(ValueError, match="ADG_AUTH_RATE_LIMIT_REDIS_URL"):

@@ -119,6 +119,9 @@ def test_backend_compose_passes_hardening_configuration() -> None:
     assert environment["ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS"] == (
         "${ADG_AUTH_RATE_LIMIT_BLOCK_SECONDS:-300}"
     )
+    assert environment["ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS"] == (
+        "${ADG_AUTH_RATE_LIMIT_MEMORY_MAX_BUCKETS:-10000}"
+    )
     assert environment["ADG_METADATA_SCAN_MAX_DATABASES"] == (
         "${ADG_METADATA_SCAN_MAX_DATABASES:-25}"
     )
