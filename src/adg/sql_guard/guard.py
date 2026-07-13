@@ -197,8 +197,13 @@ class SqlGuard:
     def _statement_rejection(self, statement: exp.Expression) -> str | None:
         """Return a first-layer statement-type rejection reason, if any."""
 
-        statement_category = self._statement_category(statement)
         allowed_categories = self._mode_allowed_statement_categories[self._execution_mode]
+        if isinstance(statement, exp.Select):
+            if statement.args.get("locks"):
+                return "locking_read_not_allowed"
+            if statement.args.get("into") is not None and "schema" not in allowed_categories:
+                return "select_into_not_allowed"
+        statement_category = self._statement_category(statement)
         if statement_category in allowed_categories:
             return None
         return "statement_not_allowed"
@@ -207,6 +212,8 @@ class SqlGuard:
         """Classify a parsed statement into a coarse execution-mode category."""
 
         statement_type = statement.key.lower()
+        if isinstance(statement, exp.Select) and statement.args.get("into") is not None:
+            return "schema"
         if isinstance(statement, exp.Select) or statement_type == "describe":
             return "read"
         if isinstance(statement, exp.Command):

@@ -35,6 +35,38 @@ def test_guard_rejects_mutation_statement() -> None:
 
 
 @pytest.mark.parametrize(
+    "query,rejection",
+    [
+        (
+            "select id into archived_customers from public.customers",
+            "select_into_not_allowed",
+        ),
+        ("select id from public.customers for update", "locking_read_not_allowed"),
+        ("select id from public.customers for share", "locking_read_not_allowed"),
+    ],
+)
+def test_guard_rejects_select_side_effects_even_with_relaxed_validation(
+    query: str,
+    rejection: str,
+) -> None:
+    result = SqlGuard(strict_validation=False).check(query)
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == [rejection]
+
+
+def test_guard_only_allows_select_into_in_schema_mode() -> None:
+    result = SqlGuard(execution_mode="schema").check(
+        "select id into archived_customers from public.customers"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert result.normalized_sql.startswith("CREATE TABLE archived_customers AS SELECT")
+
+
+@pytest.mark.parametrize(
     "sql",
     [
         "create table public.customers_archive (id int)",
