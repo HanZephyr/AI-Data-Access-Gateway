@@ -23,6 +23,8 @@ def test_settings_defaults_are_local_friendly() -> None:
     assert settings.runtime_datasource_connect_timeout_seconds == 10
     assert settings.runtime_datasource_read_timeout_seconds == 120
     assert settings.runtime_datasource_write_timeout_seconds == 120
+    assert settings.runtime_query_max_limit == 1000
+    assert settings.runtime_decrypt_max_values == 100
     assert settings.masking_encryption_key == "change-me-to-a-long-random-masking-key"
     assert settings.secret_kdf_iterations == 390_000
     assert settings.metadata_scan_max_databases == 25
@@ -57,6 +59,8 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS", "7")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_READ_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS", "46")
+    monkeypatch.setenv("ADG_RUNTIME_QUERY_MAX_LIMIT", "250")
+    monkeypatch.setenv("ADG_RUNTIME_DECRYPT_MAX_VALUES", "25")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_ENABLED", "false")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_STORAGE", "redis")
     monkeypatch.setenv("ADG_AUTH_RATE_LIMIT_REDIS_URL", "redis://localhost:6379/2")
@@ -86,6 +90,8 @@ def test_settings_read_adg_prefixed_environment(monkeypatch: MonkeyPatch) -> Non
     assert settings.runtime_datasource_connect_timeout_seconds == 7
     assert settings.runtime_datasource_read_timeout_seconds == 45
     assert settings.runtime_datasource_write_timeout_seconds == 46
+    assert settings.runtime_query_max_limit == 250
+    assert settings.runtime_decrypt_max_values == 25
     assert settings.auth_rate_limit_enabled is False
     assert settings.auth_rate_limit_storage == "redis"
     assert settings.auth_rate_limit_redis_url == "redis://localhost:6379/2"
@@ -164,6 +170,16 @@ def test_settings_reject_invalid_runtime_pool_values(monkeypatch: MonkeyPatch) -
         Settings()
 
     monkeypatch.delenv("ADG_RUNTIME_DATASOURCE_CONNECT_TIMEOUT_SECONDS")
+    monkeypatch.setenv("ADG_RUNTIME_QUERY_MAX_LIMIT", "0")
+    with pytest.raises(ValueError, match="runtime_query_max_limit"):
+        Settings()
+
+    monkeypatch.delenv("ADG_RUNTIME_QUERY_MAX_LIMIT")
+    monkeypatch.setenv("ADG_RUNTIME_DECRYPT_MAX_VALUES", "0")
+    with pytest.raises(ValueError, match="runtime_decrypt_max_values"):
+        Settings()
+
+    monkeypatch.delenv("ADG_RUNTIME_DECRYPT_MAX_VALUES")
     monkeypatch.setenv("ADG_SECRET_KDF_ITERATIONS", "999")
     with pytest.raises(ValueError, match="secret_kdf_iterations"):
         Settings()

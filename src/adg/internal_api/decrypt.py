@@ -26,8 +26,19 @@ def decrypt_values(
     """Decrypt reversible masking markers for the authenticated runtime user."""
 
     user_id = api_key.user_id
-    values = [str(value) for value in payload.get("values", [])]
     settings = get_settings()
+    raw_values = payload.get("values", [])
+    if not isinstance(raw_values, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Decrypt values must be a list",
+        )
+    if len(raw_values) > settings.runtime_decrypt_max_values:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Decrypt value limit exceeded",
+        )
+    values = [str(value) for value in raw_values]
     masking_service = MaskingService(
         session,
         secret_key=settings.secret_key,

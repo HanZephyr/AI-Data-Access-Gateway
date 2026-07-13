@@ -294,6 +294,23 @@ class GatewayRuntimeService:
         """Validate, authorize, execute, mask, and audit a read-only runtime query."""
 
         self._session.flush()
+        settings = get_settings()
+        limit_reason = None
+        if limit < 1:
+            limit_reason = "runtime_limit_invalid"
+        elif limit > settings.runtime_query_max_limit:
+            limit_reason = "runtime_limit_exceeded"
+        if limit_reason is not None:
+            self._record_rejection(
+                identity,
+                api_key_id,
+                "sql_rejected",
+                datasource_id,
+                resource_ids,
+                query,
+                limit_reason,
+            )
+            return {"status": "rejected", "reason": limit_reason}
         datasource = self._get_datasource(datasource_id)
         if datasource.status != "active":
             reason = "datasource_disabled"
@@ -339,7 +356,6 @@ class GatewayRuntimeService:
                 )
                 return {"status": "rejected", "reason": decision.reason}
 
-        settings = get_settings()
         guard_result = SqlGuard(
             default_limit=limit,
             max_limit=limit,

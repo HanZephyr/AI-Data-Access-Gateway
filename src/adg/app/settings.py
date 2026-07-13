@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     runtime_datasource_connect_timeout_seconds: int = Field(default=10, gt=0)
     runtime_datasource_read_timeout_seconds: int = Field(default=120, gt=0)
     runtime_datasource_write_timeout_seconds: int = Field(default=120, gt=0)
+    runtime_query_max_limit: int = Field(default=1000, ge=1)
+    runtime_decrypt_max_values: int = Field(default=100, ge=1)
     auth_rate_limit_enabled: bool = True
     auth_rate_limit_storage: Literal["memory", "redis"] = "memory"
     auth_rate_limit_redis_url: str | None = None

@@ -129,6 +129,19 @@ def test_runtime_decrypt_rejects_expired_context() -> None:
     assert response.json()["detail"] == "Decrypt context expired"
 
 
+def test_runtime_decrypt_rejects_oversized_batches() -> None:
+    client, marker, _ = build_internal_app()
+
+    response = client.post(
+        "/runtime/decrypt",
+        json={"values": [marker] * 101},
+        headers={"X-ADG-API-Key": "adg_runtime"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Decrypt value limit exceeded"
+
+
 def test_runtime_decrypt_rejects_when_user_lacks_decrypt_permission() -> None:
     client, marker, session_factory = build_internal_app()
 

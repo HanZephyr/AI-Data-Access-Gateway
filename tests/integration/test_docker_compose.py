@@ -73,6 +73,12 @@ def test_backend_compose_passes_runtime_datasource_timeout_settings() -> None:
     assert environment["ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS"] == (
         "${ADG_RUNTIME_DATASOURCE_WRITE_TIMEOUT_SECONDS:-120}"
     )
+    assert environment["ADG_RUNTIME_QUERY_MAX_LIMIT"] == (
+        "${ADG_RUNTIME_QUERY_MAX_LIMIT:-1000}"
+    )
+    assert environment["ADG_RUNTIME_DECRYPT_MAX_VALUES"] == (
+        "${ADG_RUNTIME_DECRYPT_MAX_VALUES:-100}"
+    )
 
 
 def test_backend_dockerfile_supports_configurable_runtime_port() -> None:

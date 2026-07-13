@@ -71,6 +71,7 @@ class RuntimeSettingsStub:
     secret_kdf_iterations = 1
     sql_execution_mode = "read_only"
     sql_strict_validation = False
+    runtime_query_max_limit = 1000
 
 
 def identity() -> IdentityContext:
@@ -526,6 +527,42 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     event = db_session.execute(select(AuditEvent)).scalar_one()
     assert event.event_type == "query_execution"
     assert event.decision == "allowed"
+
+
+def test_execute_query_rejects_invalid_or_excessive_runtime_limits(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class LimitSettingsStub(RuntimeSettingsStub):
+        runtime_query_max_limit = 2
+
+    monkeypatch.setattr("adg.gateway_runtime.tools.get_settings", lambda: LimitSettingsStub())
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    service = runtime(db_session)
+    FakeConnector.last_sql = None
+
+    invalid = service.execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from warehouse.public.customers",
+        limit=0,
+    )
+    excessive = service.execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query="select id from warehouse.public.customers",
+        limit=3,
+    )
+
+    assert invalid == {"status": "rejected", "reason": "runtime_limit_invalid"}
+    assert excessive == {"status": "rejected", "reason": "runtime_limit_exceeded"}
+    assert FakeConnector.last_sql is None
 
 
 def test_execute_query_returns_structured_error_when_connector_fails(
