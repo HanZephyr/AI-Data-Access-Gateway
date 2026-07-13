@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from cryptography.fernet import Fernet
+from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
 
 from adg.connectors.base import QueryResult
@@ -129,6 +130,81 @@ def test_reversible_decrypt_accepts_legacy_secret_key_wrapped_context(
     )
 
     assert plaintext == ["legacy@example.com"]
+
+
+def test_reversible_masking_batches_query_context_and_key_derivation(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    resource = Resource(
+        id="res_customers",
+        datasource_id="ds_1",
+        parent_id=None,
+        kind="relational_table",
+        name="customers",
+        path="warehouse.public.customers",
+        display_name="customers",
+        query_language="sql",
+        metadata_json="{}",
+    )
+    db_session.add(resource)
+    db_session.add_all(
+        [
+            MaskingPolicy(
+                resource_id=resource.id,
+                field_name=field_name,
+                strategy="reversible",
+                config_json="{}",
+                status="active",
+            )
+            for field_name in ("email", "phone")
+        ]
+    )
+    db_session.flush()
+    service = MaskingService(
+        db_session,
+        secret_key=SECRET,
+        masking_encryption_key="masking-key-for-tests",
+        kdf_iterations=1_200,
+    )
+
+    masked, _ = service.apply_to_result(
+        identity=IdentityContext(user_id="user-1", roles=["analyst"]),
+        datasource_id="ds_1",
+        query_id="qry_batch",
+        resources=[resource],
+        result=QueryResult(
+            columns=[
+                {"name": "email", "data_type": "string"},
+                {"name": "phone", "data_type": "string"},
+            ],
+            rows=[
+                {"email": f"user-{index}@example.com", "phone": f"1380000{index:04d}"}
+                for index in range(100)
+            ],
+        ),
+    )
+
+    contexts = db_session.query(DecryptContext).all()
+    markers = [str(row[field]) for row in masked.rows for field in ("email", "phone")]
+    context_ids = {marker.split("$", 3)[2] for marker in markers}
+    assert len(contexts) == 1
+    assert context_ids == {contexts[0].id}
+    assert json.loads(contexts[0].allowed_fields_json) == ["email", "phone"]
+
+    decrypt_calls = 0
+    original_decrypt_context_key = service._decrypt_context_key
+
+    def count_decrypt_context_key(key_ciphertext: str) -> bytes:
+        nonlocal decrypt_calls
+        decrypt_calls += 1
+        return original_decrypt_context_key(key_ciphertext)
+
+    monkeypatch.setattr(service, "_decrypt_context_key", count_decrypt_context_key)
+    plaintext = service.decrypt_values(user_id="user-1", values=markers)
+
+    assert plaintext[0:2] == ["user-0@example.com", "13800000000"]
+    assert decrypt_calls == 1
 
 
 def test_decrypt_rejects_expired_contexts(db_session: Session) -> None:

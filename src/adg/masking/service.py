@@ -54,6 +54,23 @@ class MaskingService:
         policies = self._matching_policies(identity=identity, resources=resources)
         masked_columns: list[dict[str, str]] = []
         rows: list[dict[str, object]] = []
+        reversible_fields = sorted(
+            {
+                policy.field_name
+                for policy in policies
+                if policy.strategy == "reversible"
+                and any(row.get(policy.field_name) is not None for row in result.rows)
+            }
+        )
+        reversible_context = None
+        if reversible_fields:
+            reversible_context = self._create_reversible_context(
+                user_id=identity.user_id,
+                datasource_id=datasource_id,
+                resource_ids=[resource.id for resource in resources],
+                query_id=query_id,
+                field_names=reversible_fields,
+            )
 
         for row in result.rows:
             masked_row = dict(row)
@@ -62,12 +79,12 @@ class MaskingService:
                     continue
                 # Reversible masking stores a decrypt context; other strategies are stateless.
                 if policy.strategy == "reversible":
-                    masked_row[policy.field_name] = self.mask_reversible_value(
-                        user_id=identity.user_id,
-                        datasource_id=datasource_id,
-                        resource_ids=[resource.id for resource in resources],
-                        query_id=query_id,
-                        field_name=policy.field_name,
+                    if reversible_context is None:
+                        raise RuntimeError("Reversible masking context was not initialized")
+                    context_id, temporary_fernet = reversible_context
+                    masked_row[policy.field_name] = self._encrypt_reversible_marker(
+                        context_id=context_id,
+                        temporary_fernet=temporary_fernet,
                         value=masked_row[policy.field_name],
                     )
                 else:
@@ -122,16 +139,41 @@ class MaskingService:
     ) -> str:
         """Encrypt one value and return an ADG marker that can be decrypted later."""
 
+        context_id, temporary_fernet = self._create_reversible_context(
+            user_id=user_id,
+            datasource_id=datasource_id,
+            resource_ids=resource_ids or [],
+            query_id=query_id,
+            field_names=[field_name],
+            expires_at=expires_at,
+        )
+        return self._encrypt_reversible_marker(
+            context_id=context_id,
+            temporary_fernet=temporary_fernet,
+            value=value,
+        )
+
+    def _create_reversible_context(
+        self,
+        *,
+        user_id: str | None,
+        datasource_id: str,
+        resource_ids: list[str],
+        query_id: str,
+        field_names: list[str],
+        expires_at: datetime | None = None,
+    ) -> tuple[str, Fernet]:
+        """Create one temporary key and decrypt context for a reversible result batch."""
+
         context_id = uuidv7()
         temporary_key = Fernet.generate_key()
         temporary_fernet = Fernet(temporary_key)
-        ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()
         context = DecryptContext(
             id=context_id,
             query_id=query_id,
             user_id=user_id,
             datasource_id=datasource_id,
-            resource_ids_json=json.dumps(resource_ids or [], separators=(",", ":")),
+            resource_ids_json=json.dumps(resource_ids, separators=(",", ":")),
             key_ciphertext=envelope_to_json(
                 encrypt_fernet_envelope(
                     temporary_key,
@@ -139,11 +181,23 @@ class MaskingService:
                     iterations=self._kdf_iterations,
                 )
             ),
-            allowed_fields_json=json.dumps([field_name], separators=(",", ":")),
+            allowed_fields_json=json.dumps(field_names, separators=(",", ":")),
             expires_at=expires_at or datetime.now(UTC) + timedelta(minutes=15),
         )
         self._session.add(context)
         self._session.flush()
+        return context_id, temporary_fernet
+
+    def _encrypt_reversible_marker(
+        self,
+        *,
+        context_id: str,
+        temporary_fernet: Fernet,
+        value: object,
+    ) -> str:
+        """Encrypt one scalar with an already-created reversible result context."""
+
+        ciphertext = temporary_fernet.encrypt(str(value).encode()).decode()
         return f"$adg_rev${context_id}${ciphertext}"
 
     def decrypt_values(
@@ -154,7 +208,25 @@ class MaskingService:
     ) -> list[str]:
         """Decrypt a batch of reversible ADG markers for the requesting user."""
 
-        return [self._decrypt_marker(user_id=user_id, marker=value) for value in values]
+        context_fernets: dict[str, Fernet] = {}
+        plaintext: list[str] = []
+        for marker in values:
+            context_id, ciphertext = self._parse_marker(marker)
+            temporary_fernet = context_fernets.get(context_id)
+            if temporary_fernet is None:
+                context = self._get_decrypt_context(user_id=user_id, marker=marker)
+                try:
+                    temporary_fernet = Fernet(
+                        self._decrypt_context_key(context.key_ciphertext)
+                    )
+                except InvalidToken as error:
+                    raise ValidationError("Decrypt value is invalid") from error
+                context_fernets[context_id] = temporary_fernet
+            try:
+                plaintext.append(temporary_fernet.decrypt(ciphertext.encode()).decode())
+            except InvalidToken as error:
+                raise ValidationError("Decrypt value is invalid") from error
+        return plaintext
 
     def get_decrypt_contexts(
         self,
@@ -165,19 +237,6 @@ class MaskingService:
         """Resolve reversible markers into validated decrypt contexts."""
 
         return [self._get_decrypt_context(user_id=user_id, marker=value) for value in values]
-
-    def _decrypt_marker(self, *, user_id: str | None, marker: str) -> str:
-        """Validate marker ownership and TTL before decrypting the value payload."""
-
-        _, ciphertext = self._parse_marker(marker)
-        context = self._get_decrypt_context(user_id=user_id, marker=marker)
-
-        try:
-            temporary_key = self._decrypt_context_key(context.key_ciphertext)
-            plaintext = Fernet(temporary_key).decrypt(ciphertext.encode()).decode()
-        except InvalidToken as error:
-            raise ValidationError("Decrypt value is invalid") from error
-        return plaintext
 
     def _get_decrypt_context(self, *, user_id: str | None, marker: str) -> DecryptContext:
         """Load one decrypt context and enforce identity and TTL validation."""
