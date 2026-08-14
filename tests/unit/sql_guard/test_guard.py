@@ -17,6 +17,130 @@ def test_guard_allows_select_and_injects_default_limit() -> None:
     assert result.risk_level == "low"
 
 
+def test_guard_allows_read_only_cte_and_excludes_cte_alias_from_resources() -> None:
+    result = SqlGuard(default_limit=100, max_limit=500).check(
+        "with recent_customers as ("
+        "select id, name from public.customers"
+        ") select id, name from recent_customers"
+    )
+
+    assert result.allowed is True
+    assert result.normalized_sql is not None
+    assert "LIMIT 100" in result.normalized_sql
+    assert result.accessed_resources == ["public.customers"]
+    assert result.accessed_fields == ["id", "name"]
+
+
+def test_guard_rejects_data_modifying_cte_even_in_admin_mode() -> None:
+    result = SqlGuard(execution_mode="admin").check(
+        "with customers as ("
+        "update public.customers set name = 'Alice' where id = 1 returning id"
+        ") select id from customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_non_select_not_allowed"]
+
+
+def test_guard_rejects_data_modifying_cte_nested_in_subquery() -> None:
+    result = SqlGuard().check(
+        "select id from ("
+        "with changed as ("
+        "update public.customers set name = 'Alice' where id = 1 returning id"
+        ") select id from changed"
+        ") nested_customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_non_select_not_allowed"]
+
+
+def test_guard_rejects_non_select_final_statement_for_cte_even_in_admin_mode() -> None:
+    result = SqlGuard(execution_mode="admin").check(
+        "with selected_customers as ("
+        "select id from public.customers"
+        ") update public.customers set name = 'Alice' "
+        "where id in (select id from selected_customers)"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_final_statement_not_allowed"]
+
+
+def test_guard_rejects_recursive_cte() -> None:
+    result = SqlGuard().check(
+        "with recursive series(n) as ("
+        "select 1 union all select n + 1 from series where n < 3"
+        ") select n from series"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["recursive_cte_not_allowed"]
+
+
+def test_guard_tracks_cte_source_fields_without_cte_output_aliases() -> None:
+    result = SqlGuard().check(
+        "with customer_email as ("
+        "select email as leaked from public.customers"
+        ") select leaked from customer_email"
+    )
+
+    assert result.allowed is True
+    assert result.accessed_fields == ["email"]
+
+
+def test_guard_rejects_locking_read_inside_cte() -> None:
+    result = SqlGuard().check(
+        "with locked_customers as ("
+        "select id from public.customers for update"
+        ") select id from locked_customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_locking_read_not_allowed"]
+
+
+def test_guard_rejects_non_literal_limit_inside_cte() -> None:
+    result = SqlGuard().check(
+        "with limited_customers as ("
+        "select id from public.customers limit ?"
+        ") select id from limited_customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["non_literal_limit_not_allowed"]
+
+
+def test_guard_rejects_cte_limit_above_maximum() -> None:
+    result = SqlGuard(default_limit=100, max_limit=500).check(
+        "with limited_customers as ("
+        "select id from public.customers limit 501"
+        ") select id from limited_customers"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_limit_exceeded"]
+
+
+def test_guard_rejects_cte_wildcard_even_with_relaxed_validation() -> None:
+    result = SqlGuard(strict_validation=False).check(
+        "with customer_data as ("
+        "select * from public.customers"
+        ") select email from customer_data"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_wildcard_projection_not_allowed"]
+
+
 def test_guard_tracks_projection_output_lineage() -> None:
     result = SqlGuard(strict_validation=False).check(
         "select email as leaked, lower(phone) as normalized_phone from public.customers"

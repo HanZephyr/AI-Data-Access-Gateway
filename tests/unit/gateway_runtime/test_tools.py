@@ -539,6 +539,56 @@ def test_execute_query_runs_allowed_sql_and_audits_success(db_session: Session) 
     assert event.decision == "allowed"
 
 
+def test_execute_query_runs_allowed_read_only_cte(db_session: Session) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query=(
+            "with customer_ids as (select id from public.customers) "
+            "select id from customer_ids"
+        ),
+        limit=1,
+    )
+
+    assert response["status"] == "success"
+    assert response["rows"] == [{"id": 1}]
+    assert FakeConnector.last_sql is not None
+    assert "WITH customer_ids AS" in FakeConnector.last_sql
+
+
+def test_execute_query_rejects_data_modifying_cte_before_connector(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query=(
+            "with customers as ("
+            "update public.customers set email = 'alice@example.com' "
+            "where id = 1 returning id"
+            ") select id from customers"
+        ),
+        limit=1,
+    )
+
+    assert response == {"status": "rejected", "reason": "cte_non_select_not_allowed"}
+    assert FakeConnector.last_sql is None
+
+
 def test_execute_query_rejects_invalid_or_excessive_runtime_limits(
     db_session: Session,
     monkeypatch: MonkeyPatch,
@@ -707,6 +757,42 @@ def test_execute_query_rejects_denied_field_and_skips_connector(
 
     assert response["status"] == "rejected"
     assert response["reason"] == "field_access_denied:email"
+    assert FakeConnector.last_sql is None
+
+
+def test_execute_query_rejects_denied_field_referenced_inside_cte(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        FieldPolicy(
+            subject_type="all",
+            subject_id="*",
+            effect="deny",
+            resource_id=resource.id,
+            field_name="email",
+            action="read",
+            status="active",
+        )
+    )
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query=(
+            "with customer_email as ("
+            "select email as leaked from public.customers"
+            ") select leaked from customer_email"
+        ),
+        limit=10,
+    )
+
+    assert response == {"status": "rejected", "reason": "field_access_denied:email"}
     assert FakeConnector.last_sql is None
 
 
@@ -904,6 +990,43 @@ def test_execute_query_masks_aliased_columns_case_insensitively(
         assert response["masking"]["masked_columns"] == [
             {"name": "LEAKED", "strategy": "fixed"}
         ]
+
+
+def test_execute_query_rejects_cte_when_resource_has_masking_policy(
+    db_session: Session,
+) -> None:
+    add_datasource(db_session)
+    resource = add_resource(db_session, resource_id="res_customers")
+    allow_resource_read(db_session, resource.id)
+    db_session.add(
+        MaskingPolicy(
+            resource_id=resource.id,
+            field_name="email",
+            strategy="fixed",
+            config_json='{"replacement":"REDACTED"}',
+            status="active",
+        )
+    )
+    FakeConnector.last_sql = None
+
+    response = runtime(db_session).execute_query(
+        identity=identity(),
+        api_key_id="key_1",
+        datasource_id="ds_1",
+        resource_ids=[resource.id],
+        query=(
+            "with customer_email as ("
+            "select email as leaked from public.customers"
+            ") select leaked from customer_email"
+        ),
+        limit=1,
+    )
+
+    assert response == {
+        "status": "rejected",
+        "reason": "masked_nested_projection_not_supported",
+    }
+    assert FakeConnector.last_sql is None
 
 
 @pytest.mark.parametrize(

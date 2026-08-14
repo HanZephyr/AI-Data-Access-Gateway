@@ -3,6 +3,7 @@ from typing import Literal, cast
 
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer.scope import traverse_scope
 
 type SqlExecutionMode = Literal["read_only", "dml", "schema", "admin"]
 
@@ -146,6 +147,17 @@ class SqlGuard:
 
         statement = statements[0]
         statement_type = statement.key.upper()
+        cte_rejection = self._cte_rejection(statement)
+        if cte_rejection is not None:
+            return SqlGuardResult(
+                allowed=False,
+                normalized_sql=None,
+                statement_type=statement_type,
+                accessed_resources=self._accessed_resources(statement),
+                accessed_fields=self._accessed_fields(statement),
+                projections=self._projection_lineage(statement),
+                rejection_reasons=[cte_rejection],
+            )
         statement_rejection = self._statement_rejection(statement)
         if statement_rejection is not None:
             return SqlGuardResult(
@@ -207,6 +219,34 @@ class SqlGuard:
             rejection_reasons=rejection_reasons,
             warnings=warnings,
         )
+
+    def _cte_rejection(self, statement: exp.Expression) -> str | None:
+        """Reject unsupported CTEs across the complete SQL expression tree."""
+
+        with_clauses = list(statement.find_all(exp.With))
+        if not with_clauses:
+            return None
+        if not isinstance(statement, exp.Select):
+            return "cte_final_statement_not_allowed"
+        for with_clause in with_clauses:
+            if with_clause.args.get("recursive"):
+                return "recursive_cte_not_allowed"
+            for cte in with_clause.expressions:
+                if not isinstance(cte.this, exp.Select):
+                    return "cte_non_select_not_allowed"
+                if cte.this.args.get("locks"):
+                    return "cte_locking_read_not_allowed"
+                if cte.this.args.get("into") is not None:
+                    return "cte_select_into_not_allowed"
+                if self._has_wildcard_projection(cte.this):
+                    return "cte_wildcard_projection_not_allowed"
+                limit_rejection = self._limit_rejection(cte.this)
+                if limit_rejection is not None:
+                    return limit_rejection
+                cte_limit = self._limit_value(cte.this)
+                if cte_limit is not None and cte_limit > self._max_limit:
+                    return "cte_limit_exceeded"
+        return None
 
     def _statement_rejection(self, statement: exp.Expression) -> str | None:
         """Return a first-layer statement-type rejection reason, if any."""
@@ -293,16 +333,31 @@ class SqlGuard:
     def _accessed_resources(self, statement: exp.Expression) -> list[str]:
         """Collect referenced table names for later resource-policy resolution."""
 
-        resources = {
-            ".".join(part for part in (table.db, table.name) if part)
-            for table in statement.find_all(exp.Table)
-        }
+        resources: set[str] = set()
+        for scope in traverse_scope(statement):
+            for table in scope.tables:
+                source = scope.sources.get(table.alias_or_name)
+                if not isinstance(source, exp.Table):
+                    continue
+                resources.add(".".join(part for part in (table.db, table.name) if part))
         return sorted(resources)
 
     def _accessed_fields(self, statement: exp.Expression) -> list[str]:
-        """Collect referenced column names for audit metadata."""
+        """Collect physical-source column names for policy checks and audit metadata."""
 
-        fields = {column.name for column in statement.find_all(exp.Column) if column.name != "*"}
+        fields: set[str] = set()
+        for scope in traverse_scope(statement):
+            physical_source_names = {
+                name for name, source in scope.sources.items() if isinstance(source, exp.Table)
+            }
+            if not physical_source_names:
+                continue
+            for column in scope.columns:
+                if column.name == "*":
+                    continue
+                if column.table and column.table not in physical_source_names:
+                    continue
+                fields.add(column.name)
         return sorted(fields)
 
     def _projection_lineage(self, statement: exp.Expression) -> list[ProjectionLineage]:
