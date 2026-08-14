@@ -105,6 +105,18 @@ def test_guard_rejects_locking_read_inside_cte() -> None:
     assert result.rejection_reasons == ["cte_locking_read_not_allowed"]
 
 
+def test_guard_rejects_locking_read_nested_inside_cte() -> None:
+    result = SqlGuard().check(
+        "with customer_ids as ("
+        "select id from (select id from public.customers for update) locked_customers"
+        ") select id from customer_ids"
+    )
+
+    assert result.allowed is False
+    assert result.normalized_sql is None
+    assert result.rejection_reasons == ["cte_locking_read_not_allowed"]
+
+
 def test_guard_rejects_non_literal_limit_inside_cte() -> None:
     result = SqlGuard().check(
         "with limited_customers as ("

@@ -234,18 +234,19 @@ class SqlGuard:
             for cte in with_clause.expressions:
                 if not isinstance(cte.this, exp.Select):
                     return "cte_non_select_not_allowed"
-                if cte.this.args.get("locks"):
-                    return "cte_locking_read_not_allowed"
-                if cte.this.args.get("into") is not None:
-                    return "cte_select_into_not_allowed"
-                if self._has_wildcard_projection(cte.this):
-                    return "cte_wildcard_projection_not_allowed"
-                limit_rejection = self._limit_rejection(cte.this)
-                if limit_rejection is not None:
-                    return limit_rejection
-                cte_limit = self._limit_value(cte.this)
-                if cte_limit is not None and cte_limit > self._max_limit:
-                    return "cte_limit_exceeded"
+                for cte_select in cte.this.find_all(exp.Select):
+                    if cte_select.args.get("locks"):
+                        return "cte_locking_read_not_allowed"
+                    if cte_select.args.get("into") is not None:
+                        return "cte_select_into_not_allowed"
+                    if self._has_wildcard_projection(cte_select):
+                        return "cte_wildcard_projection_not_allowed"
+                    limit_rejection = self._limit_rejection(cte_select)
+                    if limit_rejection is not None:
+                        return limit_rejection
+                    cte_limit = self._limit_value(cte_select)
+                    if cte_limit is not None and cte_limit > self._max_limit:
+                        return "cte_limit_exceeded"
         return None
 
     def _statement_rejection(self, statement: exp.Expression) -> str | None:
