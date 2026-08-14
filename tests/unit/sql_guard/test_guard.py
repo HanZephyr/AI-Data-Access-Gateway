@@ -447,6 +447,8 @@ def test_guard_rejects_non_literal_casts() -> None:
         "select id from public.orders where year(created_at) = 2026 "
         "and month(created_at) = 5 and day(created_at) = 15",
         "select id from public.orders where date_format(created_at, '%Y-%m-%d') >= '2026-05-15'",
+        "select id from public.orders "
+        "where str_to_date(created_at, '%Y-%m') >= date '2026-05-15'",
         "select id from public.orders where to_date(created_at) >= '2026-05-15'",
         "select id from public.orders where created_at >= date_sub(current_date, interval 30 day)",
         "select id from public.orders where datediff(current_date, created_at) <= 30",
@@ -473,6 +475,10 @@ def test_guard_allows_common_temporal_predicate_functions(query: str) -> None:
         (
             "select date_format(created_at, '%Y-%m-%d') as created_day from public.orders",
             "temporal_projection_not_allowed:date_format",
+        ),
+        (
+            "select str_to_date(created_at, '%Y-%m') as created_month from public.orders",
+            "temporal_projection_not_allowed:str_to_date",
         ),
         (
             "select cast(created_at as date) as created_day from public.orders",

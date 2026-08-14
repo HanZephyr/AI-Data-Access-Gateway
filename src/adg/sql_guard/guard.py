@@ -69,6 +69,7 @@ class SqlGuard:
         exp.Month,
         exp.Quarter,
         exp.Second,
+        exp.StrToDate,
         exp.TimeAdd,
         exp.TimeDiff,
         exp.TimeSub,
